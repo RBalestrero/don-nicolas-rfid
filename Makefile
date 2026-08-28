@@ -47,4 +47,4 @@ migrate: ## Ejecutar migraciones de base de datos
 	cd backend && python -m alembic upgrade head
 
 seed: ## Cargar datos de prueba
-	@echo ">> Seed pendiente — Fase 1"
+	cd backend && python ../scripts/seed-admin.py

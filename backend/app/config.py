@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_debug: bool = True
     secret_key: str = "dev-secret-key-change-in-production"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

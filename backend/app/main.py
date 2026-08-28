@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import check_database_connection
+from app.modules.auth.router import router as auth_router
 
 settings = get_settings()
 
@@ -22,6 +23,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", tags=["Sistema"])
