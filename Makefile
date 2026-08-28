@@ -1,29 +1,50 @@
-.PHONY: setup dev test test-backend test-frontend lint migrate seed help
+.PHONY: setup dev dev-fast dev-stop test test-backend test-frontend lint help
 
 help: ## Mostrar ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-setup: ## Instalar dependencias de todos los módulos
-	@echo ">> Setup pendiente — se habilitará en Fase 0.2"
+setup: ## Instalar dependencias (backend + frontend)
+	@bash scripts/setup-dev.sh
 
-dev: ## Levantar entorno de desarrollo
-	@echo ">> Docker Compose pendiente — se habilitará en Fase 0.3"
-	@cd infra && docker compose up -d 2>/dev/null || echo "Infraestructura no configurada aún"
+dev: ## Levantar todo con Docker (hot reload en API y web)
+	@[ -f .env ] || cp .env.example .env
+	cd infra && docker compose up --build
 
-test: ## Ejecutar todos los tests
-	@echo ">> Tests pendientes — se habilitarán con la implementación"
+dev-fast: ## Hot reload rápido: Postgres en Docker, API y web locales
+	@[ -f .env ] || cp .env.example .env
+	@echo ">> Levantando PostgreSQL..."
+	@cd infra && docker compose up -d postgres
+	@echo ""
+	@echo ">> Iniciá en terminales separadas:"
+	@echo "   Terminal 1: make dev-api"
+	@echo "   Terminal 2: make dev-web"
+	@echo ""
+	@echo "   Preview: http://localhost:5173"
+	@echo "   API docs: http://localhost:8000/api/docs"
+
+dev-api: ## API con hot reload (uvicorn --reload)
+	cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+dev-web: ## Frontend con hot reload (Vite HMR)
+	cd frontend && npm run dev
+
+dev-stop: ## Detener contenedores Docker
+	cd infra && docker compose down
+
+test: test-backend test-frontend ## Ejecutar todos los tests
 
 test-backend: ## Tests del backend
-	@echo ">> Backend tests pendientes"
+	cd backend && python -m pytest -v
 
 test-frontend: ## Tests del frontend
-	@echo ">> Frontend tests pendientes"
+	cd frontend && npm test
 
-lint: ## Lint en todos los módulos
-	@echo ">> Lint pendiente — se habilitará con la implementación"
+lint: ## Lint backend y frontend
+	cd backend && python -m ruff check .
+	cd frontend && npm run lint 2>/dev/null || true
 
 migrate: ## Ejecutar migraciones de base de datos
-	@echo ">> Migraciones pendientes — se habilitarán en Fase 0.4"
+	@echo ">> Migraciones pendientes — Fase 0.4"
 
 seed: ## Cargar datos de prueba
-	@echo ">> Seed pendiente — se habilitará en Fase 1"
+	@echo ">> Seed pendiente — Fase 1"

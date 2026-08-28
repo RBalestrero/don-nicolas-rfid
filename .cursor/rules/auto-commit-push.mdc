@@ -1,0 +1,15 @@
+---
+description: Commit y push automático tras verificar que una feature funciona
+alwaysApply: true
+---
+
+# Commit y push automático
+
+Cuando el usuario confirme que una feature funciona (o cuando yo verifique con tests que funciona):
+
+1. Ejecutar tests de funcionalidad relevantes
+2. Hacer `git add` de los archivos del cambio
+3. Crear commit con mensaje Conventional Commits en español
+4. Hacer `git push` a `origin` sin pedir confirmación adicional
+
+No commitear archivos con secretos (`.env`, credenciales). No hacer push force a `main`.

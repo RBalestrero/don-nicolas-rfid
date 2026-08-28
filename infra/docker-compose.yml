@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: don-nicolas-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-don_nicolas_rfid}
+      POSTGRES_USER: ${POSTGRES_USER:-rfid_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rfid_admin} -d ${POSTGRES_DB:-don_nicolas_rfid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: don-nicolas-api
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_HOST: postgres
+      API_DEBUG: "true"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ../backend/app:/app/app
+      - ../backend/tests:/app/tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: don-nicolas-web
+    env_file:
+      - ../.env
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend/src:/app/src
+      - ../frontend/index.html:/app/index.html
+      - ../frontend/vite.config.ts:/app/vite.config.ts
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

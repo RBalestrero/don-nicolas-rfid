@@ -32,8 +32,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 0 — Fundación:** Plan de desarrollo y documentación completados.  
-> **Próximo paso:** Aprobación del plan → inicialización de código (Fase 0.2+).
+> **Fase 0.2:** Entorno de desarrollo con hot reload configurado.
 
 ## Hardware soportado
 
@@ -41,18 +40,49 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 - **Impresoras RFID:** Zebra ZD621R, Zebra ZT411 (on-metal)
 - **Etiquetas:** UHF EPC Gen2 V2 / ISO 18000-63
 
-## Desarrollo
+## Desarrollo con hot reload
+
+### Opción recomendada — más rápida (Windows)
 
 ```bash
-# Setup (cuando esté disponible)
-make setup
-make dev
+bash scripts/setup-dev.sh   # solo la primera vez
+```
 
-# Tests
-make test
+Levantar PostgreSQL:
 
-# Lint
-make lint
+```bash
+cd infra && docker compose up -d postgres
+```
+
+En **dos terminales separadas**:
+
+```bash
+# Terminal 1 — API con reload automático
+cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2 — Vite HMR (cambios instantáneos)
+cd frontend && npm run dev
+```
+
+| URL | Descripción |
+|-----|-------------|
+| http://localhost:5173 | Preview web (hot reload) |
+| http://localhost:8000/api/docs | Documentación API (Swagger) |
+| http://localhost:8000/api/v1/health | Health check |
+
+### Opción Docker — todo en contenedores
+
+```bash
+cd infra && docker compose up --build
+```
+
+Detener: `cd infra && docker compose down`
+
+### Tests
+
+```bash
+cd backend && python -m pytest -v
+cd frontend && npm test
 ```
 
 ## Licencia
