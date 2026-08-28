@@ -23,7 +23,7 @@ dev-fast: ## Hot reload rápido: Postgres en Docker, API y web locales
 	@echo "   API docs: http://localhost:8000/api/docs"
 
 dev-api: ## API con hot reload (uvicorn --reload)
-	cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	bash scripts/dev-api.sh
 
 dev-web: ## Frontend con hot reload (Vite HMR)
 	cd frontend && npm run dev
