@@ -13,6 +13,28 @@ jobs:
       run:
         working-directory: backend
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: don_nicolas_rfid
+          POSTGRES_USER: rfid_admin
+          POSTGRES_PASSWORD: changeme
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: don_nicolas_rfid
+      POSTGRES_USER: rfid_admin
+      POSTGRES_PASSWORD: changeme
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +44,9 @@ jobs:
 
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
+
+      - name: Ejecutar migraciones
+        run: python -m alembic upgrade head
 
       - name: Lint (Ruff)
         run: ruff check .

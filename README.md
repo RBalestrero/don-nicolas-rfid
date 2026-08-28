@@ -32,7 +32,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 0.2:** Entorno de desarrollo con hot reload configurado.
+> **Fase 0.4:** Esquema inicial de base de datos (roles y usuarios) con Alembic.
 
 ## Hardware soportado
 

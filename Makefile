@@ -44,7 +44,7 @@ lint: ## Lint backend y frontend
 	cd frontend && npm run lint 2>/dev/null || true
 
 migrate: ## Ejecutar migraciones de base de datos
-	@echo ">> Migraciones pendientes — Fase 0.4"
+	cd backend && python -m alembic upgrade head
 
 seed: ## Cargar datos de prueba
 	@echo ">> Seed pendiente — Fase 1"
