@@ -1,0 +1,1 @@
+# Integraciones con hardware externo

@@ -82,3 +82,18 @@ class HistorialResponse(BaseModel):
     accion: str
     cambios: dict | None
     creado_en: datetime
+
+
+class EtiquetaImpresionRequest(BaseModel):
+    copias: int = Field(1, ge=1, le=10)
+
+
+class EtiquetaImpresionResponse(BaseModel):
+    activo_id: UUID
+    numero_patrimonial: str
+    descripcion: str
+    epc: str
+    epc_asignado: bool
+    impreso: bool
+    modo_simulacion: bool
+    zpl: str | None = None

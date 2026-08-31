@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_upload_size_mb: int = 10
 
+    zebra_printer_host: str = "192.168.1.100"
+    zebra_printer_port: int = 9100
+    zebra_printer_simulate: bool = True
+    zebra_printer_timeout: int = 5
+
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024

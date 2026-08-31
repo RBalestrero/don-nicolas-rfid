@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.modules.assets.fotografias_service import FotografiaService
+from app.modules.assets.impresion_service import ImpresionService
 from app.modules.assets.schemas import (
     ActivoCreate,
     ActivoResponse,
@@ -14,6 +15,8 @@ from app.modules.assets.schemas import (
     CategoriaCreate,
     CategoriaResponse,
     CategoriaUpdate,
+    EtiquetaImpresionRequest,
+    EtiquetaImpresionResponse,
     FotografiaResponse,
     HistorialResponse,
 )
@@ -151,6 +154,21 @@ def get_historial_activo(
         )
         for r in registros
     ]
+
+
+@router.post(
+    "/activos/{activo_id}/imprimir-etiqueta",
+    response_model=EtiquetaImpresionResponse,
+)
+def imprimir_etiqueta(
+    activo_id: uuid.UUID,
+    data: EtiquetaImpresionRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    service = ImpresionService(db)
+    copias = data.copias if data else 1
+    return service.imprimir_etiqueta(activo_id, current_user, copias=copias)
 
 
 @router.post(

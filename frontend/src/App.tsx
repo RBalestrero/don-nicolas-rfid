@@ -85,6 +85,7 @@ export default function App() {
             <li>✓ Activos y categorías</li>
             <li>✓ Fotografías de activos</li>
             <li>✓ Historial y auditoría</li>
+            <li>✓ Impresión etiquetas RFID (ZPL)</li>
             <li>Gestión de Depósitos</li>
             <li>Inventario Móvil</li>
             <li>Transferencias</li>

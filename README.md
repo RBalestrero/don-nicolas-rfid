@@ -33,7 +33,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 1.4:** Historial de auditoría de activos.
+> **Fase 1.5:** Impresión de etiquetas RFID vía ZPL (Zebra).
 
 ## Hardware soportado
 
