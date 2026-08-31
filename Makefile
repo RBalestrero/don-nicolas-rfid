@@ -22,6 +22,9 @@ dev-fast: ## Hot reload rápido: Postgres en Docker, API y web locales
 	@echo "   Preview: http://localhost:5174"
 	@echo "   API docs: http://localhost:8000/api/docs"
 
+dev-stop-api: ## Detener API y workers huérfanos
+	bash scripts/stop-api.sh
+
 dev-api: ## API con hot reload (uvicorn --reload)
 	bash scripts/dev-api.sh
 

@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "./context/AuthContext";
+import ActivosPage from "./components/ActivosPage";
+import LoginForm from "./components/LoginForm";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -10,93 +13,79 @@ interface HealthResponse {
   database: string;
 }
 
-export default function App() {
+function HealthBadge() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchHealth = async () => {
+    const check = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        const response = await fetch(`${API_URL}/health`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data: HealthResponse = await response.json();
-        setHealth(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error de conexión");
+        const res = await fetch(`${API_URL}/health`);
+        if (res.ok) setHealth(await res.json());
+      } catch {
         setHealth(null);
-      } finally {
-        setLoading(false);
       }
     };
-
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 5000);
+    check();
+    const interval = setInterval(check, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  if (!health) return <span className="badge warn">API offline</span>;
+  return (
+    <span className={`badge ${health.status === "ok" ? "ok" : "warn"}`}>
+      API {health.status} · DB {health.database}
+    </span>
+  );
+}
+
+export default function App() {
+  const { user, loading, logout } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="app">
+        <p className="muted center">Cargando...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="app">
+        <header className="header">
+          <div className="logo">RFID</div>
+          <div>
+            <h1>Don Nicolás</h1>
+            <p>Sistema de Gestión de Activos e Inventario</p>
+          </div>
+        </header>
+        <main className="main">
+          <LoginForm />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
       <header className="header">
         <div className="logo">RFID</div>
-        <div>
+        <div className="header-text">
           <h1>Don Nicolás</h1>
-          <p>Sistema de Gestión de Activos e Inventario</p>
+          <p>
+            {user.nombre} · {user.rol}
+          </p>
+        </div>
+        <div className="header-actions">
+          <HealthBadge />
+          <button type="button" className="btn secondary" onClick={logout}>
+            Salir
+          </button>
         </div>
       </header>
 
       <main className="main">
-        <section className="card">
-          <h2>Estado del sistema</h2>
-          {loading && <p className="muted">Conectando con la API...</p>}
-          {error && <p className="error">API no disponible: {error}</p>}
-          {health && (
-            <dl className="status-grid">
-              <div>
-                <dt>Estado</dt>
-                <dd className={health.status === "ok" ? "badge ok" : "badge warn"}>
-                  {health.status}
-                </dd>
-              </div>
-              <div>
-                <dt>Servicio</dt>
-                <dd>{health.service}</dd>
-              </div>
-              <div>
-                <dt>Versión</dt>
-                <dd>{health.version}</dd>
-              </div>
-              <div>
-                <dt>Base de datos</dt>
-                <dd className={health.database === "connected" ? "badge ok" : "badge warn"}>
-                  {health.database}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </section>
-
-        <section className="card modules">
-          <h2>Módulos en desarrollo</h2>
-          <ul>
-            <li>✓ Autenticación y usuarios</li>
-            <li>✓ Activos y categorías</li>
-            <li>✓ Fotografías de activos</li>
-            <li>✓ Historial y auditoría</li>
-            <li>✓ Impresión etiquetas RFID (ZPL)</li>
-            <li>Gestión de Depósitos</li>
-            <li>Inventario Móvil</li>
-            <li>Transferencias</li>
-          </ul>
-          <p className="muted" style={{ marginTop: "1rem" }}>
-            API docs:{" "}
-            <a href="http://localhost:8000/api/docs" target="_blank" rel="noreferrer">
-              localhost:8000/api/docs
-            </a>
-          </p>
-        </section>
+        <ActivosPage />
       </main>
 
       <footer className="footer">
