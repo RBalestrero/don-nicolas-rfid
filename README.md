@@ -33,7 +33,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 0.4:** Esquema inicial de base de datos (roles y usuarios) con Alembic.
+> **Fase 1.1:** CRUD de activos y categorías implementado.
 
 ## Hardware soportado
 
