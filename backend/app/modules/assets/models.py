@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,3 +44,23 @@ class Activo(Base):
     )
 
     categoria: Mapped["Categoria"] = relationship(back_populates="activos")
+    fotografias: Mapped[list["Fotografia"]] = relationship(
+        back_populates="activo", cascade="all, delete-orphan"
+    )
+
+
+class Fotografia(Base):
+    __tablename__ = "fotografias"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    activo_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("activos.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    nombre_archivo: Mapped[str] = mapped_column(String(255), nullable=False)
+    ruta: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    tamano_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    es_principal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    activo: Mapped["Activo"] = relationship(back_populates="fotografias")

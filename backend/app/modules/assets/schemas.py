@@ -57,3 +57,16 @@ class ActivoResponse(ActivoBase):
     creado_en: datetime
     actualizado_en: datetime
     categoria: CategoriaResponse
+
+
+class FotografiaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    activo_id: UUID
+    nombre_archivo: str
+    mime_type: str
+    tamano_bytes: int
+    es_principal: bool
+    creado_en: datetime
+    url: str

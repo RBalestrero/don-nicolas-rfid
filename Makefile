@@ -19,14 +19,14 @@ dev-fast: ## Hot reload rápido: Postgres en Docker, API y web locales
 	@echo "   Terminal 1: make dev-api"
 	@echo "   Terminal 2: make dev-web"
 	@echo ""
-	@echo "   Preview: http://localhost:5173"
+	@echo "   Preview: http://localhost:5174"
 	@echo "   API docs: http://localhost:8000/api/docs"
 
 dev-api: ## API con hot reload (uvicorn --reload)
 	bash scripts/dev-api.sh
 
 dev-web: ## Frontend con hot reload (Vite HMR)
-	cd frontend && npm run dev
+	bash scripts/dev-web.sh
 
 dev-stop: ## Detener contenedores Docker
 	cd infra && docker compose down

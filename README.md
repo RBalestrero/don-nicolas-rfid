@@ -33,7 +33,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 1.1:** CRUD de activos y categorías implementado.
+> **Fase 1.3:** Carga de fotografías de activos. Frontend en puerto **5174**.
 
 ## Hardware soportado
 
@@ -67,7 +67,7 @@ cd frontend && npm run dev
 
 | URL | Descripción |
 |-----|-------------|
-| http://localhost:5173 | Preview web (hot reload) |
+| http://localhost:5174 | Preview web Don Nicolás (hot reload) |
 | http://localhost:8000/api/docs | Documentación API (Swagger) |
 | http://localhost:8000/api/v1/health | Health check |
 

@@ -79,18 +79,26 @@ export default function App() {
         </section>
 
         <section className="card modules">
-          <h2>Módulos (próximamente)</h2>
+          <h2>Módulos en desarrollo</h2>
           <ul>
-            <li>Alta e Identificación de Activos</li>
+            <li>✓ Autenticación y usuarios</li>
+            <li>✓ Activos y categorías</li>
+            <li>✓ Fotografías de activos</li>
             <li>Gestión de Depósitos</li>
             <li>Inventario Móvil</li>
             <li>Transferencias</li>
           </ul>
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            API docs:{" "}
+            <a href="http://localhost:8000/api/docs" target="_blank" rel="noreferrer">
+              localhost:8000/api/docs
+            </a>
+          </p>
         </section>
       </main>
 
       <footer className="footer">
-        <span>Hot reload activo — los cambios se reflejan al guardar</span>
+        <span>Don Nicolás RFID — puerto 5174 (hot reload activo)</span>
       </footer>
     </div>
   );

@@ -19,7 +19,14 @@ class Settings(BaseSettings):
     postgres_user: str = "rfid_admin"
     postgres_password: str = "changeme"
 
-    cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    cors_origins: str = "http://localhost:5174,http://localhost:5173,http://localhost:3000"
+
+    upload_dir: str = "./uploads"
+    max_upload_size_mb: int = 10
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.max_upload_size_mb * 1024 * 1024
 
     @property
     def database_url(self) -> str:

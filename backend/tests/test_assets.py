@@ -115,7 +115,10 @@ def test_update_activo(client: TestClient, auth_headers):
 
     update_response = client.put(
         f"/api/v1/activos/{activo_id}",
-        json={"descripcion": "Camioneta Ford Ranger", "epc": f"E2801160600002038F4259{_unique('')[:4]}"},
+        json={
+            "descripcion": "Camioneta Ford Ranger",
+            "epc": f"E2801160600002038F4259{_unique('')[:4]}",
+        },
         headers=auth_headers,
     )
     assert update_response.status_code == 200

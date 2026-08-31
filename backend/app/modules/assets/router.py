@@ -1,10 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.modules.assets.fotografias_service import FotografiaService
 from app.modules.assets.schemas import (
     ActivoCreate,
     ActivoResponse,
@@ -12,6 +14,7 @@ from app.modules.assets.schemas import (
     CategoriaCreate,
     CategoriaResponse,
     CategoriaUpdate,
+    FotografiaResponse,
 )
 from app.modules.assets.service import ActivoService, CategoriaService
 from app.modules.auth.models import Usuario
@@ -125,3 +128,50 @@ def delete_activo(
 ):
     service = ActivoService(db)
     service.delete_activo(activo_id)
+
+
+@router.post(
+    "/activos/{activo_id}/fotografias",
+    response_model=FotografiaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_fotografia(
+    activo_id: uuid.UUID,
+    file: UploadFile = File(...),
+    es_principal: bool = False,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = FotografiaService(db)
+    return await service.upload(activo_id, file, es_principal=es_principal)
+
+
+@router.get("/activos/{activo_id}/fotografias", response_model=list[FotografiaResponse])
+def list_fotografias(
+    activo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = FotografiaService(db)
+    return service.list_fotografias(activo_id)
+
+
+@router.get("/fotografias/{foto_id}/archivo")
+def get_fotografia_archivo(
+    foto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = FotografiaService(db)
+    path, mime_type = service.get_file_path(foto_id)
+    return FileResponse(path, media_type=mime_type, filename=path.name)
+
+
+@router.delete("/fotografias/{foto_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_fotografia(
+    foto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = FotografiaService(db)
+    service.delete_fotografia(foto_id)
