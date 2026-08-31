@@ -29,6 +29,18 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
 
 
+@app.on_event("startup")
+def log_registered_routes() -> None:
+    import logging
+
+    paths = sorted(app.openapi()["paths"].keys())
+    logging.getLogger("uvicorn.error").info(
+        "Don Nicolás API — %d endpoints: %s",
+        len(paths),
+        ", ".join(paths),
+    )
+
+
 @app.get("/api/v1/health", tags=["Sistema"])
 def health_check() -> dict:
     db_ok = check_database_connection()
