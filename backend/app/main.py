@@ -5,6 +5,7 @@ from app.config import get_settings
 from app.database import check_database_connection
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
+from app.modules.warehouses.router import router as warehouses_router
 
 settings = get_settings()
 
@@ -27,6 +28,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
+app.include_router(warehouses_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
