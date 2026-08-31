@@ -86,3 +86,36 @@ class DepositoDetalleResponse(DepositoResponse):
 
 class SectorDetalleResponse(SectorResponse):
     ubicaciones: list[UbicacionResponse] = []
+
+
+class AsignacionUbicacionRequest(BaseModel):
+    ubicacion_id: UUID
+
+
+class UbicacionAsignadaResponse(BaseModel):
+    activo_id: UUID
+    ubicacion_id: UUID
+    ubicacion_codigo: str
+    sector_id: UUID
+    sector_nombre: str
+    deposito_id: UUID
+    deposito_nombre: str
+
+
+class StockActivoItem(BaseModel):
+    activo_id: UUID
+    numero_patrimonial: str
+    descripcion: str
+    categoria_nombre: str
+    epc: str | None
+
+
+class StockUbicacionResponse(BaseModel):
+    ubicacion_id: UUID
+    ubicacion_codigo: str
+    sector_id: UUID
+    sector_nombre: str
+    deposito_id: UUID
+    deposito_nombre: str
+    total: int
+    activos: list[StockActivoItem]

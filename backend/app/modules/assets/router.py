@@ -22,6 +22,8 @@ from app.modules.assets.schemas import (
 )
 from app.modules.assets.service import ActivoService, CategoriaService
 from app.modules.auth.models import Usuario
+from app.modules.warehouses.asignacion_service import AsignacionService
+from app.modules.warehouses.schemas import AsignacionUbicacionRequest, UbicacionAsignadaResponse
 
 router = APIRouter(tags=["Activos"])
 
@@ -132,6 +134,40 @@ def delete_activo(
 ):
     service = ActivoService(db)
     service.delete_activo(activo_id, current_user)
+
+
+@router.post(
+    "/activos/{activo_id}/asignar-ubicacion",
+    response_model=UbicacionAsignadaResponse,
+)
+def asignar_ubicacion_activo(
+    activo_id: uuid.UUID,
+    data: AsignacionUbicacionRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    service = AsignacionService(db)
+    return service.asignar_ubicacion(activo_id, data, current_user)
+
+
+@router.get("/activos/{activo_id}/ubicacion", response_model=UbicacionAsignadaResponse)
+def get_ubicacion_activo(
+    activo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = AsignacionService(db)
+    return service.get_ubicacion_activo(activo_id)
+
+
+@router.delete("/activos/{activo_id}/ubicacion", status_code=status.HTTP_204_NO_CONTENT)
+def desasignar_ubicacion_activo(
+    activo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    service = AsignacionService(db)
+    service.desasignar_ubicacion(activo_id, current_user)
 
 
 @router.get("/activos/{activo_id}/historial", response_model=list[HistorialResponse])

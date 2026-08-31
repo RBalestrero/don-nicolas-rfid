@@ -15,11 +15,13 @@ from app.modules.warehouses.schemas import (
     SectorDetalleResponse,
     SectorResponse,
     SectorUpdate,
+    StockUbicacionResponse,
     UbicacionCreate,
     UbicacionResponse,
     UbicacionUpdate,
 )
 from app.modules.warehouses.service import DepositoService, SectorService, UbicacionService
+from app.modules.warehouses.asignacion_service import AsignacionService
 
 router = APIRouter(tags=["Depósitos"])
 
@@ -240,3 +242,13 @@ def delete_ubicacion(
 ):
     service = UbicacionService(db)
     service.delete_ubicacion(deposito_id, sector_id, ubicacion_id)
+
+
+@router.get("/ubicaciones/{ubicacion_id}/stock", response_model=StockUbicacionResponse)
+def get_stock_ubicacion(
+    ubicacion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = AsignacionService(db)
+    return service.get_stock_ubicacion(ubicacion_id)

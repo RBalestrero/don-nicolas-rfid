@@ -59,3 +59,4 @@ class Ubicacion(Base):
     )
 
     sector: Mapped["Sector"] = relationship(back_populates="ubicaciones")
+    activos: Mapped[list["Activo"]] = relationship(back_populates="ubicacion")

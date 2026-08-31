@@ -26,6 +26,8 @@ class HistorialService:
     ACCION_FOTO_AGREGADA = "foto_agregada"
     ACCION_FOTO_ELIMINADA = "foto_eliminada"
     ACCION_ETIQUETA_IMPRESA = "etiqueta_impresa"
+    ACCION_ASIGNACION_UBICACION = "asignacion_ubicacion"
+    ACCION_DESASIGNACION_UBICACION = "desasignacion_ubicacion"
 
     def __init__(self, db: Session):
         self.db = db

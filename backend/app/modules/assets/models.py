@@ -38,12 +38,16 @@ class Activo(Base):
     creado_por_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("usuarios.id"), nullable=True
     )
+    ubicacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ubicaciones.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actualizado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     categoria: Mapped["Categoria"] = relationship(back_populates="activos")
+    ubicacion: Mapped["Ubicacion | None"] = relationship(back_populates="activos")
     fotografias: Mapped[list["Fotografia"]] = relationship(
         back_populates="activo", cascade="all, delete-orphan"
     )
