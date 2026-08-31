@@ -6,9 +6,11 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.storage import save_upload
+from app.modules.assets.historial_service import HistorialService
 from app.modules.assets.models import Activo, Fotografia
 from app.modules.assets.repository import ActivoRepository
 from app.modules.assets.schemas import FotografiaResponse
+from app.modules.auth.models import Usuario
 
 
 class FotografiaRepository:
@@ -49,6 +51,7 @@ class FotografiaService:
         self.db = db
         self.repository = FotografiaRepository(db)
         self.activo_repository = ActivoRepository(db)
+        self.historial = HistorialService(db)
 
     def _ensure_activo(self, activo_id: uuid.UUID) -> Activo:
         activo = self.activo_repository.get_by_id(activo_id)
@@ -74,6 +77,7 @@ class FotografiaService:
         self,
         activo_id: uuid.UUID,
         file: UploadFile,
+        user: Usuario,
         es_principal: bool = False,
     ) -> FotografiaResponse:
         self._ensure_activo(activo_id)
@@ -92,6 +96,12 @@ class FotografiaService:
             es_principal=es_principal or es_primera,
         )
         created = self.repository.create(fotografia)
+        self.historial.registrar(
+            activo_id=activo_id,
+            accion=HistorialService.ACCION_FOTO_AGREGADA,
+            usuario=user,
+            cambios={"nombre_archivo": nombre_archivo, "tamano_bytes": tamano},
+        )
         return self._to_response(created)
 
     def list_fotografias(self, activo_id: uuid.UUID) -> list[FotografiaResponse]:
@@ -115,9 +125,15 @@ class FotografiaService:
             )
         return path, fotografia.mime_type
 
-    def delete_fotografia(self, foto_id: uuid.UUID) -> None:
+    def delete_fotografia(self, foto_id: uuid.UUID, user: Usuario) -> None:
         fotografia = self.get_fotografia(foto_id)
         path = Path(fotografia.ruta)
         self.repository.delete(fotografia)
+        self.historial.registrar(
+            activo_id=fotografia.activo_id,
+            accion=HistorialService.ACCION_FOTO_ELIMINADA,
+            usuario=user,
+            cambios={"nombre_archivo": fotografia.nombre_archivo},
+        )
         if path.exists():
             path.unlink()

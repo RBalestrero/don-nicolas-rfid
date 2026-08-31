@@ -70,3 +70,15 @@ class FotografiaResponse(BaseModel):
     es_principal: bool
     creado_en: datetime
     url: str
+
+
+class HistorialResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    activo_id: UUID
+    usuario_id: UUID | None
+    usuario_nombre: str | None = None
+    accion: str
+    cambios: dict | None
+    creado_en: datetime

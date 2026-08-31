@@ -15,6 +15,7 @@ from app.modules.assets.schemas import (
     CategoriaResponse,
     CategoriaUpdate,
     FotografiaResponse,
+    HistorialResponse,
 )
 from app.modules.assets.service import ActivoService, CategoriaService
 from app.modules.auth.models import Usuario
@@ -114,20 +115,42 @@ def update_activo(
     activo_id: uuid.UUID,
     data: ActivoUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ):
     service = ActivoService(db)
-    return service.update_activo(activo_id, data)
+    return service.update_activo(activo_id, data, current_user)
 
 
 @router.delete("/activos/{activo_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_activo(
     activo_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    service = ActivoService(db)
+    service.delete_activo(activo_id, current_user)
+
+
+@router.get("/activos/{activo_id}/historial", response_model=list[HistorialResponse])
+def get_historial_activo(
+    activo_id: uuid.UUID,
+    db: Session = Depends(get_db),
     _: Usuario = Depends(get_current_user),
 ):
     service = ActivoService(db)
-    service.delete_activo(activo_id)
+    registros = service.get_historial(activo_id)
+    return [
+        HistorialResponse(
+            id=r.id,
+            activo_id=r.activo_id,
+            usuario_id=r.usuario_id,
+            usuario_nombre=getattr(r, "_usuario_nombre", None),
+            accion=r.accion,
+            cambios=r.cambios,
+            creado_en=r.creado_en,
+        )
+        for r in registros
+    ]
 
 
 @router.post(
@@ -140,10 +163,10 @@ async def upload_fotografia(
     file: UploadFile = File(...),
     es_principal: bool = False,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ):
     service = FotografiaService(db)
-    return await service.upload(activo_id, file, es_principal=es_principal)
+    return await service.upload(activo_id, file, current_user, es_principal=es_principal)
 
 
 @router.get("/activos/{activo_id}/fotografias", response_model=list[FotografiaResponse])
@@ -171,7 +194,7 @@ def get_fotografia_archivo(
 def delete_fotografia(
     foto_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ):
     service = FotografiaService(db)
-    service.delete_fotografia(foto_id)
+    service.delete_fotografia(foto_id, current_user)

@@ -47,6 +47,9 @@ class Activo(Base):
     fotografias: Mapped[list["Fotografia"]] = relationship(
         back_populates="activo", cascade="all, delete-orphan"
     )
+    historial: Mapped[list["HistorialActivo"]] = relationship(
+        back_populates="activo", cascade="all, delete-orphan"
+    )
 
 
 class Fotografia(Base):
@@ -64,3 +67,20 @@ class Fotografia(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     activo: Mapped["Activo"] = relationship(back_populates="fotografias")
+
+
+class HistorialActivo(Base):
+    __tablename__ = "historial_activos"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    activo_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("activos.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    accion: Mapped[str] = mapped_column(String(50), nullable=False)
+    cambios: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    activo: Mapped["Activo"] = relationship(back_populates="historial")

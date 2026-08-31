@@ -33,7 +33,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 
 ## Estado del proyecto
 
-> **Fase 1.3:** Carga de fotografías de activos. Frontend en puerto **5174**.
+> **Fase 1.4:** Historial de auditoría de activos.
 
 ## Hardware soportado
 

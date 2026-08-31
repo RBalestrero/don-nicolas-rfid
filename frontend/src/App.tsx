@@ -84,6 +84,7 @@ export default function App() {
             <li>✓ Autenticación y usuarios</li>
             <li>✓ Activos y categorías</li>
             <li>✓ Fotografías de activos</li>
+            <li>✓ Historial y auditoría</li>
             <li>Gestión de Depósitos</li>
             <li>Inventario Móvil</li>
             <li>Transferencias</li>
