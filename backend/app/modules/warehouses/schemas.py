@@ -119,3 +119,27 @@ class StockUbicacionResponse(BaseModel):
     deposito_nombre: str
     total: int
     activos: list[StockActivoItem]
+
+
+class StockActivoDetalle(StockActivoItem):
+    categoria_id: UUID
+    ubicacion_id: UUID
+    ubicacion_codigo: str
+    sector_id: UUID
+    sector_nombre: str
+
+
+class StockResumenSector(BaseModel):
+    sector_id: UUID
+    sector_nombre: str
+    total: int
+    ubicaciones: int
+
+
+class StockDepositoResponse(BaseModel):
+    deposito_id: UUID
+    deposito_nombre: str
+    total: int
+    filtros: dict
+    por_sector: list[StockResumenSector]
+    activos: list[StockActivoDetalle]

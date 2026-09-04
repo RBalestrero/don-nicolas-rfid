@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
+from app.modules.warehouses.asignacion_service import AsignacionService
 from app.modules.warehouses.schemas import (
     DepositoCreate,
     DepositoDetalleResponse,
@@ -15,13 +16,14 @@ from app.modules.warehouses.schemas import (
     SectorDetalleResponse,
     SectorResponse,
     SectorUpdate,
+    StockDepositoResponse,
     StockUbicacionResponse,
     UbicacionCreate,
     UbicacionResponse,
     UbicacionUpdate,
 )
 from app.modules.warehouses.service import DepositoService, SectorService, UbicacionService
-from app.modules.warehouses.asignacion_service import AsignacionService
+from app.modules.warehouses.stock_service import StockService
 
 router = APIRouter(tags=["Depósitos"])
 
@@ -252,3 +254,23 @@ def get_stock_ubicacion(
 ):
     service = AsignacionService(db)
     return service.get_stock_ubicacion(ubicacion_id)
+
+
+@router.get("/depositos/{deposito_id}/stock", response_model=StockDepositoResponse)
+def get_stock_deposito(
+    deposito_id: uuid.UUID,
+    sector_id: uuid.UUID | None = None,
+    ubicacion_id: uuid.UUID | None = None,
+    categoria_id: uuid.UUID | None = None,
+    search: str | None = Query(None, min_length=1),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    service = StockService(db)
+    return service.get_stock_deposito(
+        deposito_id,
+        sector_id=sector_id,
+        ubicacion_id=ubicacion_id,
+        categoria_id=categoria_id,
+        search=search,
+    )
