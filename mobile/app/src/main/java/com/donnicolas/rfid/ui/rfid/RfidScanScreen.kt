@@ -75,7 +75,10 @@ fun RfidScanScreen(
             } else {
                 Button(
                     onClick = onStart,
-                    enabled = !state.connecting && state.readerState != RfidReaderState.ERROR,
+                    enabled = !state.connecting &&
+                        state.readerState != RfidReaderState.ERROR &&
+                        state.readerState != RfidReaderState.DISCONNECTED &&
+                        state.readerState != RfidReaderState.CONNECTING,
                     modifier = Modifier.weight(1f),
                 ) { Text("Iniciar lectura") }
             }
@@ -138,5 +141,14 @@ private fun ErrorBlock(error: AppError) {
         Text(error.code, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.error)
         Text(error.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
         Text(error.detail, style = MaterialTheme.typography.bodySmall)
+        error.cause?.takeIf { it.isNotBlank() }?.let { cause ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Causa: ${cause.take(400)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

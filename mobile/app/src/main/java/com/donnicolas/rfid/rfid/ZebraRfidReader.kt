@@ -11,8 +11,10 @@ import com.zebra.rfid.api3.INVENTORY_STATE
 import com.zebra.rfid.api3.InvalidUsageException
 import com.zebra.rfid.api3.OperationFailureException
 import com.zebra.rfid.api3.RFIDReader
+import com.zebra.rfid.api3.RFIDResults
 import com.zebra.rfid.api3.ReaderDevice
 import com.zebra.rfid.api3.Readers
+import com.zebra.rfid.api3.RegionInfo
 import com.zebra.rfid.api3.RfidEventsListener
 import com.zebra.rfid.api3.RfidReadEvents
 import com.zebra.rfid.api3.RfidStatusEvents
@@ -65,8 +67,7 @@ class ZebraRfidReader(
                         code = "RFID_NO_READER_FOUND",
                         title = "No hay lector RFID disponible",
                         detail = "GetAvailableRFIDReaderList() devolvió vacío en ${Build.MODEL}. " +
-                            "Se probaron transportes SERVICE_SERIAL, QC_SERIAL, SERVICE_USB y BLUETOOTH. " +
-                            "Verificá que el servicio RFID de Zebra esté activo en el MC33.",
+                            "Cerrá 123RFID / RFID Demo si están abiertas y reintentá.",
                     )
                 }
 
@@ -78,28 +79,7 @@ class ZebraRfidReader(
                         detail = "El dispositivo '${device.name}' no expuso getRFIDReader().",
                     )
 
-                try {
-                    if (!rfidReader.isConnected) {
-                        rfidReader.connect()
-                    }
-                } catch (e: OperationFailureException) {
-                    val results = e.results?.toString().orEmpty()
-                    if (results.contains("RFID_READER_REGION_NOT_CONFIGURED", ignoreCase = true) ||
-                        e.vendorMessage?.contains("REGION", ignoreCase = true) == true
-                    ) {
-                        configureRegion(rfidReader)
-                        if (!rfidReader.isConnected) {
-                            rfidReader.connect()
-                        }
-                    } else {
-                        throw failure(
-                            code = "RFID_CONNECT_OPERATION_FAILED",
-                            title = "Fallo al conectar el lector RFID",
-                            detail = "OperationFailureException al conectar '${device.name}'.",
-                            cause = "${e.vendorMessage} | $results",
-                        )
-                    }
-                }
+                connectWithRecovery(rfidReader, device.name)
 
                 if (!rfidReader.isConnected) {
                     throw failure(
@@ -179,7 +159,7 @@ class ZebraRfidReader(
                     code = "RFID_INVENTORY_START_FAILED",
                     title = "No se pudo iniciar el inventario RFID",
                     detail = "Actions.Inventory.perform() falló.",
-                    cause = "${e.vendorMessage} | ${e.results}",
+                    cause = formatOpFailure(e),
                 )
             } catch (e: InvalidUsageException) {
                 throw failure(
@@ -213,7 +193,114 @@ class ZebraRfidReader(
         }
     }
 
+    private fun connectWithRecovery(rfidReader: RFIDReader, deviceName: String) {
+        try {
+            if (!rfidReader.isConnected) {
+                rfidReader.connect()
+            }
+            return
+        } catch (e: OperationFailureException) {
+            Log.w(TAG, "connect fallo: ${formatOpFailure(e)}")
+            when (e.results) {
+                RFIDResults.RFID_READER_REGION_NOT_CONFIGURED -> {
+                    configureRegion(rfidReader)
+                    retryConnect(rfidReader, deviceName, e, afterRegion = true)
+                }
+                RFIDResults.RFID_COMM_CONNECTION_ALREADY_EXISTS,
+                RFIDResults.RFID_API_LOCK_ACQUIRE_FAILURE,
+                -> {
+                    runCatching { rfidReader.disconnect() }
+                    try {
+                        rfidReader.connect()
+                    } catch (retry: OperationFailureException) {
+                        if (retry.results == RFIDResults.RFID_READER_REGION_NOT_CONFIGURED) {
+                            configureRegion(rfidReader)
+                            retryConnect(rfidReader, deviceName, retry, afterRegion = true)
+                        } else {
+                            throw mapConnectFailure(deviceName, retry, locked = true)
+                        }
+                    }
+                }
+                else -> {
+                    // Algunos firmwares solo reportan REGION en vendor/status.
+                    if (isRegionNotConfigured(e)) {
+                        configureRegion(rfidReader)
+                        retryConnect(rfidReader, deviceName, e, afterRegion = true)
+                    } else {
+                        throw mapConnectFailure(deviceName, e, locked = false)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun retryConnect(
+        rfidReader: RFIDReader,
+        deviceName: String,
+        original: OperationFailureException,
+        afterRegion: Boolean,
+    ) {
+        try {
+            if (!rfidReader.isConnected) {
+                rfidReader.connect()
+            }
+        } catch (e: OperationFailureException) {
+            throw mapConnectFailure(deviceName, e, locked = false, afterRegion = afterRegion, previous = original)
+        }
+    }
+
+    private fun mapConnectFailure(
+        deviceName: String,
+        e: OperationFailureException,
+        locked: Boolean,
+        afterRegion: Boolean = false,
+        previous: OperationFailureException? = null,
+    ): RfidException {
+        val results = e.results?.toString().orEmpty()
+        val lockedHint = locked ||
+            results.contains("LOCK", ignoreCase = true) ||
+            results.contains("ALREADY_EXISTS", ignoreCase = true)
+
+        val title = when {
+            afterRegion -> "Región RFID configurada, pero reconnect falló"
+            lockedHint -> "Lector RFID ocupado por otra app"
+            else -> "Fallo al conectar el lector RFID"
+        }
+        val detail = buildString {
+            append("OperationFailureException al conectar '$deviceName' (${Build.MODEL}).")
+            if (lockedHint) {
+                append(" Cerrá completamente 123RFID / RFID Demo / RFID Manager y tocá Reconectar.")
+            }
+            if (afterRegion) {
+                append(" Se intentó setRegulatoryConfig y un segundo connect().")
+            }
+        }
+        val cause = buildString {
+            append(formatOpFailure(e))
+            previous?.let { append(" | previo: ${formatOpFailure(it)}") }
+        }
+        return failure(
+            code = if (lockedHint) "RFID_READER_BUSY" else "RFID_CONNECT_OPERATION_FAILED",
+            title = title,
+            detail = detail,
+            cause = cause,
+        )
+    }
+
+    private fun isRegionNotConfigured(e: OperationFailureException): Boolean {
+        if (e.results == RFIDResults.RFID_READER_REGION_NOT_CONFIGURED) return true
+        val blob = listOfNotNull(e.results?.toString(), e.vendorMessage, e.statusDescription)
+            .joinToString(" ")
+        return blob.contains("REGION_NOT_CONFIGURED", ignoreCase = true) ||
+            blob.contains("REGION NOT CONFIGURED", ignoreCase = true)
+    }
+
+    private fun formatOpFailure(e: OperationFailureException): String {
+        return "results=${e.results} | vendor=${e.vendorMessage} | status=${e.statusDescription}"
+    }
+
     private fun discoverReaders(): List<ReaderDevice> {
+        // MC33xx integrado: SERVICE_SERIAL / QC_SERIAL primero (HHSample prueba varios).
         val transports = listOf(
             ENUM_TRANSPORT.SERVICE_SERIAL,
             ENUM_TRANSPORT.QC_SERIAL,
@@ -244,17 +331,46 @@ class ZebraRfidReader(
 
     private fun configureRegion(rfidReader: RFIDReader) {
         try {
-            val regCfg = rfidReader.Config.regulatoryConfig ?: return
-            val regionInfo = rfidReader.ReaderCapabilities.SupportedRegions.getRegionInfo(0) ?: return
+            val regCfg = rfidReader.Config.regulatoryConfig
+                ?: throw IllegalStateException("regulatoryConfig null")
+            val regions = rfidReader.ReaderCapabilities.SupportedRegions
+            val regionInfo = pickPreferredRegion(regions)
+                ?: throw IllegalStateException("SupportedRegions vacío")
+
             regCfg.setRegion(regionInfo.regionCode)
             regCfg.setIsHoppingOn(regionInfo.isHoppingConfigurable)
             regCfg.setEnabledChannels(regionInfo.supportedChannels)
             regCfg.setStandardName(regionInfo.name)
             rfidReader.Config.regulatoryConfig = regCfg
-            Log.i(TAG, "Región RFID configurada: ${regionInfo.name}")
+            Log.i(
+                TAG,
+                "Región RFID configurada: name=${regionInfo.name} code=${regionInfo.regionCode}",
+            )
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo auto-configurar región: ${e.message}")
+            Log.e(TAG, "No se pudo auto-configurar región: ${e.message}", e)
+            throw failure(
+                code = "RFID_REGION_CONFIG_FAILED",
+                title = "No se pudo configurar la región RFID",
+                detail = "El lector exige región regulatoria. Preferimos AR/FCC/ETSI según disponibilidad.",
+                cause = e.message ?: e.toString(),
+            )
         }
+    }
+
+    private fun pickPreferredRegion(regions: com.zebra.rfid.api3.SupportedRegions): RegionInfo? {
+        if (regions.length() <= 0) return null
+        val preferred = listOf("AR", "ARGENTINA", "FCC", "USA", "NA", "ETSI", "EU")
+        for (pref in preferred) {
+            for (i in 0 until regions.length()) {
+                val info = regions.getRegionInfo(i) ?: continue
+                val name = info.name.orEmpty()
+                val code = info.regionCode.orEmpty()
+                if (name.contains(pref, ignoreCase = true) || code.equals(pref, ignoreCase = true)) {
+                    return info
+                }
+            }
+        }
+        return regions.getRegionInfo(0)
     }
 
     private fun configureReader(rfidReader: RFIDReader) {
