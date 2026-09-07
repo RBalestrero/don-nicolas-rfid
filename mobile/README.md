@@ -2,60 +2,48 @@
 
 App móvil Kotlin para operaciones de campo (Zebra MC33xx).
 
-## Fase actual
+## Conexión API (MC33 en Wi‑Fi)
 
-**3.3** — Inventario masivo (esperado vs leído) en app + API.
+En esta red el TCP al puerto **8000** de la PC queda bloqueado (ping OK, HTTP timeout).
+La solución estable es un **túnel ADB por Wi‑Fi** hacia `127.0.0.1:8000`.
 
-## Conexión API por Wi‑Fi (recomendado)
+### Setup (una vez por sesión / reboot del MC33)
 
-El MC33 y la PC deben estar en la **misma red Wi‑Fi**. No hace falta USB ni `adb reverse`.
+1. API en la PC: `bash scripts/dev-api.sh`
+2. Conectá el MC33 por USB **una vez** (o si ya tiene ADB TCP activo):
 
-1. En la PC, anotá la IP LAN (`ipconfig` → IPv4, ej. `192.168.100.164`).
-2. En `mobile/local.properties`:
+```bash
+bash scripts/adb-wifi-api.sh 192.168.100.91
+```
+
+3. En `mobile/local.properties`:
+
+```properties
+api.host=127.0.0.1
+```
+
+4. Instalá la app:
+
+```bash
+cd mobile && ./gradlew installDebug
+```
+
+En login debería verse `API: 127.0.0.1:8000`.
+
+Podés desconectar el USB: el túnel sigue por Wi‑Fi mientras el ADB TCP (`:5555`) esté activo.
+
+### Si la red permite TCP 8000 directo
 
 ```properties
 api.host=192.168.100.164
 ```
 
-3. API escuchando en todas las interfaces (`scripts/dev-api.sh` ya usa `--host 0.0.0.0`).
-4. Firewall Windows: puerto **8000** TCP entrante (regla "Don Nicolas API 8000").
-5. Rebuild e install:
-
-```bash
-cd mobile
-./gradlew installDebug
-```
-
-En Home debería verse `API: 192.168.100.164:8000`.
-
-### Alternativas
-
-| Modo | `api.host` | Extra |
-|------|------------|--------|
-| Wi‑Fi / cuna | IP LAN de la PC | Misma red |
-| USB debug | `127.0.0.1` | `adb reverse tcp:8000 tcp:8000` |
-| Emulador | `10.0.2.2` | — |
+sin `adb reverse`.
 
 ## Flujo inventario
 
-1. Login
-2. **Inventario masivo** → elegir depósito
-3. Leer RFID
-4. Contadores: esperado / encontrado / faltante / sobrante
-5. **Cerrar inventario**
-
-## Hardware
-
-- Dispositivo: **MC3300x**
-- AAR: `app/libs/rfidapi3lib-2.0.5.292.aar`
-- Modo: `RFID_MODE=AUTO`
+1. Login → **Inventario masivo** → depósito
+2. Leer RFID → contadores esperado/encontrado/faltante/sobrante
+3. **Cerrar inventario**
 
 Usuario: `admin@donnicolas.com` / `admin123`
-
-## Comandos
-
-```bash
-cd mobile
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
-```
