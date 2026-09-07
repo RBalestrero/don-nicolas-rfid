@@ -4,37 +4,33 @@ App móvil Kotlin para operaciones de campo (Zebra MC33xx).
 
 ## Fase actual
 
-**3.2** — Lectura masiva RFID con Zebra RFID API3 real + simulador para CI.
+**3.3** — Inventario masivo (esperado vs leído) en app + API.
 
-## Hardware conectado
+## Flujo inventario
+
+1. Login
+2. **Inventario masivo** → elegir depósito
+3. Leer RFID (gatillo o botón)
+4. Contadores en vivo: esperado / encontrado / faltante / sobrante
+5. **Cerrar inventario** → sync a API y detalle
+
+## Hardware
 
 - Dispositivo: **MC3300x** (USB debugging)
-- AAR: `app/libs/rfidapi3lib-2.0.5.292.aar` (HHSampleApp del SDK)
-- Modo: `RFID_MODE=AUTO` → Zebra en MC33, Simulator en emulador/CI
+- AAR: `app/libs/rfidapi3lib-2.0.5.292.aar`
+- Modo: `RFID_MODE=AUTO` → Zebra en MC33, Simulator en CI
 
 ## Deploy al MC33 por USB
 
 ```bash
-# 1) API escuchando en la PC
 bash scripts/dev-api.sh
-
-# 2) Túnel USB para que el MC33 llegue a localhost:8000 de la PC
 adb reverse tcp:8000 tcp:8000
-
-# 3) Instalar
 cd mobile
 ./gradlew installDebug
 adb shell am start -n com.donnicolas.rfid/.MainActivity
 ```
 
 Usuario: `admin@donnicolas.com` / `admin123`
-
-## SDKs locales (no versionados)
-
-Colocá extractos en `docs/sdk/` (gitignored):
-
-- `docs/sdk/mc330u/Zebra_RFIDAPI3_SDK_...` → RFID handheld
-- `docs/sdk/ZT411R/Link-OS_SDK/Webservices` → impresora
 
 ## Comandos
 

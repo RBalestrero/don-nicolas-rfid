@@ -20,6 +20,7 @@ import com.donnicolas.rfid.data.model.User
 @Composable
 fun HomeScreen(
     user: User,
+    onOpenInventory: () -> Unit,
     onOpenRfidScan: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -50,10 +51,17 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(28.dp))
         Button(
+            onClick = onOpenInventory,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Inventario masivo")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(
             onClick = onOpenRfidScan,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Lectura masiva RFID")
+            Text("Lectura RFID (debug)")
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(
