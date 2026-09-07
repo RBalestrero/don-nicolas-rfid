@@ -91,4 +91,19 @@ class InventoryRepository(
             )
         }
     }
+
+    suspend fun reporte(inventarioId: String): InventoryResult<com.donnicolas.rfid.data.api.InventarioReporteDto> {
+        return try {
+            InventoryResult.Ok(inventoryApi.reporte(inventarioId))
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "obtener reporte de inventario",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios/$inventarioId/reporte",
+                ),
+            )
+        }
+    }
 }

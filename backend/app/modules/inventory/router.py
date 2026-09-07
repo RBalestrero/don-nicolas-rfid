@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,6 +10,8 @@ from app.modules.inventory.schemas import (
     InventarioCerrarRequest,
     InventarioCreate,
     InventarioLecturasRequest,
+    InventarioListItem,
+    InventarioReporteResponse,
     InventarioResponse,
 )
 from app.modules.inventory.service import InventoryService
@@ -26,6 +28,21 @@ def create_inventario(
     return InventoryService(db).create(data, current_user.id)
 
 
+@router.get("/inventarios", response_model=list[InventarioListItem])
+def list_inventarios(
+    deposito_id: uuid.UUID | None = None,
+    estado: str | None = Query(None, description="en_curso | cerrado"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    return InventoryService(db).list_inventarios(
+        deposito_id=deposito_id,
+        estado=estado,
+        limit=limit,
+    )
+
+
 @router.get("/inventarios/{inventario_id}", response_model=InventarioResponse)
 def get_inventario(
     inventario_id: uuid.UUID,
@@ -33,6 +50,15 @@ def get_inventario(
     _: Usuario = Depends(get_current_user),
 ):
     return InventoryService(db).get(inventario_id)
+
+
+@router.get("/inventarios/{inventario_id}/reporte", response_model=InventarioReporteResponse)
+def get_inventario_reporte(
+    inventario_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    return InventoryService(db).reporte(inventario_id)
 
 
 @router.post("/inventarios/{inventario_id}/lecturas", response_model=InventarioResponse)

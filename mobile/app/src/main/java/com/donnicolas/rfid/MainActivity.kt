@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                                     onBackToSelect = inventoryViewModel::backToSelect,
                                     onBackHome = { destination = AppDestination.HOME },
                                     onReconnect = inventoryViewModel::connectReader,
+                                    onReportFilter = inventoryViewModel::setReportFilter,
                                 )
                             }
                             AppDestination.HOME -> {

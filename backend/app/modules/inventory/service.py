@@ -11,6 +11,8 @@ from app.modules.inventory.schemas import (
     InventarioCerrarRequest,
     InventarioCreate,
     InventarioLecturasRequest,
+    InventarioListItem,
+    InventarioReporteResponse,
     InventarioResponse,
     InventarioResumen,
     DetalleInventarioResponse,
@@ -71,6 +73,53 @@ class InventoryService:
     def get(self, inventario_id: uuid.UUID) -> InventarioResponse:
         inventario = self._get_or_404(inventario_id)
         return self._to_response(inventario)
+
+    def list_inventarios(
+        self,
+        *,
+        deposito_id: uuid.UUID | None = None,
+        estado: str | None = None,
+        limit: int = 50,
+    ) -> list[InventarioListItem]:
+        stmt = select(Inventario).order_by(Inventario.iniciado_en.desc()).limit(min(limit, 200))
+        if deposito_id is not None:
+            stmt = stmt.where(Inventario.deposito_id == deposito_id)
+        if estado is not None:
+            stmt = stmt.where(Inventario.estado == estado)
+        rows = list(self.db.scalars(stmt).all())
+        return [InventarioListItem.model_validate(row) for row in rows]
+
+    def reporte(self, inventario_id: uuid.UUID) -> InventarioReporteResponse:
+        inventario = self._get_or_404(inventario_id)
+        response = self._to_response(inventario)
+        encontrados = [d for d in response.detalles if d.estado == DETALLE_ENCONTRADO]
+        faltantes = [d for d in response.detalles if d.estado == DETALLE_FALTANTE]
+        sobrantes = [d for d in response.detalles if d.estado == DETALLE_SOBRANTE]
+        sin_epc = [
+            d
+            for d in response.detalles
+            if d.estado in (DETALLE_ESPERADO, DETALLE_FALTANTE, DETALLE_ENCONTRADO) and not d.epc
+        ]
+        esperado = response.resumen.total_esperado
+        coincidencia = (
+            round(100.0 * response.resumen.total_encontrado / esperado, 1) if esperado > 0 else 0.0
+        )
+        return InventarioReporteResponse(
+            inventario_id=inventario.id,
+            deposito_id=inventario.deposito_id,
+            estado=inventario.estado,
+            iniciado_en=inventario.iniciado_en,
+            cerrado_en=inventario.cerrado_en,
+            resumen=response.resumen,
+            coincidencia_pct=coincidencia,
+            tiene_discrepancias=(
+                response.resumen.total_faltante > 0 or response.resumen.total_sobrante > 0
+            ),
+            encontrados=encontrados,
+            faltantes=faltantes,
+            sobrantes=sobrantes,
+            sin_epc=sin_epc,
+        )
 
     def registrar_lecturas(
         self,

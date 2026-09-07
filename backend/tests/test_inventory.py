@@ -143,3 +143,61 @@ def test_inventario_no_reabre(client: TestClient, auth_headers):
         headers=auth_headers,
     )
     assert again.status_code == 409
+
+
+def test_reporte_discrepancias_y_listado(client: TestClient, auth_headers):
+    setup = _setup_inventario_base(client, auth_headers)
+    inv = client.post(
+        "/api/v1/inventarios",
+        json={"deposito_id": setup["deposito"]["id"]},
+        headers=auth_headers,
+    ).json()
+    client.post(
+        f"/api/v1/inventarios/{inv['id']}/cerrar",
+        json={"epcs": ["E200001", "E299999"]},
+        headers=auth_headers,
+    )
+
+    reporte = client.get(f"/api/v1/inventarios/{inv['id']}/reporte", headers=auth_headers)
+    assert reporte.status_code == 200
+    data = reporte.json()
+    assert data["tiene_discrepancias"] is True
+    assert data["coincidencia_pct"] == 33.3
+    assert len(data["encontrados"]) == 1
+    assert len(data["faltantes"]) == 2
+    assert len(data["sobrantes"]) == 1
+    assert data["encontrados"][0]["epc"] == "E200001"
+    assert {d["epc"] for d in data["faltantes"]} == {"E200002", "E200003"}
+    assert data["sobrantes"][0]["epc"] == "E299999"
+
+    lista = client.get(
+        "/api/v1/inventarios",
+        params={"deposito_id": setup["deposito"]["id"], "estado": "cerrado"},
+        headers=auth_headers,
+    )
+    assert lista.status_code == 200
+    items = lista.json()
+    assert len(items) >= 1
+    assert items[0]["id"] == inv["id"]
+    assert items[0]["total_faltante"] == 2
+    assert items[0]["total_sobrante"] == 1
+
+
+def test_reporte_sin_discrepancias(client: TestClient, auth_headers):
+    setup = _setup_inventario_base(client, auth_headers)
+    inv = client.post(
+        "/api/v1/inventarios",
+        json={"deposito_id": setup["deposito"]["id"]},
+        headers=auth_headers,
+    ).json()
+    cerrado = client.post(
+        f"/api/v1/inventarios/{inv['id']}/cerrar",
+        json={"epcs": setup["epcs"]},
+        headers=auth_headers,
+    ).json()
+    reporte = client.get(f"/api/v1/inventarios/{cerrado['id']}/reporte", headers=auth_headers).json()
+    assert reporte["tiene_discrepancias"] is False
+    assert reporte["coincidencia_pct"] == 100.0
+    assert len(reporte["faltantes"]) == 0
+    assert len(reporte["sobrantes"]) == 0
+    assert len(reporte["encontrados"]) == 3

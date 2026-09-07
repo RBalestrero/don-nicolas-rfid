@@ -11,6 +11,9 @@ import com.donnicolas.rfid.data.repository.InventoryRepository
 import com.donnicolas.rfid.data.repository.InventoryResult
 import com.donnicolas.rfid.inventory.InventoryComparer
 import com.donnicolas.rfid.inventory.InventoryCompareResult
+import com.donnicolas.rfid.inventory.InventoryReport
+import com.donnicolas.rfid.inventory.InventoryReportBuilder
+import com.donnicolas.rfid.inventory.ReportFilter
 import com.donnicolas.rfid.rfid.RfidEvent
 import com.donnicolas.rfid.rfid.RfidException
 import com.donnicolas.rfid.rfid.RfidInventorySession
@@ -42,6 +45,8 @@ data class InventoryUiState(
     val compare: InventoryCompareResult? = null,
     val recentTags: List<RfidTag> = emptyList(),
     val closedDetalles: List<DetalleInventarioDto> = emptyList(),
+    val report: InventoryReport? = null,
+    val reportFilter: ReportFilter = ReportFilter.FALTANTES,
     val error: AppError? = null,
 )
 
@@ -166,12 +171,26 @@ class InventoryViewModel(
             when (val result = repository.cerrar(invId, epcs)) {
                 is InventoryResult.Ok -> {
                     val closed = result.value
+                    var report = InventoryReportBuilder.fromInventario(closed)
+                    when (val reporteResult = repository.reporte(invId)) {
+                        is InventoryResult.Ok -> {
+                            report = InventoryReportBuilder.fromReporteDto(reporteResult.value)
+                        }
+                        is InventoryResult.Error -> Unit
+                    }
+                    val defaultFilter = when {
+                        report.faltantes.isNotEmpty() -> ReportFilter.FALTANTES
+                        report.sobrantes.isNotEmpty() -> ReportFilter.SOBRANTES
+                        else -> ReportFilter.ENCONTRADOS
+                    }
                     _state.update {
                         it.copy(
                             loading = false,
                             step = InventoryStep.RESULT,
                             inventario = closed,
                             closedDetalles = closed.detalles,
+                            report = report,
+                            reportFilter = defaultFilter,
                             compare = InventoryComparer.compare(
                                 expectedEpcs,
                                 epcs.toSet(),
@@ -184,6 +203,10 @@ class InventoryViewModel(
                 }
             }
         }
+    }
+
+    fun setReportFilter(filter: ReportFilter) {
+        _state.update { it.copy(reportFilter = filter) }
     }
 
     fun backToSelect() {
@@ -200,6 +223,8 @@ class InventoryViewModel(
                     uniqueReads = 0,
                     recentTags = emptyList(),
                     closedDetalles = emptyList(),
+                    report = null,
+                    reportFilter = ReportFilter.FALTANTES,
                     error = null,
                 )
             }

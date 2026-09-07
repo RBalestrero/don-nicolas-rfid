@@ -21,6 +21,9 @@ interface InventoryApi {
     @GET("inventarios/{id}")
     suspend fun get(@Path("id") id: String): InventarioDto
 
+    @GET("inventarios/{id}/reporte")
+    suspend fun reporte(@Path("id") id: String): InventarioReporteDto
+
     @POST("inventarios/{id}/lecturas")
     suspend fun registrarLecturas(
         @Path("id") id: String,
@@ -81,4 +84,16 @@ data class DetalleInventarioDto(
     @Json(name = "numero_patrimonial") val numeroPatrimonial: String? = null,
     val descripcion: String? = null,
     val estado: String,
+)
+
+data class InventarioReporteDto(
+    @Json(name = "inventario_id") val inventarioId: String,
+    @Json(name = "deposito_id") val depositoId: String,
+    val estado: String,
+    val resumen: InventarioResumenDto,
+    @Json(name = "coincidencia_pct") val coincidenciaPct: Double = 0.0,
+    @Json(name = "tiene_discrepancias") val tieneDiscrepancias: Boolean = false,
+    val encontrados: List<DetalleInventarioDto> = emptyList(),
+    val faltantes: List<DetalleInventarioDto> = emptyList(),
+    val sobrantes: List<DetalleInventarioDto> = emptyList(),
 )

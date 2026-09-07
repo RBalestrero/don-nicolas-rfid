@@ -39,6 +39,7 @@ fun InventoryScreen(
     onBackToSelect: () -> Unit,
     onBackHome: () -> Unit,
     onReconnect: () -> Unit,
+    onReportFilter: (com.donnicolas.rfid.inventory.ReportFilter) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -81,6 +82,7 @@ fun InventoryScreen(
             )
             InventoryStep.RESULT -> ResultStep(
                 state = state,
+                onFilter = onReportFilter,
                 onAgain = onBackToSelect,
                 onHome = onBackHome,
             )
@@ -186,30 +188,76 @@ private fun ScanningStep(
 @Composable
 private fun ResultStep(
     state: InventoryUiState,
+    onFilter: (com.donnicolas.rfid.inventory.ReportFilter) -> Unit,
     onAgain: () -> Unit,
     onHome: () -> Unit,
 ) {
-    val compare = state.compare
+    val report = state.report
     Spacer(modifier = Modifier.height(12.dp))
-    Text("Inventario cerrado", style = MaterialTheme.typography.titleMedium)
-    state.inventario?.let {
-        Text("Estado: ${it.estado}", style = MaterialTheme.typography.bodySmall)
+    Text("Reporte post-inventario", style = MaterialTheme.typography.titleMedium)
+    if (report != null) {
+        Text(
+            text = if (report.tieneDiscrepancias) {
+                "Hay discrepancias · coincidencia ${"%.1f".format(report.coincidenciaPct)}%"
+            } else {
+                "Sin discrepancias · coincidencia 100%"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (report.tieneDiscrepancias) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Metric("Esp", report.esperado.toString(), Modifier.weight(1f))
+            Metric("OK", report.encontrado.toString(), Modifier.weight(1f))
+            Metric("Falt", report.faltante.toString(), Modifier.weight(1f))
+            Metric("Sobr", report.sobrante.toString(), Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            FilterChip("Falt", com.donnicolas.rfid.inventory.ReportFilter.FALTANTES, state.reportFilter, onFilter, Modifier.weight(1f))
+            FilterChip("Sobr", com.donnicolas.rfid.inventory.ReportFilter.SOBRANTES, state.reportFilter, onFilter, Modifier.weight(1f))
+            FilterChip("OK", com.donnicolas.rfid.inventory.ReportFilter.ENCONTRADOS, state.reportFilter, onFilter, Modifier.weight(1f))
+            FilterChip("Todos", com.donnicolas.rfid.inventory.ReportFilter.TODOS, state.reportFilter, onFilter, Modifier.weight(1f))
+        }
+    } else if (state.compare != null) {
+        CompareMetrics(state.compare)
     }
-    Spacer(modifier = Modifier.height(12.dp))
-    if (compare != null) {
-        CompareMetrics(compare)
-    }
+
     Spacer(modifier = Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         Button(onClick = onAgain, modifier = Modifier.weight(1f)) { Text("Otro inventario") }
         OutlinedButton(onClick = onHome, modifier = Modifier.weight(1f)) { Text("Inicio") }
     }
     Spacer(modifier = Modifier.height(16.dp))
-    Text("Detalle", style = MaterialTheme.typography.titleSmall)
+    val items = report?.filtered(state.reportFilter) ?: state.closedDetalles
+    Text(
+        text = "Detalle (${items.size})",
+        style = MaterialTheme.typography.titleSmall,
+    )
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(state.closedDetalles, key = { it.id }) { detalle ->
+        items(items, key = { it.id }) { detalle ->
             DetalleRow(detalle)
         }
+    }
+}
+
+@Composable
+private fun FilterChip(
+    label: String,
+    filter: com.donnicolas.rfid.inventory.ReportFilter,
+    selected: com.donnicolas.rfid.inventory.ReportFilter,
+    onFilter: (com.donnicolas.rfid.inventory.ReportFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isSelected = selected == filter
+    if (isSelected) {
+        Button(onClick = { onFilter(filter) }, modifier = modifier) { Text(label) }
+    } else {
+        OutlinedButton(onClick = { onFilter(filter) }, modifier = modifier) { Text(label) }
     }
 }
 

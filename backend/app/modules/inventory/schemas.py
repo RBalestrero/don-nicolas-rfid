@@ -38,6 +38,22 @@ class InventarioResumen(BaseModel):
     sin_epc: int = 0
 
 
+class InventarioListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    deposito_id: UUID
+    sector_id: UUID | None
+    ubicacion_id: UUID | None
+    estado: str
+    total_esperado: int
+    total_encontrado: int
+    total_faltante: int
+    total_sobrante: int
+    iniciado_en: datetime
+    cerrado_en: datetime | None
+
+
 class InventarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,3 +71,18 @@ class InventarioResponse(BaseModel):
     cerrado_en: datetime | None
     resumen: InventarioResumen
     detalles: list[DetalleInventarioResponse] = []
+
+
+class InventarioReporteResponse(BaseModel):
+    inventario_id: UUID
+    deposito_id: UUID
+    estado: str
+    iniciado_en: datetime
+    cerrado_en: datetime | None
+    resumen: InventarioResumen
+    coincidencia_pct: float
+    tiene_discrepancias: bool
+    encontrados: list[DetalleInventarioResponse]
+    faltantes: list[DetalleInventarioResponse]
+    sobrantes: list[DetalleInventarioResponse]
+    sin_epc: list[DetalleInventarioResponse] = []
