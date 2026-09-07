@@ -52,6 +52,21 @@ fun InventoryScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (state.offlineMode) {
+            Text(
+                text = "Modo offline",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        state.statusMessage?.let { msg ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         state.error?.let {
             Spacer(modifier = Modifier.height(12.dp))
@@ -162,7 +177,11 @@ private fun ScanningStep(
                 Text("Leer RFID")
             }
         }
-        OutlinedButton(onClick = onSync, modifier = Modifier.weight(1f), enabled = !state.loading) {
+        OutlinedButton(
+            onClick = onSync,
+            modifier = Modifier.weight(1f),
+            enabled = !state.loading && !state.offlineMode,
+        ) {
             Text("Sync API")
         }
     }
@@ -195,6 +214,14 @@ private fun ResultStep(
     val report = state.report
     Spacer(modifier = Modifier.height(12.dp))
     Text("Reporte post-inventario", style = MaterialTheme.typography.titleMedium)
+    state.statusMessage?.let { msg ->
+        Text(
+            text = msg,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
     if (report != null) {
         Text(
             text = if (report.tieneDiscrepancias) {

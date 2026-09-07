@@ -12,7 +12,6 @@ import com.donnicolas.rfid.data.repository.InventoryResult
 import com.donnicolas.rfid.inventory.InventoryComparer
 import com.donnicolas.rfid.inventory.InventoryCompareResult
 import com.donnicolas.rfid.inventory.InventoryReport
-import com.donnicolas.rfid.inventory.InventoryReportBuilder
 import com.donnicolas.rfid.inventory.ReportFilter
 import com.donnicolas.rfid.rfid.RfidEvent
 import com.donnicolas.rfid.rfid.RfidException
@@ -39,6 +38,8 @@ data class InventoryUiState(
     val depositos: List<DepositoDto> = emptyList(),
     val selectedDeposito: DepositoDto? = null,
     val inventario: InventarioDto? = null,
+    val offlineMode: Boolean = false,
+    val statusMessage: String? = null,
     val readerState: RfidReaderState = RfidReaderState.DISCONNECTED,
     val scanning: Boolean = false,
     val uniqueReads: Int = 0,
@@ -71,8 +72,13 @@ class InventoryViewModel(
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             when (val result = repository.listDepositos()) {
-                is InventoryResult.Ok -> _state.update {
-                    it.copy(loading = false, depositos = result.value.filter { d -> d.activo })
+                is InventoryResult.Ok -> {
+                    _state.update {
+                        it.copy(loading = false, depositos = result.value.filter { d -> d.activo })
+                    }
+                    result.value.filter { it.activo }.forEach { dep ->
+                        repository.prefetchStock(dep.id)
+                    }
                 }
                 is InventoryResult.Error -> _state.update {
                     it.copy(loading = false, error = result.error)
@@ -83,10 +89,10 @@ class InventoryViewModel(
 
     fun startInventario(deposito: DepositoDto) {
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, selectedDeposito = deposito) }
-            when (val result = repository.createInventario(deposito.id)) {
+            _state.update { it.copy(loading = true, error = null, selectedDeposito = deposito, statusMessage = null) }
+            when (val result = repository.startInventario(deposito)) {
                 is InventoryResult.Ok -> {
-                    val inv = result.value
+                    val inv = result.value.inventario
                     expectedEpcs = inv.detalles
                         .mapNotNull { it.epc?.trim()?.uppercase() }
                         .filter { it.isNotEmpty() }
@@ -97,6 +103,8 @@ class InventoryViewModel(
                             loading = false,
                             step = InventoryStep.SCANNING,
                             inventario = inv,
+                            offlineMode = result.value.offline,
+                            statusMessage = result.value.message,
                             compare = InventoryComparer.compare(expectedEpcs, emptySet()),
                             uniqueReads = 0,
                             recentTags = emptyList(),
@@ -163,21 +171,23 @@ class InventoryViewModel(
     }
 
     fun cerrarInventario() {
-        val invId = _state.value.inventario?.id ?: return
+        val inventario = _state.value.inventario ?: return
         viewModelScope.launch {
             runCatching { reader.stopInventory() }
             _state.update { it.copy(loading = true, error = null, scanning = false) }
             val epcs = session.snapshot().tags.map { it.epc }
-            when (val result = repository.cerrar(invId, epcs)) {
+            when (
+                val result = repository.cerrar(
+                    inventario = inventario,
+                    deposito = _state.value.selectedDeposito,
+                    expectedEpcs = expectedEpcs,
+                    readEpcs = epcs,
+                    offlineSession = _state.value.offlineMode,
+                )
+            ) {
                 is InventoryResult.Ok -> {
-                    val closed = result.value
-                    var report = InventoryReportBuilder.fromInventario(closed)
-                    when (val reporteResult = repository.reporte(invId)) {
-                        is InventoryResult.Ok -> {
-                            report = InventoryReportBuilder.fromReporteDto(reporteResult.value)
-                        }
-                        is InventoryResult.Error -> Unit
-                    }
+                    val closed = result.value.inventario
+                    val report = result.value.report
                     val defaultFilter = when {
                         report.faltantes.isNotEmpty() -> ReportFilter.FALTANTES
                         report.sobrantes.isNotEmpty() -> ReportFilter.SOBRANTES
@@ -191,10 +201,8 @@ class InventoryViewModel(
                             closedDetalles = closed.detalles,
                             report = report,
                             reportFilter = defaultFilter,
-                            compare = InventoryComparer.compare(
-                                expectedEpcs,
-                                epcs.toSet(),
-                            ),
+                            statusMessage = result.value.message,
+                            compare = InventoryComparer.compare(expectedEpcs, epcs.toSet()),
                         )
                     }
                 }
@@ -225,6 +233,8 @@ class InventoryViewModel(
                     closedDetalles = emptyList(),
                     report = null,
                     reportFilter = ReportFilter.FALTANTES,
+                    offlineMode = false,
+                    statusMessage = null,
                     error = null,
                 )
             }

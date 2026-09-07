@@ -12,6 +12,9 @@ interface WarehouseApi {
     suspend fun listDepositos(
         @Query("include_inactive") includeInactive: Boolean = false,
     ): List<DepositoDto>
+
+    @GET("depositos/{id}/stock")
+    suspend fun getStock(@Path("id") depositoId: String): StockDepositoDto
 }
 
 interface InventoryApi {
@@ -43,6 +46,20 @@ data class DepositoDto(
     val descripcion: String? = null,
     val direccion: String? = null,
     val activo: Boolean = true,
+)
+
+data class StockDepositoDto(
+    @Json(name = "deposito_id") val depositoId: String,
+    @Json(name = "deposito_nombre") val depositoNombre: String? = null,
+    val total: Int = 0,
+    val activos: List<StockActivoDto> = emptyList(),
+)
+
+data class StockActivoDto(
+    @Json(name = "activo_id") val activoId: String? = null,
+    @Json(name = "numero_patrimonial") val numeroPatrimonial: String? = null,
+    val descripcion: String? = null,
+    val epc: String? = null,
 )
 
 data class InventarioCreateDto(

@@ -21,9 +21,13 @@ import com.donnicolas.rfid.data.model.User
 @Composable
 fun HomeScreen(
     user: User,
+    pendingSync: Int = 0,
+    syncing: Boolean = false,
+    syncMessage: String? = null,
     onOpenInventory: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenRfidScan: () -> Unit,
+    onSyncPending: () -> Unit = {},
     onLogout: () -> Unit,
 ) {
     Column(
@@ -56,6 +60,22 @@ fun HomeScreen(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (pendingSync > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Pendientes de sync: $pendingSync",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        syncMessage?.let {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(modifier = Modifier.height(28.dp))
         Button(
             onClick = onOpenInventory,
@@ -69,6 +89,14 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Buscar activo por RFID")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onSyncPending,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !syncing && pendingSync > 0,
+        ) {
+            Text(if (syncing) "Sincronizando…" else "Sincronizar pendientes")
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(

@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.donnicolas.rfid.ui.auth.LoginScreen
 import com.donnicolas.rfid.ui.auth.LoginViewModel
 import com.donnicolas.rfid.ui.home.HomeScreen
+import com.donnicolas.rfid.ui.home.HomeViewModel
 import com.donnicolas.rfid.ui.inventory.InventoryScreen
 import com.donnicolas.rfid.ui.inventory.InventoryViewModel
 import com.donnicolas.rfid.ui.rfid.RfidScanScreen
@@ -115,11 +117,23 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             AppDestination.HOME -> {
+                                val app = application as DonNicolasApp
+                                val homeViewModel: HomeViewModel = viewModel(
+                                    factory = HomeViewModel.Factory(app.inventoryRepository),
+                                )
+                                val homeState by homeViewModel.state.collectAsState()
+                                LaunchedEffect(Unit) {
+                                    homeViewModel.refreshPending()
+                                }
                                 HomeScreen(
                                     user = user,
+                                    pendingSync = homeState.pendingSync,
+                                    syncing = homeState.syncing,
+                                    syncMessage = homeState.syncMessage,
                                     onOpenInventory = { destination = AppDestination.INVENTORY },
                                     onOpenSearch = { destination = AppDestination.SEARCH },
                                     onOpenRfidScan = { destination = AppDestination.RFID_SCAN },
+                                    onSyncPending = homeViewModel::flushSync,
                                     onLogout = {
                                         destination = AppDestination.HOME
                                         loginViewModel.logout()
