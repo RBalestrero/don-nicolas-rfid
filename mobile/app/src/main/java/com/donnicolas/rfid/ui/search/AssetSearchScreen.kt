@@ -5,15 +5,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -53,7 +58,8 @@ fun AssetSearchScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp),
+            .safeDrawingPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text("Localizar activo", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -63,7 +69,7 @@ fun AssetSearchScreen(
         )
 
         state.error?.let {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             ErrorBlock(it)
         }
 
@@ -96,12 +102,12 @@ private fun SelectStep(
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Elegí un artículo con EPC. La localización usa solo el lector (no necesita API).",
+            text = "Elegí un artículo con EPC. Al localizar se aplica un PreFilter para ignorar otras etiquetas.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = state.query,
             onValueChange = onQueryChange,
@@ -116,7 +122,7 @@ private fun SelectStep(
             }
             OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Volver") }
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         if (state.loadingList) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         } else if (state.activos.isEmpty()) {
@@ -125,7 +131,12 @@ private fun SelectStep(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
             items(state.activos, key = { it.id }) { activo ->
                 Column(
                     modifier = Modifier
@@ -161,78 +172,93 @@ private fun LocateStep(
 ) {
     val selected = state.selected
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = selected?.numeroPatrimonial.orEmpty(),
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Text(
-            text = selected?.descripcion.orEmpty(),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Text(
-            text = selected?.epc.orEmpty(),
-            fontFamily = FontFamily.Monospace,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = if (state.locating) {
-                "Mantené el gatillo y apuntá hacia adelante"
-            } else {
-                "Mantené apretado el gatillo para localizar (o usá el botón)"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-        LocateArrow(proximity = state.proximity)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = state.proximityLabel,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            color = proximityColor(state.proximity),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Intensidad ${state.proximity}%",
-            style = MaterialTheme.typography.labelMedium,
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = { state.proximity / 100f },
+        Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .height(14.dp),
-            color = proximityColor(state.proximity),
-            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        )
-        state.rssi?.let { rssi ->
-            Spacer(modifier = Modifier.height(6.dp))
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "RSSI $rssi dBm",
-                style = MaterialTheme.typography.labelSmall,
+                text = selected?.numeroPatrimonial.orEmpty(),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = selected?.descripcion.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = selected?.epc.orEmpty(),
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (state.locating) {
+                    "Gatillo activo · PreFilter EPC · apuntá hacia adelante"
+                } else {
+                    "Mantené el gatillo (o Localizar). Solo se lee el EPC elegido."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            LocateArrow(proximity = state.proximity)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = state.proximityLabel,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                color = proximityColor(state.proximity),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Intensidad ${state.proximity}%",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { state.proximity / 100f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(14.dp),
+                color = proximityColor(state.proximity),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+            state.rssi?.let { rssi ->
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "RSSI $rssi dBm",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            if (state.locating) {
-                Button(onClick = onStopLocate, modifier = Modifier.weight(1f)) { Text("Soltar") }
-            } else {
-                Button(onClick = onStartLocate, modifier = Modifier.weight(1f)) { Text("Localizar") }
+        // Botones fijos encima de la barra de navegación del sistema
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(top = 4.dp, bottom = 8.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                if (state.locating) {
+                    Button(onClick = onStopLocate, modifier = Modifier.weight(1f)) { Text("Soltar") }
+                } else {
+                    Button(onClick = onStartLocate, modifier = Modifier.weight(1f)) { Text("Localizar") }
+                }
+                OutlinedButton(onClick = onBackToSelect, modifier = Modifier.weight(1f)) {
+                    Text("Otro artículo")
+                }
             }
-            OutlinedButton(onClick = onBackToSelect, modifier = Modifier.weight(1f)) {
-                Text("Otro artículo")
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onReconnect, modifier = Modifier.weight(1f)) { Text("Reconectar") }
+                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Inicio") }
             }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = onReconnect, modifier = Modifier.weight(1f)) { Text("Reconectar") }
-            OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Inicio") }
         }
     }
 }
@@ -244,12 +270,12 @@ private fun LocateArrow(proximity: Int) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp),
+            .height(120.dp),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(
             modifier = Modifier
-                .size(120.dp)
+                .size(100.dp)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -269,7 +295,6 @@ private fun LocateArrow(proximity: Int) {
             }
             drawPath(path, color = fill.copy(alpha = 0.25f + proximity / 150f), style = Fill)
             drawPath(path, color = fill, style = Stroke(width = 6f))
-            // Barra interna de relleno según proximidad
             val barH = h * 0.4f * (proximity / 100f)
             if (barH > 2f) {
                 drawRoundRect(
