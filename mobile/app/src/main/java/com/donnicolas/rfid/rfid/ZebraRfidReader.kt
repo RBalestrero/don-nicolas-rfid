@@ -4,10 +4,8 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.donnicolas.rfid.data.model.AppError
-import com.zebra.rfid.api3.Antennas
 import com.zebra.rfid.api3.ENUM_TRANSPORT
 import com.zebra.rfid.api3.HANDHELD_TRIGGER_EVENT_TYPE
-import com.zebra.rfid.api3.INVENTORY_STATE
 import com.zebra.rfid.api3.InvalidUsageException
 import com.zebra.rfid.api3.OperationFailureException
 import com.zebra.rfid.api3.RFIDReader
@@ -18,12 +16,12 @@ import com.zebra.rfid.api3.RegionInfo
 import com.zebra.rfid.api3.RfidEventsListener
 import com.zebra.rfid.api3.RfidReadEvents
 import com.zebra.rfid.api3.RfidStatusEvents
-import com.zebra.rfid.api3.SESSION
-import com.zebra.rfid.api3.SL_FLAG
-import com.zebra.rfid.api3.START_TRIGGER_TYPE
 import com.zebra.rfid.api3.STATUS_EVENT_TYPE
-import com.zebra.rfid.api3.STOP_TRIGGER_TYPE
-import com.zebra.rfid.api3.TriggerInfo
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,7 +32,10 @@ import kotlinx.coroutines.withContext
 
 /**
  * Adaptador Zebra RFID API3 para handheld MC33xx.
- * Basado en HHSampleApp/RFIDHandler del SDK 2.0.5.292.
+ *
+ * No pisa potencia/sesión/triggers: respeta la configuración aplicada
+ * previamente (p. ej. desde 123RFID). Solo conecta, escucha eventos y
+ * arranca/detiene inventario.
  */
 class ZebraRfidReader(
     context: Context,
@@ -42,13 +43,18 @@ class ZebraRfidReader(
     override val modeName: String = "ZEBRA"
 
     private val appContext = context.applicationContext
-    private val eventsFlow = MutableSharedFlow<RfidEvent>(extraBufferCapacity = 256)
+    private val eventsFlow = MutableSharedFlow<RfidEvent>(extraBufferCapacity = 512)
     private val mutex = Mutex()
+    private val inventoryLock = ReentrantLock()
+    private val inventoryRunning = AtomicBoolean(false)
+    private val inventoryExecutor: ExecutorService =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "zebra-rfid-inventory").apply { isDaemon = true }
+        }
 
     private var readers: Readers? = null
     private var reader: RFIDReader? = null
     private var eventHandler: EventHandler? = null
-    private var inventoryRunning = false
 
     override fun events(): Flow<RfidEvent> = eventsFlow.asSharedFlow()
 
@@ -89,10 +95,10 @@ class ZebraRfidReader(
                     )
                 }
 
-                configureReader(rfidReader)
+                attachEventsOnly(rfidReader)
                 reader = rfidReader
-                inventoryRunning = false
-                Log.i(TAG, "Conectado a ${device.name} / ${rfidReader.hostName}")
+                inventoryRunning.set(false)
+                Log.i(TAG, "Conectado a ${device.name} / ${rfidReader.hostName} (sin override de config RF)")
                 emitState(RfidReaderState.READY)
             } catch (e: RfidException) {
                 emitState(RfidReaderState.ERROR)
@@ -124,7 +130,7 @@ class ZebraRfidReader(
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         mutex.withLock {
-            runCatching { stopInventoryInternal() }
+            stopInventoryInternal(force = true)
             runCatching {
                 eventHandler?.let { handler ->
                     reader?.Events?.removeEventsListener(handler)
@@ -135,7 +141,7 @@ class ZebraRfidReader(
             eventHandler = null
             reader = null
             readers = null
-            inventoryRunning = false
+            inventoryRunning.set(false)
             emitState(RfidReaderState.DISCONNECTED)
         }
     }
@@ -151,9 +157,7 @@ class ZebraRfidReader(
                 )
             }
             try {
-                rfidReader.Actions.Inventory.perform()
-                inventoryRunning = true
-                emitState(RfidReaderState.INVENTORY_RUNNING)
+                startInventoryInternal(rfidReader)
             } catch (e: OperationFailureException) {
                 throw failure(
                     code = "RFID_INVENTORY_START_FAILED",
@@ -174,22 +178,62 @@ class ZebraRfidReader(
 
     override suspend fun stopInventory() = withContext(Dispatchers.IO) {
         mutex.withLock {
-            stopInventoryInternal()
+            stopInventoryInternal(force = true)
             if (reader?.isConnected == true) {
                 emitState(RfidReaderState.READY)
             }
         }
     }
 
-    private fun stopInventoryInternal() {
-        val rfidReader = reader ?: return
-        if (!inventoryRunning) return
-        try {
-            rfidReader.Actions.Inventory.stop()
-        } catch (e: Exception) {
-            Log.w(TAG, "stopInventory: ${e.message}")
-        } finally {
-            inventoryRunning = false
+    private fun startInventoryInternal(rfidReader: RFIDReader) {
+        inventoryLock.withLock {
+            if (inventoryRunning.get()) return
+            rfidReader.Actions.Inventory.perform()
+            inventoryRunning.set(true)
+            eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.INVENTORY_RUNNING))
+        }
+    }
+
+    private fun stopInventoryInternal(force: Boolean = false) {
+        inventoryLock.withLock {
+            val rfidReader = reader ?: run {
+                inventoryRunning.set(false)
+                return
+            }
+            if (!force && !inventoryRunning.get()) return
+            try {
+                rfidReader.Actions.Inventory.stop()
+            } catch (e: Exception) {
+                // stop() con inventario ya detenido es frecuente al soltar el gatillo.
+                Log.w(TAG, "stopInventory: ${e.javaClass.simpleName}: ${e.message}")
+            } finally {
+                inventoryRunning.set(false)
+            }
+        }
+    }
+
+    private fun queueStartInventory() {
+        inventoryExecutor.execute {
+            try {
+                val rfidReader = reader ?: return@execute
+                if (!rfidReader.isConnected) return@execute
+                startInventoryInternal(rfidReader)
+            } catch (e: Exception) {
+                Log.e(TAG, "queueStartInventory: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun queueStopInventory() {
+        inventoryExecutor.execute {
+            try {
+                stopInventoryInternal(force = true)
+                if (reader?.isConnected == true) {
+                    eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.READY))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "queueStopInventory: ${e.message}", e)
+            }
         }
     }
 
@@ -222,7 +266,6 @@ class ZebraRfidReader(
                     }
                 }
                 else -> {
-                    // Algunos firmwares solo reportan REGION en vendor/status.
                     if (isRegionNotConfigured(e)) {
                         configureRegion(rfidReader)
                         retryConnect(rfidReader, deviceName, e, afterRegion = true)
@@ -300,7 +343,6 @@ class ZebraRfidReader(
     }
 
     private fun discoverReaders(): List<ReaderDevice> {
-        // MC33xx integrado: SERVICE_SERIAL / QC_SERIAL primero (HHSample prueba varios).
         val transports = listOf(
             ENUM_TRANSPORT.SERVICE_SERIAL,
             ENUM_TRANSPORT.QC_SERIAL,
@@ -344,14 +386,15 @@ class ZebraRfidReader(
             rfidReader.Config.regulatoryConfig = regCfg
             Log.i(
                 TAG,
-                "Región RFID configurada: name=${regionInfo.name} code=${regionInfo.regionCode}",
+                "Región RFID configurada (solo por REGION_NOT_CONFIGURED): " +
+                    "name=${regionInfo.name} code=${regionInfo.regionCode}",
             )
         } catch (e: Exception) {
             Log.e(TAG, "No se pudo auto-configurar región: ${e.message}", e)
             throw failure(
                 code = "RFID_REGION_CONFIG_FAILED",
                 title = "No se pudo configurar la región RFID",
-                detail = "El lector exige región regulatoria. Preferimos AR/FCC/ETSI según disponibilidad.",
+                detail = "El lector exige región regulatoria. Configurala en 123RFID y reintentá.",
                 cause = e.message ?: e.toString(),
             )
         }
@@ -373,39 +416,16 @@ class ZebraRfidReader(
         return regions.getRegionInfo(0)
     }
 
-    private fun configureReader(rfidReader: RFIDReader) {
-        val triggerInfo = TriggerInfo()
-        triggerInfo.StartTrigger.triggerType = START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE
-        triggerInfo.StopTrigger.triggerType = STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE
-
+    /** Solo eventos: no modifica potencia, sesión, prefilters ni triggers del reader. */
+    private fun attachEventsOnly(rfidReader: RFIDReader) {
         val handler = eventHandler ?: EventHandler().also { eventHandler = it }
+        runCatching { rfidReader.Events.removeEventsListener(handler) }
         rfidReader.Events.addEventsListener(handler)
         rfidReader.Events.setHandheldEvent(true)
         rfidReader.Events.setTagReadEvent(true)
         rfidReader.Events.setAttachTagDataWithReadEvent(false)
         rfidReader.Events.setReaderDisconnectEvent(true)
-        rfidReader.Config.setStartTrigger(triggerInfo.StartTrigger)
-        rfidReader.Config.setStopTrigger(triggerInfo.StopTrigger)
-
-        try {
-            val maxPower = rfidReader.ReaderCapabilities.transmitPowerLevelValues.size - 1
-            val antennaConfig: Antennas.AntennaRfConfig =
-                rfidReader.Config.Antennas.getAntennaRfConfig(1)
-            antennaConfig.transmitPowerIndex = maxPower
-            antennaConfig.setrfModeTableIndex(0)
-            antennaConfig.setTari(0)
-            rfidReader.Config.Antennas.setAntennaRfConfig(1, antennaConfig)
-
-            val singulation: Antennas.SingulationControl =
-                rfidReader.Config.Antennas.getSingulationControl(1)
-            singulation.session = SESSION.SESSION_S0
-            singulation.Action.inventoryState = INVENTORY_STATE.INVENTORY_STATE_A
-            singulation.Action.slFlag = SL_FLAG.SL_ALL
-            rfidReader.Config.Antennas.setSingulationControl(1, singulation)
-            rfidReader.Actions.PreFilters.deleteAll()
-        } catch (e: Exception) {
-            Log.w(TAG, "Config RF parcial: ${e.message}")
-        }
+        Log.i(TAG, "Eventos RFID suscritos; se conserva la config del reader (123RFID)")
     }
 
     private suspend fun emitState(state: RfidReaderState) {
@@ -430,21 +450,23 @@ class ZebraRfidReader(
 
     private inner class EventHandler : RfidEventsListener {
         override fun eventReadNotify(e: RfidReadEvents?) {
+            if (!inventoryRunning.get()) return
             val rfidReader = reader ?: return
             try {
                 val tags = rfidReader.Actions.getReadTags(100) ?: return
                 val mapped = tags.mapNotNull { tag ->
                     val epc = tag.tagID ?: return@mapNotNull null
+                    if (epc.isBlank()) return@mapNotNull null
                     RfidTag(
                         epc = epc,
-                        rssi = tag.peakRSSI.toInt(),
-                        antenna = tag.antennaID.toInt(),
+                        rssi = runCatching { tag.peakRSSI.toInt() }.getOrDefault(0),
+                        antenna = runCatching { tag.antennaID.toInt() }.getOrDefault(0),
                         seenCount = 1,
                     )
                 }
                 if (mapped.isNotEmpty()) {
+                    // Un solo evento por lote: evita saturar la UI y crashes al soltar el gatillo.
                     eventsFlow.tryEmit(RfidEvent.BatchRead(mapped))
-                    mapped.forEach { eventsFlow.tryEmit(RfidEvent.TagRead(it)) }
                 }
             } catch (ex: Exception) {
                 Log.e(TAG, "eventReadNotify: ${ex.message}", ex)
@@ -452,40 +474,41 @@ class ZebraRfidReader(
         }
 
         override fun eventStatusNotify(e: RfidStatusEvents?) {
-            val statusType = e?.StatusEventData?.statusEventType ?: return
-            when (statusType) {
-                STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT -> {
-                    val trigger = e.StatusEventData.HandheldTriggerEventData.handheldEvent
-                    when (trigger) {
-                        HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED -> {
-                            Log.i(TAG, "Trigger PRESSED → inventory")
-                            runCatching { reader?.Actions?.Inventory?.perform() }
-                            inventoryRunning = true
-                            eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.INVENTORY_RUNNING))
+            try {
+                val statusType = e?.StatusEventData?.statusEventType ?: return
+                when (statusType) {
+                    STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT -> {
+                        val trigger = e.StatusEventData.HandheldTriggerEventData.handheldEvent
+                        when (trigger) {
+                            HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED -> {
+                                Log.i(TAG, "Trigger PRESSED → inventory")
+                                queueStartInventory()
+                            }
+                            HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_RELEASED -> {
+                                Log.i(TAG, "Trigger RELEASED → stop")
+                                // Parar enseguida fuera del hilo del SDK.
+                                queueStopInventory()
+                            }
+                            else -> Unit
                         }
-                        HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_RELEASED -> {
-                            Log.i(TAG, "Trigger RELEASED → stop")
-                            runCatching { reader?.Actions?.Inventory?.stop() }
-                            inventoryRunning = false
-                            eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.READY))
-                        }
-                        else -> Unit
                     }
-                }
-                STATUS_EVENT_TYPE.DISCONNECTION_EVENT -> {
-                    inventoryRunning = false
-                    eventsFlow.tryEmit(
-                        RfidEvent.Failure(
-                            AppError(
-                                code = "RFID_DISCONNECTED",
-                                title = "Lector RFID desconectado",
-                                detail = "El SDK reportó DISCONNECTION_EVENT. Reconectá desde la app.",
+                    STATUS_EVENT_TYPE.DISCONNECTION_EVENT -> {
+                        inventoryRunning.set(false)
+                        eventsFlow.tryEmit(
+                            RfidEvent.Failure(
+                                AppError(
+                                    code = "RFID_DISCONNECTED",
+                                    title = "Lector RFID desconectado",
+                                    detail = "El SDK reportó DISCONNECTION_EVENT. Reconectá desde la app.",
+                                ),
                             ),
-                        ),
-                    )
-                    eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.DISCONNECTED))
+                        )
+                        eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.DISCONNECTED))
+                    }
+                    else -> Log.d(TAG, "Status event: $statusType")
                 }
-                else -> Log.d(TAG, "Status event: $statusType")
+            } catch (ex: Exception) {
+                Log.e(TAG, "eventStatusNotify: ${ex.message}", ex)
             }
         }
     }
