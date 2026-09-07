@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-fast dev-stop test test-backend test-frontend lint help
+.PHONY: setup dev dev-fast dev-stop test test-backend test-frontend test-mobile lint help
 
 help: ## Mostrar ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -34,13 +34,16 @@ dev-web: ## Frontend con hot reload (Vite HMR)
 dev-stop: ## Detener contenedores Docker
 	cd infra && docker compose down
 
-test: test-backend test-frontend ## Ejecutar todos los tests
+test: test-backend test-frontend test-mobile ## Ejecutar todos los tests
 
 test-backend: ## Tests del backend
 	cd backend && python -m pytest -v
 
 test-frontend: ## Tests del frontend
 	cd frontend && npm test
+
+test-mobile: ## Tests unitarios Android
+	cd mobile && ./gradlew testDebugUnitTest
 
 lint: ## Lint backend y frontend
 	cd backend && python -m ruff check .

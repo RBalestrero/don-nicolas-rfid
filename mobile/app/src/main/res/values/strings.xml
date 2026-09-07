@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Don Nicolás RFID</string>
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_subtitle">Acceso operativo de campo</string>
+    <string name="email">Email</string>
+    <string name="password">Contraseña</string>
+    <string name="login_button">Ingresar</string>
+    <string name="logout">Salir</string>
+    <string name="home_welcome">Sesión activa</string>
+</resources>
