@@ -50,6 +50,11 @@ fun LoginScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Text(
+            text = "API: ${com.donnicolas.rfid.BuildConfig.API_HOST}:8000",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(modifier = Modifier.height(32.dp))
 
         OutlinedTextField(
