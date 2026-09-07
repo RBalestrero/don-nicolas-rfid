@@ -3,6 +3,7 @@ package com.donnicolas.rfid.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.data.model.AuthResult
 import com.donnicolas.rfid.data.model.User
 import com.donnicolas.rfid.data.repository.AuthRepository
@@ -16,7 +17,7 @@ data class LoginUiState(
     val email: String = "admin@donnicolas.com",
     val password: String = "",
     val loading: Boolean = false,
-    val error: String? = null,
+    val error: AppError? = null,
     val user: User? = null,
 )
 
@@ -42,8 +43,16 @@ class LoginViewModel(
 
     fun login() {
         val current = _state.value
-        if (current.email.isBlank() || current.password.isBlank()) {
-            _state.update { it.copy(error = "Completá email y contraseña") }
+        if (current.email.isBlank() && current.password.isBlank()) {
+            _state.update {
+                it.copy(
+                    error = AppError(
+                        code = "AUTH_FIELDS_REQUIRED",
+                        title = "Campos requeridos",
+                        detail = "Email y contraseña están vacíos. Completá ambos campos para iniciar sesión.",
+                    ),
+                )
+            }
             return
         }
 
@@ -54,7 +63,7 @@ class LoginViewModel(
                     _state.update { it.copy(loading = false, user = result.user, error = null) }
                 }
                 is AuthResult.Error -> {
-                    _state.update { it.copy(loading = false, error = result.message) }
+                    _state.update { it.copy(loading = false, error = result.error) }
                 }
             }
         }
@@ -74,7 +83,16 @@ class LoginViewModel(
                 }
                 is AuthResult.Error -> {
                     authRepository.logout()
-                    _state.update { it.copy(loading = false, user = null) }
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            user = null,
+                            error = result.error.copy(
+                                title = "No se pudo restaurar la sesión",
+                                detail = "Había un token guardado pero falló la validación. ${result.error.detail}",
+                            ),
+                        )
+                    }
                 }
             }
         }

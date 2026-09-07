@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.config import get_settings
 from app.database import check_database_connection
@@ -31,6 +33,32 @@ app.include_router(assets_router, prefix="/api/v1")
 app.include_router(warehouses_router, prefix="/api/v1")
 
 
+@app.exception_handler(OperationalError)
+async def handle_db_operational_error(_request: Request, exc: OperationalError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "code": "DB_CONNECTION_FAILED",
+            "detail": (
+                "No se pudo conectar a PostgreSQL. "
+                "Levantá el contenedor con: cd infra && docker compose up -d postgres. "
+                f"Causa técnica: {exc.orig if getattr(exc, 'orig', None) else exc}"
+            ),
+        },
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def handle_sqlalchemy_error(_request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "code": "DB_ERROR",
+            "detail": f"Error de base de datos durante la operación. Causa técnica: {exc}",
+        },
+    )
+
+
 @app.on_event("startup")
 def log_registered_routes() -> None:
     import logging
@@ -51,4 +79,10 @@ def health_check() -> dict:
         "service": "don-nicolas-rfid-api",
         "version": "0.1.0",
         "database": "connected" if db_ok else "disconnected",
+        "code": "OK" if db_ok else "DB_DISCONNECTED",
+        "detail": (
+            "API y base de datos operativas"
+            if db_ok
+            else "API arriba pero PostgreSQL no responde. Ejecutá: cd infra && docker compose up -d postgres"
+        ),
     }

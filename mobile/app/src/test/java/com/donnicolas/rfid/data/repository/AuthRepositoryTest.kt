@@ -21,6 +21,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import retrofit2.HttpException
 import retrofit2.Response
+import java.net.ConnectException
 
 class AuthRepositoryTest {
     private lateinit var authApi: AuthApi
@@ -31,7 +32,11 @@ class AuthRepositoryTest {
     fun setup() {
         authApi = mock()
         tokenStore = mock()
-        repository = AuthRepository(authApi, tokenStore)
+        repository = AuthRepository(
+            authApi = authApi,
+            tokenStore = tokenStore,
+            baseUrl = "http://10.0.2.2:8000/api/v1/",
+        )
     }
 
     @Test
@@ -59,8 +64,8 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `login con credenciales invalidas limpia token`() = runTest {
-        val body = """{"detail":"Credenciales inválidas"}"""
+    fun `login con credenciales invalidas expone codigo AUTH_INVALID_CREDENTIALS`() = runTest {
+        val body = """{"detail":{"code":"AUTH_INVALID_CREDENTIALS","message":"Credenciales inválidas: email o contraseña incorrectos"}}"""
             .toResponseBody("application/json".toMediaType())
         whenever(authApi.login(any())).thenThrow(
             HttpException(Response.error<Any>(401, body)),
@@ -69,9 +74,52 @@ class AuthRepositoryTest {
         val result = repository.login("admin@donnicolas.com", "wrong")
 
         assertTrue(result is AuthResult.Error)
-        assertEquals("Credenciales inválidas", (result as AuthResult.Error).message)
+        val error = (result as AuthResult.Error).error
+        assertEquals("AUTH_INVALID_CREDENTIALS", error.code)
+        assertTrue(error.detail.contains("Credenciales inválidas"))
+        assertEquals(401, error.httpStatus)
         verify(tokenStore).clear()
         verify(tokenStore, never()).saveToken(any())
+    }
+
+    @Test
+    fun `login con conexion rechazada expone NET_CONNECTION_REFUSED`() = runTest {
+        whenever(authApi.login(any())).thenAnswer {
+            throw ConnectException("Failed to connect to /10.0.2.2:8000")
+        }
+
+        val result = repository.login("admin@donnicolas.com", "admin123")
+
+        assertTrue(result is AuthResult.Error)
+        val error = (result as AuthResult.Error).error
+        assertEquals("NET_CONNECTION_REFUSED", error.code)
+        assertTrue(error.detail.contains("10.0.2.2:8000") || error.detail.contains("Postgres"))
+        assertTrue(error.endpoint!!.contains("auth/login"))
+    }
+
+    @Test
+    fun `login con API 503 por DB caida usa codigo del servidor`() = runTest {
+        val body = """{"code":"DB_CONNECTION_FAILED","detail":"No se pudo conectar a PostgreSQL."}"""
+            .toResponseBody("application/json".toMediaType())
+        whenever(authApi.login(any())).thenThrow(
+            HttpException(Response.error<Any>(503, body)),
+        )
+
+        val result = repository.login("admin@donnicolas.com", "admin123")
+
+        assertTrue(result is AuthResult.Error)
+        val error = (result as AuthResult.Error).error
+        assertEquals("DB_CONNECTION_FAILED", error.code)
+        assertEquals(503, error.httpStatus)
+        assertTrue(error.detail.contains("PostgreSQL"))
+    }
+
+    @Test
+    fun `login sin password retorna AUTH_PASSWORD_REQUIRED`() = runTest {
+        val result = repository.login("admin@donnicolas.com", "")
+        assertTrue(result is AuthResult.Error)
+        assertEquals("AUTH_PASSWORD_REQUIRED", (result as AuthResult.Error).error.code)
+        verify(authApi, never()).login(any())
     }
 
     @Test
@@ -90,12 +138,12 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `currentUser sin sesion retorna error`() = runTest {
+    fun `currentUser sin sesion retorna AUTH_NO_SESSION`() = runTest {
         whenever(tokenStore.isLoggedIn()).thenReturn(false)
 
         val result = repository.currentUser()
 
         assertTrue(result is AuthResult.Error)
-        assertEquals("Sesión no iniciada", (result as AuthResult.Error).message)
+        assertEquals("AUTH_NO_SESSION", (result as AuthResult.Error).error.code)
     }
 }

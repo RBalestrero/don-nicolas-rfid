@@ -20,6 +20,9 @@ def test_login_invalid_credentials(client: TestClient, admin_user):
         json={"email": ADMIN_EMAIL, "password": "wrongpassword"},
     )
     assert response.status_code == 401
+    detail = response.json()["detail"]
+    assert detail["code"] == "AUTH_INVALID_CREDENTIALS"
+    assert "incorrectos" in detail["message"]
 
 
 def test_me_endpoint(client: TestClient, admin_user):

@@ -21,6 +21,7 @@ class DonNicolasApp : Application() {
         authRepository = AuthRepository(
             authApi = apiClient.authApi,
             tokenStore = tokenStore,
+            baseUrl = BuildConfig.API_BASE_URL,
         )
     }
 }
