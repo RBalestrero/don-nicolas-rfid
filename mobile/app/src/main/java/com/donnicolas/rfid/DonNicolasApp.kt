@@ -64,6 +64,7 @@ class DonNicolasApp : Application() {
         )
         assetsRepository = AssetsRepository(
             assetsApi = apiClient.assetsApi,
+            cachedActivoDao = db.cachedActivoDao(),
             baseUrl = BuildConfig.API_BASE_URL,
         )
         rfidReader = RfidReaderFactory.create(this)

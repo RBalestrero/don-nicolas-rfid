@@ -109,9 +109,12 @@ class MainActivity : ComponentActivity() {
                                 val searchState by searchViewModel.state.collectAsState()
                                 AssetSearchScreen(
                                     state = searchState,
-                                    onStart = searchViewModel::startListen,
-                                    onStop = searchViewModel::stopListen,
-                                    onClear = searchViewModel::clearResult,
+                                    onQueryChange = searchViewModel::onQueryChange,
+                                    onSearch = { searchViewModel.search() },
+                                    onSelect = searchViewModel::selectActivo,
+                                    onStartLocate = searchViewModel::startLocate,
+                                    onStopLocate = searchViewModel::stopLocate,
+                                    onBackToSelect = searchViewModel::backToSelect,
                                     onReconnect = searchViewModel::connectReader,
                                     onBack = { destination = AppDestination.HOME },
                                 )

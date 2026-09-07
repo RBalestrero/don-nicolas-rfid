@@ -162,6 +162,7 @@ class RfidScanViewModel(
                             )
                         }
                     }
+                    is RfidEvent.LocateUpdate -> Unit
                 }
             }
         }

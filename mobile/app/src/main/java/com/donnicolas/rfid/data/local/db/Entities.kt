@@ -20,6 +20,17 @@ data class CachedStockEntity(
     val cachedAtMs: Long,
 )
 
+@Entity(tableName = "cached_activos")
+data class CachedActivoEntity(
+    @PrimaryKey val id: String,
+    val numeroPatrimonial: String,
+    val descripcion: String,
+    val epc: String?,
+    val categoriaNombre: String?,
+    val activo: Boolean,
+    val cachedAtMs: Long,
+)
+
 @Entity(tableName = "sync_queue")
 data class SyncQueueEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

@@ -19,6 +19,7 @@ import com.donnicolas.rfid.rfid.RfidInventorySession
 import com.donnicolas.rfid.rfid.RfidReader
 import com.donnicolas.rfid.rfid.RfidReaderState
 import com.donnicolas.rfid.rfid.RfidTag
+import com.donnicolas.rfid.rfid.RfidTriggerMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,6 +65,9 @@ class InventoryViewModel(
 
     init {
         observeReader()
+        viewModelScope.launch {
+            runCatching { reader.setTriggerMode(RfidTriggerMode.INVENTORY) }
+        }
         loadDepositos()
         connectReader()
     }
@@ -295,6 +299,7 @@ class InventoryViewModel(
                     is RfidEvent.Failure -> {
                         _state.update { it.copy(error = event.error, scanning = false) }
                     }
+                    is RfidEvent.LocateUpdate -> Unit
                 }
             }
         }

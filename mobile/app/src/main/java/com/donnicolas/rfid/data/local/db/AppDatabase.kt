@@ -9,14 +9,16 @@ import androidx.room.RoomDatabase
     entities = [
         CachedDepositoEntity::class,
         CachedStockEntity::class,
+        CachedActivoEntity::class,
         SyncQueueEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedDepositoDao(): CachedDepositoDao
     abstract fun cachedStockDao(): CachedStockDao
+    abstract fun cachedActivoDao(): CachedActivoDao
     abstract fun syncQueueDao(): SyncQueueDao
 
     companion object {

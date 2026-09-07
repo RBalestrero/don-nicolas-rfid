@@ -33,9 +33,8 @@ import kotlinx.coroutines.withContext
 /**
  * Adaptador Zebra RFID API3 para handheld MC33xx.
  *
- * No pisa potencia/sesión/triggers: respeta la configuración aplicada
- * previamente (p. ej. desde 123RFID). Solo conecta, escucha eventos y
- * arranca/detiene inventario.
+ * No pisa potencia/sesión/triggers de config RF: respeta 123RFID.
+ * El gatillo puede disparar inventario o TagLocationing según [RfidTriggerMode].
  */
 class ZebraRfidReader(
     context: Context,
@@ -47,6 +46,9 @@ class ZebraRfidReader(
     private val mutex = Mutex()
     private val inventoryLock = ReentrantLock()
     private val inventoryRunning = AtomicBoolean(false)
+    private val locateRunning = AtomicBoolean(false)
+    @Volatile private var triggerMode: RfidTriggerMode = RfidTriggerMode.INVENTORY
+    @Volatile private var locateTargetEpc: String? = null
     private val inventoryExecutor: ExecutorService =
         Executors.newSingleThreadExecutor { r ->
             Thread(r, "zebra-rfid-inventory").apply { isDaemon = true }
@@ -130,6 +132,7 @@ class ZebraRfidReader(
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         mutex.withLock {
+            stopLocateInternal(force = true)
             stopInventoryInternal(force = true)
             runCatching {
                 eventHandler?.let { handler ->
@@ -142,12 +145,22 @@ class ZebraRfidReader(
             reader = null
             readers = null
             inventoryRunning.set(false)
+            locateRunning.set(false)
+            locateTargetEpc = null
+            triggerMode = RfidTriggerMode.INVENTORY
             emitState(RfidReaderState.DISCONNECTED)
         }
     }
 
     override suspend fun startInventory() = withContext(Dispatchers.IO) {
         mutex.withLock {
+            if (triggerMode == RfidTriggerMode.LOCATE) {
+                throw failure(
+                    code = "RFID_WRONG_MODE",
+                    title = "Lector en modo localización",
+                    detail = "Salí de localización antes de iniciar inventario masivo.",
+                )
+            }
             val rfidReader = reader
             if (rfidReader == null || !rfidReader.isConnected) {
                 throw failure(
@@ -157,6 +170,7 @@ class ZebraRfidReader(
                 )
             }
             try {
+                stopLocateInternal(force = true)
                 startInventoryInternal(rfidReader)
             } catch (e: OperationFailureException) {
                 throw failure(
@@ -179,6 +193,106 @@ class ZebraRfidReader(
     override suspend fun stopInventory() = withContext(Dispatchers.IO) {
         mutex.withLock {
             stopInventoryInternal(force = true)
+            if (reader?.isConnected == true && !locateRunning.get()) {
+                emitState(RfidReaderState.READY)
+            }
+        }
+    }
+
+    override suspend fun setTriggerMode(mode: RfidTriggerMode) {
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                if (mode == triggerMode) return@withLock
+                stopLocateInternal(force = true)
+                stopInventoryInternal(force = true)
+                triggerMode = mode
+                if (mode == RfidTriggerMode.INVENTORY) {
+                    locateTargetEpc = null
+                }
+                if (reader?.isConnected == true) {
+                    emitState(RfidReaderState.READY)
+                }
+                Log.i(TAG, "Trigger mode → $mode")
+            }
+        }
+    }
+
+    override suspend fun armLocateTarget(epc: String) {
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val normalized = epc.trim().uppercase()
+                if (normalized.isEmpty()) {
+                    throw failure(
+                        code = "RFID_LOCATE_EPC_EMPTY",
+                        title = "EPC vacío para localizar",
+                        detail = "armLocateTarget() requiere un EPC válido.",
+                    )
+                }
+                stopInventoryInternal(force = true)
+                stopLocateInternal(force = true)
+                locateTargetEpc = normalized
+                triggerMode = RfidTriggerMode.LOCATE
+                if (reader?.isConnected == true) {
+                    emitState(RfidReaderState.READY)
+                }
+                Log.i(TAG, "Locate target armado: $normalized")
+            }
+        }
+    }
+
+    override suspend fun clearLocateTarget() {
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                stopLocateInternal(force = true)
+                locateTargetEpc = null
+                triggerMode = RfidTriggerMode.INVENTORY
+                if (reader?.isConnected == true) {
+                    emitState(RfidReaderState.READY)
+                }
+            }
+        }
+    }
+
+    override suspend fun startLocate() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val rfidReader = reader
+            if (rfidReader == null || !rfidReader.isConnected) {
+                throw failure(
+                    code = "RFID_NOT_CONNECTED",
+                    title = "Lector RFID no conectado",
+                    detail = "startLocate() requiere connect() exitoso.",
+                )
+            }
+            val epc = locateTargetEpc
+                ?: throw failure(
+                    code = "RFID_LOCATE_NO_TARGET",
+                    title = "Sin etiqueta a localizar",
+                    detail = "Seleccioná un activo con EPC antes de localizar.",
+                )
+            try {
+                stopInventoryInternal(force = true)
+                startLocateInternal(rfidReader, epc)
+            } catch (e: OperationFailureException) {
+                throw failure(
+                    code = "RFID_LOCATE_START_FAILED",
+                    title = "No se pudo iniciar la localización",
+                    detail = "TagLocationing.Perform() falló.",
+                    cause = formatOpFailure(e),
+                )
+            } catch (e: InvalidUsageException) {
+                throw failure(
+                    code = "RFID_LOCATE_INVALID_USAGE",
+                    title = "Localización: uso inválido",
+                    detail = "TagLocationing.Perform() lanzó InvalidUsageException.",
+                    cause = e.info ?: e.message,
+                )
+            }
+        }
+    }
+
+    override suspend fun stopLocate() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            stopLocateInternal(force = true)
             if (reader?.isConnected == true) {
                 emitState(RfidReaderState.READY)
             }
@@ -187,7 +301,7 @@ class ZebraRfidReader(
 
     private fun startInventoryInternal(rfidReader: RFIDReader) {
         inventoryLock.withLock {
-            if (inventoryRunning.get()) return
+            if (inventoryRunning.get() || locateRunning.get()) return
             rfidReader.Actions.Inventory.perform()
             inventoryRunning.set(true)
             eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.INVENTORY_RUNNING))
@@ -212,6 +326,37 @@ class ZebraRfidReader(
         }
     }
 
+    private fun startLocateInternal(rfidReader: RFIDReader, epc: String) {
+        inventoryLock.withLock {
+            if (locateRunning.get()) return
+            if (inventoryRunning.get()) {
+                runCatching { rfidReader.Actions.Inventory.stop() }
+                inventoryRunning.set(false)
+            }
+            rfidReader.Actions.TagLocationing.Perform(epc, null, null)
+            locateRunning.set(true)
+            eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.LOCATE_RUNNING))
+            Log.i(TAG, "TagLocationing.Perform($epc)")
+        }
+    }
+
+    private fun stopLocateInternal(force: Boolean = false) {
+        inventoryLock.withLock {
+            val rfidReader = reader ?: run {
+                locateRunning.set(false)
+                return
+            }
+            if (!force && !locateRunning.get()) return
+            try {
+                rfidReader.Actions.TagLocationing.Stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "stopLocate: ${e.javaClass.simpleName}: ${e.message}")
+            } finally {
+                locateRunning.set(false)
+            }
+        }
+    }
+
     private fun queueStartInventory() {
         inventoryExecutor.execute {
             try {
@@ -228,11 +373,47 @@ class ZebraRfidReader(
         inventoryExecutor.execute {
             try {
                 stopInventoryInternal(force = true)
-                if (reader?.isConnected == true) {
+                if (reader?.isConnected == true && !locateRunning.get()) {
                     eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.READY))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "queueStopInventory: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun queueStartLocate() {
+        inventoryExecutor.execute {
+            try {
+                val rfidReader = reader ?: return@execute
+                if (!rfidReader.isConnected) return@execute
+                val epc = locateTargetEpc ?: return@execute
+                startLocateInternal(rfidReader, epc)
+            } catch (e: Exception) {
+                Log.e(TAG, "queueStartLocate: ${e.message}", e)
+                eventsFlow.tryEmit(
+                    RfidEvent.Failure(
+                        AppError(
+                            code = "RFID_LOCATE_START_FAILED",
+                            title = "No se pudo iniciar localización",
+                            detail = "TagLocationing.Perform() falló desde el gatillo.",
+                            cause = e.message,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun queueStopLocate() {
+        inventoryExecutor.execute {
+            try {
+                stopLocateInternal(force = true)
+                if (reader?.isConnected == true) {
+                    eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.READY))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "queueStopLocate: ${e.message}", e)
             }
         }
     }
@@ -450,9 +631,29 @@ class ZebraRfidReader(
 
     private inner class EventHandler : RfidEventsListener {
         override fun eventReadNotify(e: RfidReadEvents?) {
-            if (!inventoryRunning.get()) return
             val rfidReader = reader ?: return
             try {
+                if (locateRunning.get()) {
+                    val tags = rfidReader.Actions.getReadTags(100) ?: return
+                    for (tag in tags) {
+                        if (!tag.isContainsLocationInfo) continue
+                        val epc = tag.tagID?.trim()?.uppercase().orEmpty()
+                        if (epc.isEmpty()) continue
+                        val distance = runCatching {
+                            tag.LocationInfo.relativeDistance.toInt()
+                        }.getOrDefault(0)
+                        val rssi = runCatching { tag.peakRSSI.toInt() }.getOrDefault(0)
+                        eventsFlow.tryEmit(
+                            RfidEvent.LocateUpdate(
+                                epc = epc,
+                                relativeDistance = LocateProximity.clamp(distance),
+                                rssi = rssi,
+                            ),
+                        )
+                    }
+                    return
+                }
+                if (!inventoryRunning.get()) return
                 val tags = rfidReader.Actions.getReadTags(100) ?: return
                 val mapped = tags.mapNotNull { tag ->
                     val epc = tag.tagID ?: return@mapNotNull null
@@ -481,19 +682,35 @@ class ZebraRfidReader(
                         val trigger = e.StatusEventData.HandheldTriggerEventData.handheldEvent
                         when (trigger) {
                             HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED -> {
-                                Log.i(TAG, "Trigger PRESSED → inventory")
-                                queueStartInventory()
+                                when (triggerMode) {
+                                    RfidTriggerMode.LOCATE -> {
+                                        Log.i(TAG, "Trigger PRESSED → locate")
+                                        queueStartLocate()
+                                    }
+                                    RfidTriggerMode.INVENTORY -> {
+                                        Log.i(TAG, "Trigger PRESSED → inventory")
+                                        queueStartInventory()
+                                    }
+                                }
                             }
                             HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_RELEASED -> {
-                                Log.i(TAG, "Trigger RELEASED → stop")
-                                // Parar enseguida fuera del hilo del SDK.
-                                queueStopInventory()
+                                when (triggerMode) {
+                                    RfidTriggerMode.LOCATE -> {
+                                        Log.i(TAG, "Trigger RELEASED → stop locate")
+                                        queueStopLocate()
+                                    }
+                                    RfidTriggerMode.INVENTORY -> {
+                                        Log.i(TAG, "Trigger RELEASED → stop inventory")
+                                        queueStopInventory()
+                                    }
+                                }
                             }
                             else -> Unit
                         }
                     }
                     STATUS_EVENT_TYPE.DISCONNECTION_EVENT -> {
                         inventoryRunning.set(false)
+                        locateRunning.set(false)
                         eventsFlow.tryEmit(
                             RfidEvent.Failure(
                                 AppError(

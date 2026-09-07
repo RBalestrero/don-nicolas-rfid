@@ -25,6 +25,28 @@ interface CachedStockDao {
 }
 
 @Dao
+interface CachedActivoDao {
+    @Query(
+        """
+        SELECT * FROM cached_activos
+        WHERE activo = 1 AND epc IS NOT NULL AND epc != ''
+          AND (
+            :q = '' OR
+            numeroPatrimonial LIKE '%' || :q || '%' OR
+            descripcion LIKE '%' || :q || '%' OR
+            epc LIKE '%' || :q || '%'
+          )
+        ORDER BY numeroPatrimonial
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchWithEpc(q: String, limit: Int = 80): List<CachedActivoEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<CachedActivoEntity>)
+}
+
+@Dao
 interface SyncQueueDao {
     @Query("SELECT * FROM sync_queue WHERE status IN ('pending', 'failed') ORDER BY createdAtMs ASC")
     suspend fun listPending(): List<SyncQueueEntity>

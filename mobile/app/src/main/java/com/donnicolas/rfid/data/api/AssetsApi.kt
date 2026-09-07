@@ -3,8 +3,15 @@ package com.donnicolas.rfid.data.api
 import com.squareup.moshi.Json
 import retrofit2.http.GET
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface AssetsApi {
+    @GET("activos")
+    suspend fun listActivos(
+        @Query("search") search: String? = null,
+        @Query("include_inactive") includeInactive: Boolean = false,
+    ): List<ActivoDto>
+
     @GET("activos/by-epc/{epc}")
     suspend fun lookupByEpc(@Path("epc") epc: String): ActivoLookupDto
 }

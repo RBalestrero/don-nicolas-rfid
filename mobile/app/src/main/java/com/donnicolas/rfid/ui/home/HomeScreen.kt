@@ -88,7 +88,7 @@ fun HomeScreen(
             onClick = onOpenSearch,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Buscar activo por RFID")
+            Text("Localizar activo")
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(
