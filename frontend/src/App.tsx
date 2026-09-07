@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
+import DepositosPage from "./components/DepositosPage";
 import LoginForm from "./components/LoginForm";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
+
+type Page = "activos" | "depositos";
 
 interface HealthResponse {
   status: string;
@@ -40,6 +43,7 @@ function HealthBadge() {
 
 export default function App() {
   const { user, loading, logout } = useAuth();
+  const [page, setPage] = useState<Page>("activos");
 
   if (loading) {
     return (
@@ -84,9 +88,24 @@ export default function App() {
         </div>
       </header>
 
-      <main className="main">
-        <ActivosPage />
-      </main>
+      <nav className="main-nav" aria-label="Navegación principal">
+        <button
+          type="button"
+          className={`nav-item ${page === "activos" ? "active" : ""}`}
+          onClick={() => setPage("activos")}
+        >
+          Activos
+        </button>
+        <button
+          type="button"
+          className={`nav-item ${page === "depositos" ? "active" : ""}`}
+          onClick={() => setPage("depositos")}
+        >
+          Depósitos
+        </button>
+      </nav>
+
+      <main className="main">{page === "activos" ? <ActivosPage /> : <DepositosPage />}</main>
 
       <footer className="footer">
         <span>Don Nicolás RFID — puerto 5174 (hot reload activo)</span>
