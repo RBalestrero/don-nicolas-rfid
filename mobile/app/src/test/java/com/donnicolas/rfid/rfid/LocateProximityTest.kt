@@ -22,4 +22,26 @@ class LocateProximityTest {
     fun `arrowScale crece con distancia`() {
         assertTrue(LocateProximity.arrowScale(10) < LocateProximity.arrowScale(90))
     }
+
+    @Test
+    fun `fromRssi sube al acercarse`() {
+        assertTrue(LocateProximity.fromRssi(-80) < LocateProximity.fromRssi(-40))
+        assertTrue(LocateProximity.fromRssi(-30) >= 80)
+    }
+
+    @Test
+    fun `epcMatches flexible`() {
+        assertTrue(
+            LocateProximity.epcMatches(
+                "E280117000000211D6A6B53D",
+                "e280117000000211d6a6b53d",
+            ),
+        )
+        assertTrue(
+            LocateProximity.epcMatches(
+                "E280117000000211D6A6B53D",
+                "XXE280117000000211D6A6B53D",
+            ),
+        )
+    }
 }

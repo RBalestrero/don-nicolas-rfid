@@ -49,6 +49,8 @@ class ZebraRfidReader(
     private val locateRunning = AtomicBoolean(false)
     @Volatile private var triggerMode: RfidTriggerMode = RfidTriggerMode.INVENTORY
     @Volatile private var locateTargetEpc: String? = null
+    /** multi = MultiTagLocate (123RFID); single = TagLocationing.Perform */
+    @Volatile private var locateEngine: String = LOCATE_NONE
     private val inventoryExecutor: ExecutorService =
         Executors.newSingleThreadExecutor { r ->
             Thread(r, "zebra-rfid-inventory").apply { isDaemon = true }
@@ -220,14 +222,12 @@ class ZebraRfidReader(
     override suspend fun armLocateTarget(epc: String) {
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                val normalized = epc.trim().uppercase()
-                if (normalized.isEmpty()) {
-                    throw failure(
+                val normalized = LocateProximity.normalizeEpc(epc)
+                    ?: throw failure(
                         code = "RFID_LOCATE_EPC_EMPTY",
                         title = "EPC vacío para localizar",
                         detail = "armLocateTarget() requiere un EPC válido.",
                     )
-                }
                 stopInventoryInternal(force = true)
                 stopLocateInternal(force = true)
                 locateTargetEpc = normalized
@@ -333,10 +333,53 @@ class ZebraRfidReader(
                 runCatching { rfidReader.Actions.Inventory.stop() }
                 inventoryRunning.set(false)
             }
-            rfidReader.Actions.TagLocationing.Perform(epc, null, null)
+
+            // PreFilters residuales (p. ej. de 123RFID) bloquean el geiger.
+            runCatching { rfidReader.Actions.PreFilters.deleteAll() }
+            runCatching { rfidReader.Actions.purgeTags() }
+
+            val supported = runCatching {
+                rfidReader.ReaderCapabilities.isTagLocationingSupported
+            }.getOrDefault(true)
+            Log.i(TAG, "Locate start epc=$epc supported=$supported")
+
+            locateEngine = LOCATE_NONE
+            var lastError: Exception? = null
+
+            // 1) MultiTagLocate — mismo camino que 123RFID Locate
+            try {
+                runCatching { rfidReader.Actions.MultiTagLocate.stop() }
+                runCatching { rfidReader.Actions.MultiTagLocate.clearItems() }
+                runCatching { rfidReader.Actions.MultiTagLocate.purgeItemList() }
+                val added = rfidReader.Actions.MultiTagLocate.addItem(epc, REF_RSSI)
+                Log.i(TAG, "MultiTagLocate.addItem($epc, $REF_RSSI) → $added")
+                rfidReader.Actions.MultiTagLocate.perform()
+                locateEngine = LOCATE_MULTI
+                Log.i(TAG, "MultiTagLocate.perform OK")
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "MultiTagLocate falló: ${e.javaClass.simpleName}: ${e.message}")
+            }
+
+            // 2) Fallback TagLocationing.Perform (API clásica)
+            if (locateEngine == LOCATE_NONE) {
+                try {
+                    runCatching { rfidReader.Actions.TagLocationing.Stop() }
+                    rfidReader.Actions.TagLocationing.Perform(epc, null, null)
+                    locateEngine = LOCATE_SINGLE
+                    Log.i(TAG, "TagLocationing.Perform($epc) OK")
+                } catch (e: Exception) {
+                    lastError = e
+                    Log.e(TAG, "TagLocationing.Perform falló: ${e.message}", e)
+                }
+            }
+
+            if (locateEngine == LOCATE_NONE) {
+                throw lastError ?: IllegalStateException("No se pudo iniciar localización RFID")
+            }
+
             locateRunning.set(true)
             eventsFlow.tryEmit(RfidEvent.StateChanged(RfidReaderState.LOCATE_RUNNING))
-            Log.i(TAG, "TagLocationing.Perform($epc)")
         }
     }
 
@@ -344,16 +387,27 @@ class ZebraRfidReader(
         inventoryLock.withLock {
             val rfidReader = reader ?: run {
                 locateRunning.set(false)
+                locateEngine = LOCATE_NONE
                 return
             }
             if (!force && !locateRunning.get()) return
-            try {
-                rfidReader.Actions.TagLocationing.Stop()
-            } catch (e: Exception) {
-                Log.w(TAG, "stopLocate: ${e.javaClass.simpleName}: ${e.message}")
-            } finally {
-                locateRunning.set(false)
+            when (locateEngine) {
+                LOCATE_MULTI -> {
+                    runCatching { rfidReader.Actions.MultiTagLocate.stop() }
+                        .onFailure { Log.w(TAG, "MultiTagLocate.stop: ${it.message}") }
+                    runCatching { rfidReader.Actions.MultiTagLocate.clearItems() }
+                }
+                LOCATE_SINGLE -> {
+                    runCatching { rfidReader.Actions.TagLocationing.Stop() }
+                        .onFailure { Log.w(TAG, "TagLocationing.Stop: ${it.message}") }
+                }
+                else -> {
+                    runCatching { rfidReader.Actions.MultiTagLocate.stop() }
+                    runCatching { rfidReader.Actions.TagLocationing.Stop() }
+                }
             }
+            locateRunning.set(false)
+            locateEngine = LOCATE_NONE
         }
     }
 
@@ -634,23 +688,7 @@ class ZebraRfidReader(
             val rfidReader = reader ?: return
             try {
                 if (locateRunning.get()) {
-                    val tags = rfidReader.Actions.getReadTags(100) ?: return
-                    for (tag in tags) {
-                        if (!tag.isContainsLocationInfo) continue
-                        val epc = tag.tagID?.trim()?.uppercase().orEmpty()
-                        if (epc.isEmpty()) continue
-                        val distance = runCatching {
-                            tag.LocationInfo.relativeDistance.toInt()
-                        }.getOrDefault(0)
-                        val rssi = runCatching { tag.peakRSSI.toInt() }.getOrDefault(0)
-                        eventsFlow.tryEmit(
-                            RfidEvent.LocateUpdate(
-                                epc = epc,
-                                relativeDistance = LocateProximity.clamp(distance),
-                                rssi = rssi,
-                            ),
-                        )
-                    }
+                    emitLocateUpdates(rfidReader)
                     return
                 }
                 if (!inventoryRunning.get()) return
@@ -666,7 +704,6 @@ class ZebraRfidReader(
                     )
                 }
                 if (mapped.isNotEmpty()) {
-                    // Un solo evento por lote: evita saturar la UI y crashes al soltar el gatillo.
                     eventsFlow.tryEmit(RfidEvent.BatchRead(mapped))
                 }
             } catch (ex: Exception) {
@@ -684,7 +721,7 @@ class ZebraRfidReader(
                             HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED -> {
                                 when (triggerMode) {
                                     RfidTriggerMode.LOCATE -> {
-                                        Log.i(TAG, "Trigger PRESSED → locate")
+                                        Log.i(TAG, "Trigger PRESSED → locate ($locateTargetEpc)")
                                         queueStartLocate()
                                     }
                                     RfidTriggerMode.INVENTORY -> {
@@ -711,6 +748,7 @@ class ZebraRfidReader(
                     STATUS_EVENT_TYPE.DISCONNECTION_EVENT -> {
                         inventoryRunning.set(false)
                         locateRunning.set(false)
+                        locateEngine = LOCATE_NONE
                         eventsFlow.tryEmit(
                             RfidEvent.Failure(
                                 AppError(
@@ -730,8 +768,88 @@ class ZebraRfidReader(
         }
     }
 
+    private fun emitLocateUpdates(rfidReader: RFIDReader) {
+        val target = locateTargetEpc
+        val seen = LinkedHashMap<String, Pair<Int, Int>>() // epc -> (distance, rssi)
+
+        fun consider(epcRaw: String?, distance: Int?, rssi: Int?, source: String) {
+            val epc = LocateProximity.normalizeEpc(epcRaw) ?: return
+            if (target != null && !LocateProximity.epcMatches(target, epc)) {
+                Log.d(TAG, "Locate ignore $epc (target=$target) via $source")
+                return
+            }
+            val dist = when {
+                distance != null && rssi != null ->
+                    maxOf(LocateProximity.clamp(distance), LocateProximity.fromRssi(rssi))
+                distance != null -> LocateProximity.clamp(distance)
+                rssi != null -> LocateProximity.fromRssi(rssi)
+                else -> return
+            }
+            val rssiVal = rssi ?: 0
+            val prev = seen[epc]
+            if (prev == null || dist >= prev.first) {
+                seen[epc] = dist to rssiVal
+            }
+            Log.i(TAG, "Locate hit epc=$epc dist=$dist rssi=$rssiVal src=$source engine=$locateEngine")
+        }
+
+        // MultiTagLocate: leer por API dedicada (como 123RFID)
+        runCatching {
+            rfidReader.Actions.getMultiTagLocateTagInfo(100)
+        }.getOrNull()?.forEach { tag ->
+            val epc = tag.tagID
+            val rssi = runCatching { tag.peakRSSI.toInt() }.getOrNull()
+            if (tag.isContainsMultiTagLocateInfo) {
+                val dist = runCatching {
+                    tag.MultiTagLocateInfo.relativeDistance.toInt()
+                }.getOrNull()
+                consider(epc, dist, rssi, "MultiTagLocateInfo")
+            } else {
+                consider(epc, null, rssi, "MultiTagLocateTagInfo-rssi")
+            }
+        }
+
+        // TagLocationing clásico + cualquier lectura con LocationInfo
+        runCatching {
+            rfidReader.Actions.getReadTags(100)
+        }.getOrNull()?.forEach { tag ->
+            val epc = tag.tagID
+            val rssi = runCatching { tag.peakRSSI.toInt() }.getOrNull()
+            when {
+                tag.isContainsLocationInfo -> {
+                    val dist = runCatching {
+                        tag.LocationInfo.relativeDistance.toInt()
+                    }.getOrNull()
+                    consider(epc, dist, rssi, "LocationInfo")
+                }
+                tag.isContainsMultiTagLocateInfo -> {
+                    val dist = runCatching {
+                        tag.MultiTagLocateInfo.relativeDistance.toInt()
+                    }.getOrNull()
+                    consider(epc, dist, rssi, "LocationInfo-multi")
+                }
+                else -> consider(epc, null, rssi, "ReadTags-rssi")
+            }
+        }
+
+        seen.forEach { (epc, pair) ->
+            eventsFlow.tryEmit(
+                RfidEvent.LocateUpdate(
+                    epc = epc,
+                    relativeDistance = pair.first,
+                    rssi = pair.second,
+                ),
+            )
+        }
+    }
+
     companion object {
         private const val TAG = "ZebraRfidReader"
+        private const val LOCATE_NONE = "none"
+        private const val LOCATE_MULTI = "multi"
+        private const val LOCATE_SINGLE = "single"
+        /** RSSI de referencia típico para MultiTagLocate (docs Zebra / 123RFID). */
+        private const val REF_RSSI = "-50"
     }
 }
 
