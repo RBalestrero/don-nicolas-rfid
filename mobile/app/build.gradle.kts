@@ -1,8 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+// Wi‑Fi: api.host=<IP-LAN-de-la-PC> en mobile/local.properties
+// USB:   api.host=127.0.0.1 + adb reverse tcp:8000 tcp:8000
+// Emulador: api.host=10.0.2.2
+val apiHost: String = (
+    project.findProperty("API_HOST") as String?
+        ?: localProps.getProperty("api.host")
+        ?: "192.168.100.164"
+).trim()
+val apiBaseUrl = "http://$apiHost:8000/api/v1/"
 
 android {
     namespace = "com.donnicolas.rfid"
@@ -16,8 +33,8 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Con dispositivo USB: adb reverse tcp:8000 tcp:8000
-        buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:8000/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "API_HOST", "\"$apiHost\"")
         // SIMULATOR | ZEBRA | AUTO (AUTO usa Zebra en MC33xx)
         buildConfigField("String", "RFID_MODE", "\"AUTO\"")
     }
@@ -31,7 +48,6 @@ android {
             )
         }
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:8000/api/v1/\"")
             buildConfigField("String", "RFID_MODE", "\"AUTO\"")
         }
     }

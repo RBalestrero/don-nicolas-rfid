@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.donnicolas.rfid.BuildConfig
 import com.donnicolas.rfid.data.model.User
 
 @Composable
@@ -48,6 +49,11 @@ fun HomeScreen(
         Text(
             text = "Rol: ${user.rol}",
             style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = "API: ${BuildConfig.API_HOST}:8000",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(28.dp))
         Button(

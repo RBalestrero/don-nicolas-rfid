@@ -42,8 +42,8 @@ object ApiErrorMapper {
                 title = "Conexión rechazada por la API",
                 detail = "El servidor rechazó la conexión TCP durante $operation. " +
                     "La API no está escuchando o el puerto/firewall bloquea el acceso. " +
-                    "En emulador usá http://10.0.2.2:8000/api/v1/ ; en dispositivo físico " +
-                    "usá la IP LAN de tu PC. URL base: $baseUrl. " +
+                    "En Wi‑Fi configurá api.host=<IP-LAN-PC> en mobile/local.properties " +
+                    "(misma red que el MC33). Emulador: 10.0.2.2. URL base: $baseUrl. " +
                     "También confirmá que Postgres y la API estén levantados.",
                 endpoint = fullUrl(baseUrl, endpoint),
                 cause = throwable.message,

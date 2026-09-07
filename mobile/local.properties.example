@@ -1,0 +1,8 @@
+# Copiá a local.properties (gitignored) y ajustá:
+# sdk.dir=<ruta-al-Android-SDK>
+# api.host=<IP-LAN-de-tu-PC>
+#
+# Ejemplos:
+#   api.host=192.168.100.164   # Wi‑Fi / cuna (recomendado)
+#   api.host=127.0.0.1         # Solo con: adb reverse tcp:8000 tcp:8000
+#   api.host=10.0.2.2          # Emulador Android
