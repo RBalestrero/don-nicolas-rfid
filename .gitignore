@@ -55,6 +55,9 @@ infra/volumes/
 # Archivos generados
 docs/extracted_content.txt
 
+# SDKs propietarios locales (no versionar binarios/docs enormes)
+docs/sdk/
+
 # Uploads / almacenamiento local
 uploads/
 storage/

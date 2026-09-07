@@ -27,6 +27,6 @@ class DonNicolasApp : Application() {
             tokenStore = tokenStore,
             baseUrl = BuildConfig.API_BASE_URL,
         )
-        rfidReader = RfidReaderFactory.create()
+        rfidReader = RfidReaderFactory.create(this)
     }
 }

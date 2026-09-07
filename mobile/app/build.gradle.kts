@@ -10,15 +10,16 @@ android {
 
     defaultConfig {
         applicationId = "com.donnicolas.rfid"
-        minSdk = 26
+        minSdk = 30
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
-        // SIMULATOR | ZEBRA | AUTO
-        buildConfigField("String", "RFID_MODE", "\"SIMULATOR\"")
+        // Con dispositivo USB: adb reverse tcp:8000 tcp:8000
+        buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:8000/api/v1/\"")
+        // SIMULATOR | ZEBRA | AUTO (AUTO usa Zebra en MC33xx)
+        buildConfigField("String", "RFID_MODE", "\"AUTO\"")
     }
 
     buildTypes {
@@ -30,7 +31,8 @@ android {
             )
         }
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:8000/api/v1/\"")
+            buildConfigField("String", "RFID_MODE", "\"AUTO\"")
         }
     }
 
@@ -63,6 +65,8 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
+
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")

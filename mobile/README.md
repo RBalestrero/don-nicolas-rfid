@@ -1,32 +1,40 @@
 # Don Nicolás RFID — App Android
 
-App móvil Kotlin para operaciones de campo (Zebra MC33R).
+App móvil Kotlin para operaciones de campo (Zebra MC33xx).
 
 ## Fase actual
 
-**3.2** — Integración RFID: lectura masiva de tags.
+**3.2** — Lectura masiva RFID con Zebra RFID API3 real + simulador para CI.
 
-- Modo `SIMULATOR` (default): emulador/CI, >1000 EPCs únicos.
-- Modo `ZEBRA`: stub listo para vincular el AAR del Zebra RFID SDK API3.
+## Hardware conectado
 
-## Requisitos
+- Dispositivo: **MC3300x** (USB debugging)
+- AAR: `app/libs/rfidapi3lib-2.0.5.292.aar` (HHSampleApp del SDK)
+- Modo: `RFID_MODE=AUTO` → Zebra en MC33, Simulator en emulador/CI
 
-- JDK 17+
-- Android SDK (API 35)
-- API Don Nicolás corriendo en `localhost:8000`
+## Deploy al MC33 por USB
 
-## Configuración
+```bash
+# 1) API escuchando en la PC
+bash scripts/dev-api.sh
 
-`local.properties` (no se versiona):
+# 2) Túnel USB para que el MC33 llegue a localhost:8000 de la PC
+adb reverse tcp:8000 tcp:8000
 
+# 3) Instalar
+cd mobile
+./gradlew installDebug
+adb shell am start -n com.donnicolas.rfid/.MainActivity
 ```
-sdk.dir=C:\\Users\\<usuario>\\AppData\\Local\\Android\\Sdk
-```
 
-En `app/build.gradle.kts`:
+Usuario: `admin@donnicolas.com` / `admin123`
 
-- `API_BASE_URL` — emulador: `http://10.0.2.2:8000/api/v1/`
-- `RFID_MODE` — `SIMULATOR` | `ZEBRA` | `AUTO`
+## SDKs locales (no versionados)
+
+Colocá extractos en `docs/sdk/` (gitignored):
+
+- `docs/sdk/mc330u/Zebra_RFIDAPI3_SDK_...` → RFID handheld
+- `docs/sdk/ZT411R/Link-OS_SDK/Webservices` → impresora
 
 ## Comandos
 
@@ -35,9 +43,3 @@ cd mobile
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 ```
-
-Usuario seed: `admin@donnicolas.com` / `admin123`
-
-## Flujo en app
-
-Login → **Lectura masiva RFID** → Iniciar lectura / Detener / Limpiar
