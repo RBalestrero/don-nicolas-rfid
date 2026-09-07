@@ -82,7 +82,15 @@ class ActivoRepository:
         ).first()
 
     def get_by_epc(self, epc: str) -> Activo | None:
-        return self.db.scalars(select(Activo).where(Activo.epc == epc)).first()
+        normalized = (epc or "").strip().upper()
+        if not normalized:
+            return None
+        stmt = (
+            select(Activo)
+            .options(joinedload(Activo.categoria))
+            .where(Activo.epc.ilike(normalized))
+        )
+        return self.db.scalars(stmt).first()
 
     def create(self, activo: Activo) -> Activo:
         self.db.add(activo)

@@ -49,4 +49,5 @@ class ApiClient(
     val authApi: AuthApi = retrofit.create(AuthApi::class.java)
     val warehouseApi: WarehouseApi = retrofit.create(WarehouseApi::class.java)
     val inventoryApi: InventoryApi = retrofit.create(InventoryApi::class.java)
+    val assetsApi: AssetsApi = retrofit.create(AssetsApi::class.java)
 }

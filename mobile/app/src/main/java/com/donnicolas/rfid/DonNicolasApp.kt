@@ -3,6 +3,7 @@ package com.donnicolas.rfid
 import android.app.Application
 import com.donnicolas.rfid.data.api.ApiClient
 import com.donnicolas.rfid.data.local.TokenStore
+import com.donnicolas.rfid.data.repository.AssetsRepository
 import com.donnicolas.rfid.data.repository.AuthRepository
 import com.donnicolas.rfid.data.repository.InventoryRepository
 import com.donnicolas.rfid.rfid.RfidReader
@@ -14,6 +15,8 @@ class DonNicolasApp : Application() {
     lateinit var authRepository: AuthRepository
         private set
     lateinit var inventoryRepository: InventoryRepository
+        private set
+    lateinit var assetsRepository: AssetsRepository
         private set
     lateinit var rfidReader: RfidReader
         private set
@@ -33,6 +36,10 @@ class DonNicolasApp : Application() {
         inventoryRepository = InventoryRepository(
             warehouseApi = apiClient.warehouseApi,
             inventoryApi = apiClient.inventoryApi,
+            baseUrl = BuildConfig.API_BASE_URL,
+        )
+        assetsRepository = AssetsRepository(
+            assetsApi = apiClient.assetsApi,
             baseUrl = BuildConfig.API_BASE_URL,
         )
         rfidReader = RfidReaderFactory.create(this)

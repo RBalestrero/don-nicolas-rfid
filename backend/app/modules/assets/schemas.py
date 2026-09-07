@@ -59,6 +59,23 @@ class ActivoResponse(ActivoBase):
     categoria: CategoriaResponse
 
 
+class ActivoUbicacionResumen(BaseModel):
+    ubicacion_id: UUID
+    ubicacion_codigo: str
+    sector_id: UUID
+    sector_nombre: str
+    deposito_id: UUID
+    deposito_nombre: str
+
+
+class ActivoLookupResponse(BaseModel):
+    encontrado: bool
+    epc_consultado: str
+    activo: ActivoResponse | None = None
+    ubicacion: ActivoUbicacionResumen | None = None
+    mensaje: str | None = None
+
+
 class FotografiaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

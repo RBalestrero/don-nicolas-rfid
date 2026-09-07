@@ -22,6 +22,7 @@ import com.donnicolas.rfid.data.model.User
 fun HomeScreen(
     user: User,
     onOpenInventory: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenRfidScan: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -61,6 +62,13 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Inventario masivo")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onOpenSearch,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Buscar activo por RFID")
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(

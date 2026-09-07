@@ -21,12 +21,15 @@ import com.donnicolas.rfid.ui.inventory.InventoryScreen
 import com.donnicolas.rfid.ui.inventory.InventoryViewModel
 import com.donnicolas.rfid.ui.rfid.RfidScanScreen
 import com.donnicolas.rfid.ui.rfid.RfidScanViewModel
+import com.donnicolas.rfid.ui.search.AssetSearchScreen
+import com.donnicolas.rfid.ui.search.AssetSearchViewModel
 import com.donnicolas.rfid.ui.theme.DonNicolasTheme
 
 private enum class AppDestination {
     HOME,
     RFID_SCAN,
     INVENTORY,
+    SEARCH,
 }
 
 class MainActivity : ComponentActivity() {
@@ -93,10 +96,29 @@ class MainActivity : ComponentActivity() {
                                     onReportFilter = inventoryViewModel::setReportFilter,
                                 )
                             }
+                            AppDestination.SEARCH -> {
+                                val app = application as DonNicolasApp
+                                val searchViewModel: AssetSearchViewModel = viewModel(
+                                    factory = AssetSearchViewModel.Factory(
+                                        app.assetsRepository,
+                                        app.rfidReader,
+                                    ),
+                                )
+                                val searchState by searchViewModel.state.collectAsState()
+                                AssetSearchScreen(
+                                    state = searchState,
+                                    onStart = searchViewModel::startListen,
+                                    onStop = searchViewModel::stopListen,
+                                    onClear = searchViewModel::clearResult,
+                                    onReconnect = searchViewModel::connectReader,
+                                    onBack = { destination = AppDestination.HOME },
+                                )
+                            }
                             AppDestination.HOME -> {
                                 HomeScreen(
                                     user = user,
                                     onOpenInventory = { destination = AppDestination.INVENTORY },
+                                    onOpenSearch = { destination = AppDestination.SEARCH },
                                     onOpenRfidScan = { destination = AppDestination.RFID_SCAN },
                                     onLogout = {
                                         destination = AppDestination.HOME

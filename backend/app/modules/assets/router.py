@@ -10,6 +10,7 @@ from app.modules.assets.fotografias_service import FotografiaService
 from app.modules.assets.impresion_service import ImpresionService
 from app.modules.assets.schemas import (
     ActivoCreate,
+    ActivoLookupResponse,
     ActivoResponse,
     ActivoUpdate,
     CategoriaCreate,
@@ -103,6 +104,16 @@ def create_activo(
 ):
     service = ActivoService(db)
     return service.create_activo(data, current_user)
+
+
+@router.get("/activos/by-epc/{epc}", response_model=ActivoLookupResponse)
+def lookup_activo_by_epc(
+    epc: str,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    """Búsqueda de activo por EPC leído con RFID (Fase 3.5)."""
+    return ActivoService(db).lookup_by_epc(epc)
 
 
 @router.get("/activos/{activo_id}", response_model=ActivoResponse)

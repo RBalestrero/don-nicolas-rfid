@@ -178,3 +178,55 @@ def test_list_activos_with_search(client: TestClient, auth_headers):
     assert response.status_code == 200
     assert len(response.json()) >= 1
     assert any("Monitor" in a["descripcion"] for a in response.json())
+
+
+def test_lookup_activo_by_epc(client: TestClient, auth_headers):
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("LookupCat")},
+        headers=auth_headers,
+    ).json()
+    epc = f"EPC{uuid.uuid4().hex[:12].upper()}"
+    activo = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT-EPC"),
+            "descripcion": "Activo buscable por RFID",
+            "categoria_id": cat["id"],
+            "epc": epc,
+        },
+        headers=auth_headers,
+    ).json()
+
+    deposito = client.post(
+        "/api/v1/depositos",
+        json={"nombre": _unique("Dep Lookup")},
+        headers=auth_headers,
+    ).json()
+    sector = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores",
+        json={"nombre": "S1"},
+        headers=auth_headers,
+    ).json()
+    ubic = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}/ubicaciones",
+        json={"codigo": "U-01"},
+        headers=auth_headers,
+    ).json()
+    client.post(
+        f"/api/v1/activos/{activo['id']}/asignar-ubicacion",
+        json={"ubicacion_id": ubic["id"]},
+        headers=auth_headers,
+    )
+
+    found = client.get(f"/api/v1/activos/by-epc/{epc.lower()}", headers=auth_headers)
+    assert found.status_code == 200
+    data = found.json()
+    assert data["encontrado"] is True
+    assert data["activo"]["id"] == activo["id"]
+    assert data["ubicacion"]["ubicacion_codigo"] == "U-01"
+    assert data["ubicacion"]["deposito_nombre"] == deposito["nombre"]
+
+    missing = client.get("/api/v1/activos/by-epc/EPCNOEXISTE999", headers=auth_headers)
+    assert missing.status_code == 200
+    assert missing.json()["encontrado"] is False

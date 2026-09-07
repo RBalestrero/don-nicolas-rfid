@@ -86,6 +86,64 @@ class ActivoService:
             )
         return activo
 
+    def lookup_by_epc(self, epc: str):
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+
+        from app.modules.assets.schemas import (
+            ActivoLookupResponse,
+            ActivoResponse,
+            ActivoUbicacionResumen,
+        )
+        from app.modules.warehouses.models import Deposito, Sector, Ubicacion
+
+        normalized = (epc or "").strip().upper()
+        if not normalized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="EPC vacío",
+            )
+
+        activo = self.repository.get_by_epc(normalized)
+        if not activo:
+            return ActivoLookupResponse(
+                encontrado=False,
+                epc_consultado=normalized,
+                mensaje="No hay activo registrado con ese EPC",
+            )
+
+        ubicacion_resumen = None
+        if activo.ubicacion_id:
+            stmt = (
+                select(Ubicacion)
+                .join(Sector, Ubicacion.sector_id == Sector.id)
+                .join(Deposito, Sector.deposito_id == Deposito.id)
+                .options(
+                    joinedload(Ubicacion.sector).joinedload(Sector.deposito),
+                )
+                .where(Ubicacion.id == activo.ubicacion_id)
+            )
+            ubicacion = self.repository.db.scalars(stmt).unique().first()
+            if ubicacion and ubicacion.activo:
+                sector = ubicacion.sector
+                deposito = sector.deposito
+                ubicacion_resumen = ActivoUbicacionResumen(
+                    ubicacion_id=ubicacion.id,
+                    ubicacion_codigo=ubicacion.codigo,
+                    sector_id=sector.id,
+                    sector_nombre=sector.nombre,
+                    deposito_id=deposito.id,
+                    deposito_nombre=deposito.nombre,
+                )
+
+        return ActivoLookupResponse(
+            encontrado=True,
+            epc_consultado=normalized,
+            activo=ActivoResponse.model_validate(activo),
+            ubicacion=ubicacion_resumen,
+            mensaje=None,
+        )
+
     def create_activo(self, data: ActivoCreate, user: Usuario) -> Activo:
         categoria = self.categoria_repository.get_by_id(data.categoria_id)
         if not categoria or not categoria.activa:
