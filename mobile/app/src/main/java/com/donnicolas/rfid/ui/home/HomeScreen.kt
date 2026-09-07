@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -19,6 +20,7 @@ import com.donnicolas.rfid.data.model.User
 @Composable
 fun HomeScreen(
     user: User,
+    onOpenRfidScan: () -> Unit,
     onLogout: () -> Unit,
 ) {
     Column(
@@ -46,13 +48,14 @@ fun HomeScreen(
             text = "Rol: ${user.rol}",
             style = MaterialTheme.typography.bodyMedium,
         )
+        Spacer(modifier = Modifier.height(28.dp))
+        Button(
+            onClick = onOpenRfidScan,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Lectura masiva RFID")
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "Próximo: inventario RFID (Fase 3.2+)",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(32.dp))
         OutlinedButton(
             onClick = onLogout,
             modifier = Modifier.fillMaxWidth(),

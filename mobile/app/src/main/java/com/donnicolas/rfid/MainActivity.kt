@@ -9,14 +9,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.donnicolas.rfid.ui.auth.LoginScreen
 import com.donnicolas.rfid.ui.auth.LoginViewModel
 import com.donnicolas.rfid.ui.home.HomeScreen
+import com.donnicolas.rfid.ui.rfid.RfidScanScreen
+import com.donnicolas.rfid.ui.rfid.RfidScanViewModel
 import com.donnicolas.rfid.ui.theme.DonNicolasTheme
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: LoginViewModel by viewModels {
+    private val loginViewModel: LoginViewModel by viewModels {
         val app = application as DonNicolasApp
         LoginViewModel.Factory(app.authRepository)
     }
@@ -27,19 +33,39 @@ class MainActivity : ComponentActivity() {
         setContent {
             DonNicolasTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val state by viewModel.state.collectAsState()
-                    val user = state.user
+                    val loginState by loginViewModel.state.collectAsState()
+                    val user = loginState.user
+                    var showRfidScan by remember { mutableStateOf(false) }
+
                     if (user == null) {
                         LoginScreen(
-                            state = state,
-                            onEmailChange = viewModel::onEmailChange,
-                            onPasswordChange = viewModel::onPasswordChange,
-                            onLogin = viewModel::login,
+                            state = loginState,
+                            onEmailChange = loginViewModel::onEmailChange,
+                            onPasswordChange = loginViewModel::onPasswordChange,
+                            onLogin = loginViewModel::login,
+                        )
+                    } else if (showRfidScan) {
+                        val app = application as DonNicolasApp
+                        val scanViewModel: RfidScanViewModel = viewModel(
+                            factory = RfidScanViewModel.Factory(app.rfidReader),
+                        )
+                        val scanState by scanViewModel.state.collectAsState()
+                        RfidScanScreen(
+                            state = scanState,
+                            onStart = scanViewModel::startScan,
+                            onStop = scanViewModel::stopScan,
+                            onClear = scanViewModel::clearTags,
+                            onReconnect = scanViewModel::connect,
+                            onBack = { showRfidScan = false },
                         )
                     } else {
                         HomeScreen(
                             user = user,
-                            onLogout = viewModel::logout,
+                            onOpenRfidScan = { showRfidScan = true },
+                            onLogout = {
+                                showRfidScan = false
+                                loginViewModel.logout()
+                            },
                         )
                     }
                 }

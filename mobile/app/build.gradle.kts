@@ -17,6 +17,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
+        // SIMULATOR | ZEBRA | AUTO
+        buildConfigField("String", "RFID_MODE", "\"SIMULATOR\"")
     }
 
     buildTypes {
