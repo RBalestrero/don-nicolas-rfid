@@ -34,11 +34,22 @@ const ubicacion: UbicacionAsignada = {
   deposito_nombre: "Central",
 };
 
+const noopHandlers = {
+  onAssign: vi.fn(),
+  onUnassign: vi.fn(),
+  onEdit: vi.fn(),
+  onHistorial: vi.fn(),
+  onDeactivate: vi.fn(),
+};
+
 describe("ActivosList", () => {
   it("muestra ubicación asignada y dispara acciones", async () => {
     const user = userEvent.setup();
     const onAssign = vi.fn();
     const onUnassign = vi.fn();
+    const onEdit = vi.fn();
+    const onHistorial = vi.fn();
+    const onDeactivate = vi.fn();
 
     render(
       <ActivosList
@@ -46,8 +57,13 @@ describe("ActivosList", () => {
         ubicaciones={{ "act-1": ubicacion }}
         loading={false}
         assigningId={null}
+        editingId={null}
+        historialId={null}
         onAssign={onAssign}
         onUnassign={onUnassign}
+        onEdit={onEdit}
+        onHistorial={onHistorial}
+        onDeactivate={onDeactivate}
       />,
     );
 
@@ -58,6 +74,15 @@ describe("ActivosList", () => {
 
     await user.click(screen.getByRole("button", { name: /quitar/i }));
     expect(onUnassign).toHaveBeenCalledWith("act-1");
+
+    await user.click(screen.getByRole("button", { name: /^editar$/i }));
+    expect(onEdit).toHaveBeenCalledWith("act-1");
+
+    await user.click(screen.getByRole("button", { name: /^historial$/i }));
+    expect(onHistorial).toHaveBeenCalledWith("act-1");
+
+    await user.click(screen.getByRole("button", { name: /dar de baja/i }));
+    expect(onDeactivate).toHaveBeenCalledWith("act-1");
   });
 
   it("muestra Sin ubicación cuando no hay asignación", () => {
@@ -67,8 +92,9 @@ describe("ActivosList", () => {
         ubicaciones={{ "act-1": null }}
         loading={false}
         assigningId={null}
-        onAssign={vi.fn()}
-        onUnassign={vi.fn()}
+        editingId={null}
+        historialId={null}
+        {...noopHandlers}
       />,
     );
 

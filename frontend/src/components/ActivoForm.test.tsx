@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ActivoForm from "./ActivoForm";
-import type { Categoria } from "../types";
+import type { Activo, Categoria } from "../types";
 
 const categoriasMock: Categoria[] = [
   {
@@ -14,6 +14,19 @@ const categoriasMock: Categoria[] = [
     actualizado_en: "2024-01-01T00:00:00Z",
   },
 ];
+
+const activoInicial: Activo = {
+  id: "act-1",
+  numero_patrimonial: "PAT-001",
+  descripcion: "Notebook Dell",
+  categoria_id: "cat-1",
+  epc: "E2801",
+  datos_tecnicos: { marca: "Dell" },
+  activo: true,
+  creado_en: "2024-01-01T00:00:00Z",
+  actualizado_en: "2024-01-01T00:00:00Z",
+  categoria: categoriasMock[0],
+};
 
 describe("ActivoForm", () => {
   it("renderiza los campos del formulario", () => {
@@ -59,5 +72,38 @@ describe("ActivoForm", () => {
 
     expect(await screen.findByText(/json válido/i)).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("prefilla y envía cambios en modo edición", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ActivoForm
+        categorias={categoriasMock}
+        initial={activoInicial}
+        onSubmit={onSubmit}
+        submitLabel="Guardar cambios"
+      />,
+    );
+
+    expect(screen.getByDisplayValue("PAT-001")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Notebook Dell")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("E2801")).toBeInTheDocument();
+
+    const descripcion = screen.getByLabelText(/^descripción$/i);
+    await user.clear(descripcion);
+    await user.type(descripcion, "Notebook actualizada");
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({
+        numero_patrimonial: "PAT-001",
+        descripcion: "Notebook actualizada",
+        categoria_id: "cat-1",
+        epc: "E2801",
+        datos_tecnicos: { marca: "Dell" },
+      });
+    });
   });
 });

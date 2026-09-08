@@ -6,9 +6,11 @@ import type {
   AsignacionUbicacionPayload,
   Categoria,
   CategoriaCreatePayload,
+  HistorialEntry,
   UbicacionAsignada,
 } from "../types";
 import ActivoForm from "./ActivoForm";
+import ActivoHistorial from "./ActivoHistorial";
 import ActivosList from "./ActivosList";
 import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
 import CategoriaForm from "./CategoriaForm";
@@ -31,6 +33,10 @@ export default function ActivosPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [historialId, setHistorialId] = useState<string | null>(null);
+  const [historial, setHistorial] = useState<HistorialEntry[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
   const [tab, setTab] = useState<"activos" | "categorias">("activos");
 
   const loadUbicaciones = useCallback(async (lista: Activo[]) => {
@@ -65,6 +71,13 @@ export default function ActivosPage() {
     loadData();
   }, [loadData]);
 
+  const closePanels = () => {
+    setAssigningId(null);
+    setEditingId(null);
+    setHistorialId(null);
+    setHistorial([]);
+  };
+
   const handleCreateActivo = async (data: ActivoCreatePayload) => {
     await apiFetch<Activo>("/activos", {
       method: "POST",
@@ -72,6 +85,22 @@ export default function ActivosPage() {
     });
     setShowForm(false);
     await loadData();
+  };
+
+  const handleUpdateActivo = async (data: ActivoCreatePayload) => {
+    if (!editingId) return;
+    setActionError(null);
+    try {
+      await apiFetch<Activo>(`/activos/${editingId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+      setEditingId(null);
+      await loadData();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Error al actualizar el activo");
+      throw err;
+    }
   };
 
   const handleCreateCategoria = async (data: CategoriaCreatePayload) => {
@@ -84,7 +113,64 @@ export default function ActivosPage() {
 
   const handleToggleAssign = (activoId: string) => {
     setActionError(null);
+    setShowForm(false);
+    setEditingId(null);
+    setHistorialId(null);
+    setHistorial([]);
     setAssigningId((current) => (current === activoId ? null : activoId));
+  };
+
+  const handleToggleEdit = (activoId: string) => {
+    setActionError(null);
+    setShowForm(false);
+    setAssigningId(null);
+    setHistorialId(null);
+    setHistorial([]);
+    setEditingId((current) => (current === activoId ? null : activoId));
+  };
+
+  const handleToggleHistorial = async (activoId: string) => {
+    setActionError(null);
+    setShowForm(false);
+    setAssigningId(null);
+    setEditingId(null);
+
+    if (historialId === activoId) {
+      setHistorialId(null);
+      setHistorial([]);
+      return;
+    }
+
+    setHistorialId(activoId);
+    setHistorialLoading(true);
+    try {
+      const data = await apiFetch<HistorialEntry[]>(`/activos/${activoId}/historial`);
+      setHistorial(data);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Error al cargar historial");
+      setHistorialId(null);
+      setHistorial([]);
+    } finally {
+      setHistorialLoading(false);
+    }
+  };
+
+  const handleDeactivate = async (activoId: string) => {
+    const activo = activos.find((a) => a.id === activoId);
+    const label = activo?.numero_patrimonial ?? "este activo";
+    if (!window.confirm(`¿Dar de baja ${label}? Dejará de aparecer en el listado.`)) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await apiFetch<void>(`/activos/${activoId}`, { method: "DELETE" });
+      if (assigningId === activoId || editingId === activoId || historialId === activoId) {
+        closePanels();
+      }
+      await loadData();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Error al dar de baja el activo");
+    }
   };
 
   const handleAssign = async (data: AsignacionUbicacionPayload) => {
@@ -118,6 +204,8 @@ export default function ActivosPage() {
   };
 
   const assigningActivo = activos.find((a) => a.id === assigningId) ?? null;
+  const editingActivo = activos.find((a) => a.id === editingId) ?? null;
+  const historialActivo = activos.find((a) => a.id === historialId) ?? null;
 
   return (
     <div className="page">
@@ -152,7 +240,10 @@ export default function ActivosPage() {
               <button
                 type="button"
                 className="btn primary"
-                onClick={() => setShowForm((v) => !v)}
+                onClick={() => {
+                  closePanels();
+                  setShowForm((v) => !v);
+                }}
               >
                 {showForm ? "Ocultar formulario" : "+ Nuevo activo"}
               </button>
@@ -162,8 +253,13 @@ export default function ActivosPage() {
               ubicaciones={ubicaciones}
               loading={loading}
               assigningId={assigningId}
+              editingId={editingId}
+              historialId={historialId}
               onAssign={handleToggleAssign}
               onUnassign={handleUnassign}
+              onEdit={handleToggleEdit}
+              onHistorial={handleToggleHistorial}
+              onDeactivate={handleDeactivate}
             />
           </section>
 
@@ -183,6 +279,40 @@ export default function ActivosPage() {
                 onCancel={() => setAssigningId(null)}
                 submitLabel={ubicaciones[assigningActivo.id] ? "Cambiar ubicación" : "Asignar ubicación"}
               />
+            </section>
+          )}
+
+          {editingActivo && (
+            <section className="card">
+              <h3>Editar activo — {editingActivo.numero_patrimonial}</h3>
+              <ActivoForm
+                key={editingActivo.id}
+                categorias={categorias}
+                initial={editingActivo}
+                onSubmit={handleUpdateActivo}
+                onCancel={() => setEditingId(null)}
+                submitLabel="Guardar cambios"
+              />
+            </section>
+          )}
+
+          {historialActivo && (
+            <section className="card">
+              <h3>Historial — {historialActivo.numero_patrimonial}</h3>
+              <p className="muted">{historialActivo.descripcion}</p>
+              <ActivoHistorial entries={historial} loading={historialLoading} />
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => {
+                    setHistorialId(null);
+                    setHistorial([]);
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
             </section>
           )}
 

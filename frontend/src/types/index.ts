@@ -35,6 +35,25 @@ export interface ActivoCreatePayload {
   datos_tecnicos?: Record<string, unknown> | null;
 }
 
+export interface ActivoUpdatePayload {
+  numero_patrimonial?: string;
+  descripcion?: string;
+  categoria_id?: string;
+  epc?: string | null;
+  datos_tecnicos?: Record<string, unknown> | null;
+  activo?: boolean;
+}
+
+export interface HistorialEntry {
+  id: string;
+  activo_id: string;
+  usuario_id: string | null;
+  usuario_nombre: string | null;
+  accion: string;
+  cambios: Record<string, unknown> | null;
+  creado_en: string;
+}
+
 export interface CategoriaCreatePayload {
   nombre: string;
   descripcion?: string | null;

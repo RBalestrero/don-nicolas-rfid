@@ -10,8 +10,13 @@ interface ActivosListProps {
   ubicaciones: Record<string, UbicacionAsignada | null>;
   loading: boolean;
   assigningId: string | null;
+  editingId: string | null;
+  historialId: string | null;
   onAssign: (activoId: string) => void;
   onUnassign: (activoId: string) => void;
+  onEdit: (activoId: string) => void;
+  onHistorial: (activoId: string) => void;
+  onDeactivate: (activoId: string) => void;
 }
 
 export default function ActivosList({
@@ -19,8 +24,13 @@ export default function ActivosList({
   ubicaciones,
   loading,
   assigningId,
+  editingId,
+  historialId,
   onAssign,
   onUnassign,
+  onEdit,
+  onHistorial,
+  onDeactivate,
 }: ActivosListProps) {
   if (loading) {
     return <p className="muted">Cargando activos...</p>;
@@ -48,8 +58,11 @@ export default function ActivosList({
           {activos.map((activo) => {
             const ubicacion = ubicaciones[activo.id] ?? null;
             const isAssigning = assigningId === activo.id;
+            const isEditing = editingId === activo.id;
+            const isHistorial = historialId === activo.id;
+            const rowActive = isAssigning || isEditing || isHistorial;
             return (
-              <tr key={activo.id} className={isAssigning ? "row-active" : undefined}>
+              <tr key={activo.id} className={rowActive ? "row-active" : undefined}>
                 <td>{activo.numero_patrimonial}</td>
                 <td>{activo.descripcion}</td>
                 <td>{activo.categoria.nombre}</td>
@@ -65,9 +78,29 @@ export default function ActivosList({
                     <button
                       type="button"
                       className="btn secondary btn-sm"
+                      onClick={() => onEdit(activo.id)}
+                    >
+                      {isEditing ? "Cerrar" : "Editar"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary btn-sm"
+                      onClick={() => onHistorial(activo.id)}
+                    >
+                      {isHistorial ? "Cerrar historial" : "Historial"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary btn-sm"
                       onClick={() => onAssign(activo.id)}
                     >
-                      {ubicacion ? (isAssigning ? "Cerrar" : "Cambiar") : isAssigning ? "Cerrar" : "Asignar"}
+                      {ubicacion
+                        ? isAssigning
+                          ? "Cerrar"
+                          : "Cambiar"
+                        : isAssigning
+                          ? "Cerrar"
+                          : "Asignar"}
                     </button>
                     {ubicacion && (
                       <button
@@ -76,6 +109,15 @@ export default function ActivosList({
                         onClick={() => onUnassign(activo.id)}
                       >
                         Quitar
+                      </button>
+                    )}
+                    {activo.activo && (
+                      <button
+                        type="button"
+                        className="btn secondary btn-sm danger"
+                        onClick={() => onDeactivate(activo.id)}
+                      >
+                        Dar de baja
                       </button>
                     )}
                   </div>

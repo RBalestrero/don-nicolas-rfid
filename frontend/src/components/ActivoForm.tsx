@@ -1,13 +1,21 @@
-import { FormEvent, useState } from "react";
-import type { ActivoCreatePayload, Categoria } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { Activo, ActivoCreatePayload, Categoria } from "../types";
 
 interface ActivoFormProps {
   categorias: Categoria[];
   onSubmit: (data: ActivoCreatePayload) => Promise<void>;
   onCancel?: () => void;
+  initial?: Activo | null;
+  submitLabel?: string;
 }
 
-export default function ActivoForm({ categorias, onSubmit, onCancel }: ActivoFormProps) {
+export default function ActivoForm({
+  categorias,
+  onSubmit,
+  onCancel,
+  initial = null,
+  submitLabel,
+}: ActivoFormProps) {
   const [numeroPatrimonial, setNumeroPatrimonial] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [categoriaId, setCategoriaId] = useState(categorias[0]?.id ?? "");
@@ -15,6 +23,24 @@ export default function ActivoForm({ categorias, onSubmit, onCancel }: ActivoFor
   const [datosTecnicos, setDatosTecnicos] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!initial) {
+      setNumeroPatrimonial("");
+      setDescripcion("");
+      setCategoriaId(categorias[0]?.id ?? "");
+      setEpc("");
+      setDatosTecnicos("");
+      return;
+    }
+    setNumeroPatrimonial(initial.numero_patrimonial);
+    setDescripcion(initial.descripcion);
+    setCategoriaId(initial.categoria_id);
+    setEpc(initial.epc ?? "");
+    setDatosTecnicos(
+      initial.datos_tecnicos ? JSON.stringify(initial.datos_tecnicos, null, 2) : "",
+    );
+  }, [initial, categorias]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,10 +70,12 @@ export default function ActivoForm({ categorias, onSubmit, onCancel }: ActivoFor
         epc: epc.trim() || null,
         datos_tecnicos: parsedDatos,
       });
-      setNumeroPatrimonial("");
-      setDescripcion("");
-      setEpc("");
-      setDatosTecnicos("");
+      if (!initial) {
+        setNumeroPatrimonial("");
+        setDescripcion("");
+        setEpc("");
+        setDatosTecnicos("");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar el activo");
     } finally {
@@ -55,8 +83,15 @@ export default function ActivoForm({ categorias, onSubmit, onCancel }: ActivoFor
     }
   };
 
+  const buttonLabel =
+    submitLabel ?? (initial ? "Guardar cambios" : "Dar de alta activo");
+
   return (
-    <form className="form" onSubmit={handleSubmit} aria-label="Formulario de alta de activo">
+    <form
+      className="form"
+      onSubmit={handleSubmit}
+      aria-label={initial ? "Formulario de edición de activo" : "Formulario de alta de activo"}
+    >
       <label className="field">
         <span>Número patrimonial</span>
         <input
@@ -132,7 +167,7 @@ export default function ActivoForm({ categorias, onSubmit, onCancel }: ActivoFor
           className="btn primary"
           disabled={submitting || categorias.length === 0}
         >
-          {submitting ? "Guardando..." : "Dar de alta activo"}
+          {submitting ? "Guardando..." : buttonLabel}
         </button>
       </div>
     </form>
