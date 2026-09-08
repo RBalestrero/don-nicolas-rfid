@@ -59,3 +59,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   return response.json() as Promise<T>;
 }
+
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    throw new ApiError(response.statusText || "Error al descargar archivo", response.status);
+  }
+  return response.blob();
+}

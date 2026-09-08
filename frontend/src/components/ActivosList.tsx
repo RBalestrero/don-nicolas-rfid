@@ -12,10 +12,12 @@ interface ActivosListProps {
   assigningId: string | null;
   editingId: string | null;
   historialId: string | null;
+  fotosId: string | null;
   onAssign: (activoId: string) => void;
   onUnassign: (activoId: string) => void;
   onEdit: (activoId: string) => void;
   onHistorial: (activoId: string) => void;
+  onFotos: (activoId: string) => void;
   onDeactivate: (activoId: string) => void;
 }
 
@@ -26,10 +28,12 @@ export default function ActivosList({
   assigningId,
   editingId,
   historialId,
+  fotosId,
   onAssign,
   onUnassign,
   onEdit,
   onHistorial,
+  onFotos,
   onDeactivate,
 }: ActivosListProps) {
   if (loading) {
@@ -60,7 +64,8 @@ export default function ActivosList({
             const isAssigning = assigningId === activo.id;
             const isEditing = editingId === activo.id;
             const isHistorial = historialId === activo.id;
-            const rowActive = isAssigning || isEditing || isHistorial;
+            const isFotos = fotosId === activo.id;
+            const rowActive = isAssigning || isEditing || isHistorial || isFotos;
             return (
               <tr key={activo.id} className={rowActive ? "row-active" : undefined}>
                 <td>{activo.numero_patrimonial}</td>
@@ -81,6 +86,13 @@ export default function ActivosList({
                       onClick={() => onEdit(activo.id)}
                     >
                       {isEditing ? "Cerrar" : "Editar"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary btn-sm"
+                      onClick={() => onFotos(activo.id)}
+                    >
+                      {isFotos ? "Cerrar fotos" : "Fotos"}
                     </button>
                     <button
                       type="button"

@@ -10,6 +10,7 @@ import type {
   UbicacionAsignada,
 } from "../types";
 import ActivoForm from "./ActivoForm";
+import ActivoFotos from "./ActivoFotos";
 import ActivoHistorial from "./ActivoHistorial";
 import ActivosList from "./ActivosList";
 import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
@@ -35,6 +36,7 @@ export default function ActivosPage() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historialId, setHistorialId] = useState<string | null>(null);
+  const [fotosId, setFotosId] = useState<string | null>(null);
   const [historial, setHistorial] = useState<HistorialEntry[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [tab, setTab] = useState<"activos" | "categorias">("activos");
@@ -75,6 +77,7 @@ export default function ActivosPage() {
     setAssigningId(null);
     setEditingId(null);
     setHistorialId(null);
+    setFotosId(null);
     setHistorial([]);
   };
 
@@ -116,6 +119,7 @@ export default function ActivosPage() {
     setShowForm(false);
     setEditingId(null);
     setHistorialId(null);
+    setFotosId(null);
     setHistorial([]);
     setAssigningId((current) => (current === activoId ? null : activoId));
   };
@@ -125,8 +129,19 @@ export default function ActivosPage() {
     setShowForm(false);
     setAssigningId(null);
     setHistorialId(null);
+    setFotosId(null);
     setHistorial([]);
     setEditingId((current) => (current === activoId ? null : activoId));
+  };
+
+  const handleToggleFotos = (activoId: string) => {
+    setActionError(null);
+    setShowForm(false);
+    setAssigningId(null);
+    setEditingId(null);
+    setHistorialId(null);
+    setHistorial([]);
+    setFotosId((current) => (current === activoId ? null : activoId));
   };
 
   const handleToggleHistorial = async (activoId: string) => {
@@ -134,6 +149,7 @@ export default function ActivosPage() {
     setShowForm(false);
     setAssigningId(null);
     setEditingId(null);
+    setFotosId(null);
 
     if (historialId === activoId) {
       setHistorialId(null);
@@ -164,7 +180,12 @@ export default function ActivosPage() {
     setActionError(null);
     try {
       await apiFetch<void>(`/activos/${activoId}`, { method: "DELETE" });
-      if (assigningId === activoId || editingId === activoId || historialId === activoId) {
+      if (
+        assigningId === activoId ||
+        editingId === activoId ||
+        historialId === activoId ||
+        fotosId === activoId
+      ) {
         closePanels();
       }
       await loadData();
@@ -206,6 +227,7 @@ export default function ActivosPage() {
   const assigningActivo = activos.find((a) => a.id === assigningId) ?? null;
   const editingActivo = activos.find((a) => a.id === editingId) ?? null;
   const historialActivo = activos.find((a) => a.id === historialId) ?? null;
+  const fotosActivo = activos.find((a) => a.id === fotosId) ?? null;
 
   return (
     <div className="page">
@@ -255,10 +277,12 @@ export default function ActivosPage() {
               assigningId={assigningId}
               editingId={editingId}
               historialId={historialId}
+              fotosId={fotosId}
               onAssign={handleToggleAssign}
               onUnassign={handleUnassign}
               onEdit={handleToggleEdit}
               onHistorial={handleToggleHistorial}
+              onFotos={handleToggleFotos}
               onDeactivate={handleDeactivate}
             />
           </section>
@@ -293,6 +317,19 @@ export default function ActivosPage() {
                 onCancel={() => setEditingId(null)}
                 submitLabel="Guardar cambios"
               />
+            </section>
+          )}
+
+          {fotosActivo && (
+            <section className="card">
+              <h3>Fotografías — {fotosActivo.numero_patrimonial}</h3>
+              <p className="muted">{fotosActivo.descripcion}</p>
+              <ActivoFotos key={fotosActivo.id} activoId={fotosActivo.id} />
+              <div className="form-actions">
+                <button type="button" className="btn secondary" onClick={() => setFotosId(null)}>
+                  Cerrar
+                </button>
+              </div>
             </section>
           )}
 

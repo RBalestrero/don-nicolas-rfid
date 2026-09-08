@@ -39,6 +39,7 @@ const noopHandlers = {
   onUnassign: vi.fn(),
   onEdit: vi.fn(),
   onHistorial: vi.fn(),
+  onFotos: vi.fn(),
   onDeactivate: vi.fn(),
 };
 
@@ -49,6 +50,7 @@ describe("ActivosList", () => {
     const onUnassign = vi.fn();
     const onEdit = vi.fn();
     const onHistorial = vi.fn();
+    const onFotos = vi.fn();
     const onDeactivate = vi.fn();
 
     render(
@@ -59,10 +61,12 @@ describe("ActivosList", () => {
         assigningId={null}
         editingId={null}
         historialId={null}
+        fotosId={null}
         onAssign={onAssign}
         onUnassign={onUnassign}
         onEdit={onEdit}
         onHistorial={onHistorial}
+        onFotos={onFotos}
         onDeactivate={onDeactivate}
       />,
     );
@@ -77,6 +81,9 @@ describe("ActivosList", () => {
 
     await user.click(screen.getByRole("button", { name: /^editar$/i }));
     expect(onEdit).toHaveBeenCalledWith("act-1");
+
+    await user.click(screen.getByRole("button", { name: /^fotos$/i }));
+    expect(onFotos).toHaveBeenCalledWith("act-1");
 
     await user.click(screen.getByRole("button", { name: /^historial$/i }));
     expect(onHistorial).toHaveBeenCalledWith("act-1");
@@ -94,6 +101,7 @@ describe("ActivosList", () => {
         assigningId={null}
         editingId={null}
         historialId={null}
+        fotosId={null}
         {...noopHandlers}
       />,
     );

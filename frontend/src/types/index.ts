@@ -54,6 +54,17 @@ export interface HistorialEntry {
   creado_en: string;
 }
 
+export interface Fotografia {
+  id: string;
+  activo_id: string;
+  nombre_archivo: string;
+  mime_type: string;
+  tamano_bytes: number;
+  es_principal: boolean;
+  creado_en: string;
+  url: string;
+}
+
 export interface CategoriaCreatePayload {
   nombre: string;
   descripcion?: string | null;
