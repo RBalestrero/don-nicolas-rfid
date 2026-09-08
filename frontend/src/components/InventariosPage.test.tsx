@@ -87,7 +87,7 @@ describe("InventariosPage", () => {
     });
 
     await user.selectOptions(screen.getByLabelText(/depósito para inventario/i), "dep-1");
-    await user.click(screen.getByRole("button", { name: /crear inventario/i }));
+    await user.click(screen.getByRole("button", { name: /iniciar inventario/i }));
 
     expect(await screen.findByText("en_curso")).toBeInTheDocument();
     expect(screen.getByLabelText(/epcs leídos/i)).toBeInTheDocument();

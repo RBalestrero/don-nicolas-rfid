@@ -15,6 +15,7 @@ import ActivoHistorial from "./ActivoHistorial";
 import ActivosList from "./ActivosList";
 import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
 import CategoriaForm from "./CategoriaForm";
+import PageHeader from "./PageHeader";
 
 async function fetchUbicacionOrNull(activoId: string): Promise<UbicacionAsignada | null> {
   try {
@@ -231,8 +232,10 @@ export default function ActivosPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h2>Gestión de activos</h2>
+      <PageHeader
+        title="Activos"
+        subtitle="Alta, ubicación, fotos e historial patrimonial"
+      >
         <div className="tabs">
           <button
             type="button"
@@ -249,7 +252,7 @@ export default function ActivosPage() {
             Categorías
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {error && <p className="error">{error}</p>}
       {actionError && <p className="error">{actionError}</p>}
@@ -267,7 +270,7 @@ export default function ActivosPage() {
                   setShowForm((v) => !v);
                 }}
               >
-                {showForm ? "Ocultar formulario" : "+ Nuevo activo"}
+                {showForm ? "Ocultar" : "+ Nuevo"}
               </button>
             </div>
             <ActivosList

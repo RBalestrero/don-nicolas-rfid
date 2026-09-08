@@ -8,6 +8,7 @@ import type {
   TransferenciaCreatePayload,
   TransferenciaListItem,
 } from "../types";
+import PageHeader from "./PageHeader";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -289,15 +290,16 @@ export default function TransferenciasPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h2>Transferencias</h2>
-      </div>
+      <PageHeader
+        title="Transferencias"
+        subtitle="Movimiento entre depósitos con confirmación por EPC"
+      />
 
       {error && <p className="error">{error}</p>}
       {loading && <p className="muted">Cargando...</p>}
 
       <section className="card">
-        <h3>Nueva transferencia</h3>
+        <h3>Nueva orden</h3>
         <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
           <div className="two-col">
             <label className="field">
@@ -390,7 +392,7 @@ export default function TransferenciasPage() {
       </section>
 
       <section className="card">
-        <h3>Órdenes recientes</h3>
+        <h3>Órdenes</h3>
         {lista.length === 0 ? (
           <p className="muted">Todavía no hay transferencias.</p>
         ) : (

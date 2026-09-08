@@ -61,13 +61,13 @@ const resumen: DashboardResumen = {
       id: "i-1",
       deposito_id: "dep-1",
       deposito_nombre: "Central",
-      estado: "cerrado",
+      estado: "en_curso",
       total_esperado: 10,
-      total_encontrado: 9,
-      total_faltante: 1,
+      total_encontrado: 3,
+      total_faltante: 0,
       total_sobrante: 0,
       iniciado_en: "2024-06-01T10:00:00Z",
-      cerrado_en: "2024-06-01T11:00:00Z",
+      cerrado_en: null,
     },
   ],
   movimientos_limit: 20,
@@ -103,23 +103,28 @@ describe("DashboardPage", () => {
     });
   });
 
-  it("renderiza KPIs y permite buscar movimientos", async () => {
+  it("muestra KPIs operativos y filtra actividad", async () => {
     const user = userEvent.setup();
-    render(<DashboardPage />);
+    const onNavigate = vi.fn();
+    render(<DashboardPage onNavigate={onNavigate} />);
 
-    expect(await screen.findByText("12")).toBeInTheDocument();
-    expect(screen.getByText("10")).toBeInTheDocument();
-    expect(screen.getByText("Central")).toBeInTheDocument();
-    expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
+    expect(await screen.findByText("Transferencias abiertas")).toBeInTheDocument();
+    expect(screen.getByText("Inventarios abiertos")).toBeInTheDocument();
+    expect(screen.getByText("Discrepancias")).toBeInTheDocument();
+    expect(screen.getByText("Sin ubicación")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /transferencias abiertas/i })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: /sin ubicación/i })).toHaveTextContent("2");
     expect(screen.getByText(/Central → Sur/)).toBeInTheDocument();
+    expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /transferencias abiertas/i }));
+    expect(onNavigate).toHaveBeenCalledWith("transferencias");
 
     await user.selectOptions(screen.getByLabelText(/^acción$/i), "transferencia");
-    await user.click(screen.getByRole("button", { name: /^buscar$/i }));
+    await user.click(screen.getByRole("button", { name: /^filtrar$/i }));
 
     await waitFor(() => {
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/movimientos?"),
-      );
+      expect(apiFetchMock).toHaveBeenCalledWith(expect.stringContaining("/movimientos?"));
     });
 
     expect(await screen.findByText(/PAT-200/)).toBeInTheDocument();

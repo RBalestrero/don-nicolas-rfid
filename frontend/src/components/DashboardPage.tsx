@@ -1,6 +1,20 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
-import type { DashboardResumen, MovimientoItem, MovimientosPage } from "../types";
+import type {
+  DashboardResumen,
+  InventarioResumenDash,
+  MovimientoItem,
+  MovimientosPage,
+  TransferenciaResumenDash,
+} from "../types";
+import PageHeader from "./PageHeader";
+
+export type AppPage =
+  | "dashboard"
+  | "activos"
+  | "depositos"
+  | "inventarios"
+  | "transferencias";
 
 const ACCION_LABELS: Record<string, string> = {
   creacion: "Alta",
@@ -20,45 +34,52 @@ function formatAccion(accion: string): string {
 
 function formatFecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleString("es-AR");
+    return new Date(iso).toLocaleString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
 }
 
-function MovimientoRow({ item }: { item: MovimientoItem }) {
-  return (
-    <li className="historial-item">
-      <div className="historial-head">
-        <strong>
-          {formatAccion(item.accion)}
-          {item.numero_patrimonial ? ` · ${item.numero_patrimonial}` : ""}
-        </strong>
-        <span className="muted">{formatFecha(item.creado_en)}</span>
-      </div>
-      <p className="muted historial-user">
-        {item.descripcion ?? "—"} · {item.usuario_nombre ?? "Sistema"}
-      </p>
-    </li>
-  );
+function estadoXfer(estado: string): string {
+  switch (estado) {
+    case "pendiente":
+      return "Pendiente";
+    case "en_transito":
+      return "En tránsito";
+    case "completada":
+      return "Completada";
+    case "cancelada":
+      return "Cancelada";
+    default:
+      return estado;
+  }
 }
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  onNavigate?: (page: AppPage) => void;
+}
+
+export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [resumen, setResumen] = useState<DashboardResumen | null>(null);
-  const [movimientos, setMovimientos] = useState<MovimientosPage | null>(null);
+  const [filtrados, setFiltrados] = useState<MovimientosPage | null>(null);
   const [accion, setAccion] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAllMovimientos, setShowAllMovimientos] = useState(false);
 
   const loadResumen = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<DashboardResumen>("/dashboard/resumen");
+      const data = await apiFetch<DashboardResumen>("/dashboard/resumen?movimientos_limit=15&ops_limit=8");
       setResumen(data);
+      setFiltrados(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar el dashboard");
     } finally {
@@ -70,28 +91,52 @@ export default function DashboardPage() {
     loadResumen();
   }, [loadResumen]);
 
-  const loadMovimientos = async (e?: FormEvent) => {
+  const colaTransferencias = useMemo(
+    () =>
+      (resumen?.transferencias_recientes ?? []).filter((t) =>
+        ["pendiente", "en_transito"].includes(t.estado),
+      ),
+    [resumen],
+  );
+
+  const colaInventarios = useMemo(
+    () => (resumen?.inventarios_recientes ?? []).filter((i) => i.estado === "en_curso"),
+    [resumen],
+  );
+
+  const movimientosVisibles: MovimientoItem[] = filtrados
+    ? filtrados.items
+    : (resumen?.movimientos_recientes ?? []);
+
+  const maxStock = Math.max(1, ...(resumen?.stock_por_deposito.map((s) => s.total) ?? [1]));
+
+  const aplicarFiltro = async (e?: FormEvent) => {
     e?.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit: "50", offset: "0" });
+      const params = new URLSearchParams({ limit: "40", offset: "0" });
       if (accion) params.set("accion", accion);
       if (search.trim()) params.set("search", search.trim());
       const data = await apiFetch<MovimientosPage>(`/movimientos?${params.toString()}`);
-      setMovimientos(data);
-      setShowAllMovimientos(true);
+      setFiltrados(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar movimientos");
+      setError(err instanceof Error ? err.message : "Error al filtrar movimientos");
     } finally {
       setBusy(false);
     }
   };
 
+  const limpiarFiltro = () => {
+    setAccion("");
+    setSearch("");
+    setFiltrados(null);
+  };
+
   if (loading) {
     return (
       <div className="page">
-        <p className="muted">Cargando dashboard...</p>
+        <p className="muted">Cargando operaciones…</p>
       </div>
     );
   }
@@ -109,125 +154,153 @@ export default function DashboardPage() {
 
   const { kpis } = resumen;
   const disc = kpis.discrepancias_inventarios_cerrados;
+  const sinUbicar = Math.max(0, kpis.activos_activos - kpis.stock_total_ubicado);
+  const cobertura =
+    kpis.activos_activos > 0
+      ? Math.round((kpis.stock_total_ubicado / kpis.activos_activos) * 100)
+      : 0;
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h2>Dashboard</h2>
+      <PageHeader
+        title="Operaciones"
+        subtitle="Atención pendiente, stock y actividad reciente"
+      >
         <button type="button" className="btn secondary" onClick={loadResumen}>
           Actualizar
         </button>
-      </div>
+      </PageHeader>
 
       {error && <p className="error">{error}</p>}
 
-      <section className="kpi-grid" aria-label="Indicadores">
-        <div className="kpi-card">
-          <span className="kpi-label">Activos</span>
-          <strong className="kpi-value">{kpis.activos_activos}</strong>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Stock ubicado</span>
-          <strong className="kpi-value">{kpis.stock_total_ubicado}</strong>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Depósitos</span>
-          <strong className="kpi-value">{kpis.depositos_activos}</strong>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Inventarios abiertos</span>
-          <strong className="kpi-value">{kpis.inventarios_abiertos}</strong>
-        </div>
-        <div className="kpi-card">
+      <section className="kpi-grid" aria-label="Indicadores operativos">
+        <button
+          type="button"
+          className={`kpi-card interactive ${kpis.transferencias_abiertas > 0 ? "tone-warn" : ""}`}
+          onClick={() => onNavigate?.("transferencias")}
+        >
           <span className="kpi-label">Transferencias abiertas</span>
           <strong className="kpi-value">{kpis.transferencias_abiertas}</strong>
-        </div>
-        <div className="kpi-card">
+          <span className="kpi-hint">Ir a cola</span>
+        </button>
+
+        <button
+          type="button"
+          className={`kpi-card interactive ${kpis.inventarios_abiertos > 0 ? "tone-warn" : ""}`}
+          onClick={() => onNavigate?.("inventarios")}
+        >
+          <span className="kpi-label">Inventarios abiertos</span>
+          <strong className="kpi-value">{kpis.inventarios_abiertos}</strong>
+          <span className="kpi-hint">Ir a conteo</span>
+        </button>
+
+        <button
+          type="button"
+          className={`kpi-card interactive ${disc.inventarios_con_discrepancia > 0 ? "tone-danger" : ""}`}
+          onClick={() => onNavigate?.("inventarios")}
+        >
           <span className="kpi-label">Discrepancias</span>
           <strong className="kpi-value">{disc.inventarios_con_discrepancia}</strong>
-          <span className="muted kpi-sub">
+          <span className="kpi-hint">
             {disc.faltantes} falt. · {disc.sobrantes} sobr.
           </span>
-        </div>
+        </button>
+
+        <button
+          type="button"
+          className={`kpi-card interactive ${sinUbicar > 0 ? "tone-warn" : "tone-ok"}`}
+          onClick={() => onNavigate?.("activos")}
+        >
+          <span className="kpi-label">Sin ubicación</span>
+          <strong className="kpi-value">{sinUbicar}</strong>
+          <span className="kpi-hint">
+            {kpis.stock_total_ubicado}/{kpis.activos_activos} ubicados · {cobertura}%
+          </span>
+        </button>
       </section>
 
-      <div className="two-col dash-cols">
-        <section className="card">
-          <h3>Stock por depósito</h3>
+      <div className="dash-layout">
+        <section className="card panel">
+          <div className="section-header">
+            <h3>Cola operativa</h3>
+            <span className="muted">
+              {colaTransferencias.length + colaInventarios.length} pendientes
+            </span>
+          </div>
+
+          {colaTransferencias.length === 0 && colaInventarios.length === 0 ? (
+            <p className="empty-state">No hay transferencias ni inventarios abiertos.</p>
+          ) : (
+            <ul className="ops-queue">
+              {colaTransferencias.map((t: TransferenciaResumenDash) => (
+                <li key={`x-${t.id}`}>
+                  <button
+                    type="button"
+                    className="ops-item"
+                    onClick={() => onNavigate?.("transferencias")}
+                  >
+                    <span className="badge warn">{estadoXfer(t.estado)}</span>
+                    <span className="ops-body">
+                      <strong>Transferencia</strong>
+                      <span className="muted">
+                        {t.deposito_origen_nombre ?? "?"} → {t.deposito_destino_nombre ?? "?"} ·{" "}
+                        {t.confirmados_destino}/{t.total_activos} activos
+                      </span>
+                    </span>
+                    <span className="ops-time muted">{formatFecha(t.creado_en)}</span>
+                  </button>
+                </li>
+              ))}
+              {colaInventarios.map((inv: InventarioResumenDash) => (
+                <li key={`i-${inv.id}`}>
+                  <button
+                    type="button"
+                    className="ops-item"
+                    onClick={() => onNavigate?.("inventarios")}
+                  >
+                    <span className="badge warn">En curso</span>
+                    <span className="ops-body">
+                      <strong>Inventario</strong>
+                      <span className="muted">
+                        {inv.deposito_nombre ?? "?"} · esperado {inv.total_esperado} · leídos{" "}
+                        {inv.total_encontrado}
+                      </span>
+                    </span>
+                    <span className="ops-time muted">{formatFecha(inv.iniciado_en)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card panel">
+          <div className="section-header">
+            <h3>Stock por depósito</h3>
+            <button
+              type="button"
+              className="btn secondary btn-sm"
+              onClick={() => onNavigate?.("depositos")}
+            >
+              Ver depósitos
+            </button>
+          </div>
           {resumen.stock_por_deposito.length === 0 ? (
-            <p className="muted">Sin depósitos activos.</p>
+            <p className="empty-state">Sin depósitos activos.</p>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Depósito</th>
-                    <th>Activos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumen.stock_por_deposito.map((s) => (
-                    <tr key={s.deposito_id}>
-                      <td>{s.deposito_nombre}</td>
-                      <td>{s.total}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="card">
-          <h3>Movimientos recientes</h3>
-          {resumen.movimientos_recientes.length === 0 ? (
-            <p className="muted">Sin movimientos aún.</p>
-          ) : (
-            <ol className="historial-list compact-list" aria-label="Movimientos recientes">
-              {resumen.movimientos_recientes.map((m) => (
-                <MovimientoRow key={m.id} item={m} />
-              ))}
-            </ol>
-          )}
-        </section>
-      </div>
-
-      <div className="two-col dash-cols">
-        <section className="card">
-          <h3>Transferencias recientes</h3>
-          {resumen.transferencias_recientes.length === 0 ? (
-            <p className="muted">Sin transferencias.</p>
-          ) : (
-            <ul className="simple-list">
-              {resumen.transferencias_recientes.map((t) => (
-                <li key={t.id}>
-                  <strong>{t.estado}</strong>
-                  <span className="muted">
-                    {" "}
-                    · {t.deposito_origen_nombre ?? "?"} → {t.deposito_destino_nombre ?? "?"}
-                    {" · "}
-                    {t.confirmados_destino}/{t.total_activos}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="card">
-          <h3>Inventarios recientes</h3>
-          {resumen.inventarios_recientes.length === 0 ? (
-            <p className="muted">Sin inventarios.</p>
-          ) : (
-            <ul className="simple-list">
-              {resumen.inventarios_recientes.map((inv) => (
-                <li key={inv.id}>
-                  <strong>{inv.estado}</strong>
-                  <span className="muted">
-                    {" "}
-                    · {inv.deposito_nombre ?? "?"} · esp {inv.total_esperado} · falt{" "}
-                    {inv.total_faltante} · sobr {inv.total_sobrante}
-                  </span>
+            <ul className="stock-bars" aria-label="Stock por depósito">
+              {resumen.stock_por_deposito.map((s) => (
+                <li key={s.deposito_id}>
+                  <div className="stock-bar-head">
+                    <span>{s.deposito_nombre}</span>
+                    <strong>{s.total}</strong>
+                  </div>
+                  <div className="stock-bar-track" aria-hidden>
+                    <div
+                      className="stock-bar-fill"
+                      style={{ width: `${Math.round((s.total / maxStock) * 100)}%` }}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -235,10 +308,18 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      <section className="card">
-        <h3>Historial de movimientos</h3>
-        <form className="form inline-form" onSubmit={loadMovimientos} aria-label="Filtrar movimientos">
-          <label className="field">
+      <section className="card panel">
+        <div className="section-header">
+          <h3>Actividad</h3>
+          {filtrados && (
+            <span className="muted">
+              {filtrados.total} resultado{filtrados.total === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+
+        <form className="toolbar" onSubmit={aplicarFiltro} aria-label="Filtrar movimientos">
+          <label className="field toolbar-field">
             <span>Acción</span>
             <select value={accion} onChange={(e) => setAccion(e.target.value)}>
               <option value="">Todas</option>
@@ -249,7 +330,7 @@ export default function DashboardPage() {
               ))}
             </select>
           </label>
-          <label className="field">
+          <label className="field toolbar-field grow">
             <span>Buscar</span>
             <input
               value={search}
@@ -257,28 +338,48 @@ export default function DashboardPage() {
               placeholder="Patrimonial o descripción"
             />
           </label>
-          <div className="form-actions">
+          <div className="toolbar-actions">
             <button type="submit" className="btn primary" disabled={busy}>
-              {busy ? "Buscando..." : "Buscar"}
+              {busy ? "Filtrando…" : "Filtrar"}
             </button>
+            {filtrados && (
+              <button type="button" className="btn secondary" onClick={limpiarFiltro}>
+                Limpiar
+              </button>
+            )}
           </div>
         </form>
 
-        {showAllMovimientos && movimientos && (
-          <>
-            <p className="muted">
-              {movimientos.total} resultado{movimientos.total === 1 ? "" : "s"}
-            </p>
-            {movimientos.items.length === 0 ? (
-              <p className="muted">No hay movimientos con esos filtros.</p>
-            ) : (
-              <ol className="historial-list" aria-label="Resultados de movimientos">
-                {movimientos.items.map((m) => (
-                  <MovimientoRow key={m.id} item={m} />
+        {movimientosVisibles.length === 0 ? (
+          <p className="empty-state">Sin movimientos para mostrar.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table dense">
+              <thead>
+                <tr>
+                  <th>Cuándo</th>
+                  <th>Acción</th>
+                  <th>Activo</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movimientosVisibles.map((m) => (
+                  <tr key={m.id}>
+                    <td className="muted">{formatFecha(m.creado_en)}</td>
+                    <td>{formatAccion(m.accion)}</td>
+                    <td>
+                      <span className="mono">{m.numero_patrimonial ?? "—"}</span>
+                      {m.descripcion && (
+                        <span className="muted"> · {m.descripcion}</span>
+                      )}
+                    </td>
+                    <td className="muted">{m.usuario_nombre ?? "Sistema"}</td>
+                  </tr>
                 ))}
-              </ol>
-            )}
-          </>
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

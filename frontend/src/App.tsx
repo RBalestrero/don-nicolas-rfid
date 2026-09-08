@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
-import DashboardPage from "./components/DashboardPage";
+import DashboardPage, { type AppPage } from "./components/DashboardPage";
 import DepositosPage from "./components/DepositosPage";
 import InventariosPage from "./components/InventariosPage";
 import TransferenciasPage from "./components/TransferenciasPage";
@@ -10,14 +10,23 @@ import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
-type Page = "dashboard" | "activos" | "depositos" | "inventarios" | "transferencias";
-
 interface HealthResponse {
   status: string;
   service: string;
   version: string;
   database: string;
 }
+
+const NAV_OPERACION: { id: AppPage; label: string }[] = [
+  { id: "dashboard", label: "Operaciones" },
+  { id: "inventarios", label: "Inventarios" },
+  { id: "transferencias", label: "Transferencias" },
+];
+
+const NAV_MAESTROS: { id: AppPage; label: string }[] = [
+  { id: "activos", label: "Activos" },
+  { id: "depositos", label: "Depósitos" },
+];
 
 function HealthBadge() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -32,41 +41,66 @@ function HealthBadge() {
       }
     };
     check();
-    const interval = setInterval(check, 10000);
+    const interval = setInterval(check, 15000);
     return () => clearInterval(interval);
   }, []);
 
   if (!health) return <span className="badge warn">API offline</span>;
   return (
     <span className={`badge ${health.status === "ok" ? "ok" : "warn"}`}>
-      API {health.status} · DB {health.database}
+      {health.status === "ok" ? "Sistema OK" : "Degradado"}
     </span>
+  );
+}
+
+function NavButton({
+  id,
+  label,
+  active,
+  onSelect,
+}: {
+  id: AppPage;
+  label: string;
+  active: boolean;
+  onSelect: (page: AppPage) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`nav-item ${active ? "active" : ""}`}
+      onClick={() => onSelect(id)}
+      aria-current={active ? "page" : undefined}
+    >
+      {label}
+    </button>
   );
 }
 
 export default function App() {
   const { user, loading, logout } = useAuth();
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<AppPage>("dashboard");
 
   if (loading) {
     return (
-      <div className="app">
-        <p className="muted center">Cargando...</p>
+      <div className="app-shell login-shell">
+        <p className="muted center">Cargando…</p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="app">
-        <header className="header">
-          <div className="logo">RFID</div>
-          <div>
-            <h1>Don Nicolás</h1>
-            <p>Sistema de Gestión de Activos e Inventario</p>
+      <div className="app-shell login-shell">
+        <header className="topbar login-topbar">
+          <div className="brand">
+            <div className="logo">DN</div>
+            <div>
+              <strong>Don Nicolás</strong>
+              <p className="muted">WMS · Activos RFID</p>
+            </div>
           </div>
         </header>
-        <main className="main">
+        <main className="login-main">
           <LoginForm />
         </main>
       </div>
@@ -74,72 +108,62 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="logo">RFID</div>
-        <div className="header-text">
-          <h1>Don Nicolás</h1>
-          <p>
-            {user.nombre} · {user.rol}
-          </p>
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="logo">DN</div>
+          <div className="brand-text">
+            <strong>Don Nicolás</strong>
+            <span className="muted">WMS</span>
+          </div>
         </div>
-        <div className="header-actions">
+        <div className="topbar-actions">
+          <span className="user-chip muted">
+            {user.nombre} · {user.rol}
+          </span>
           <HealthBadge />
-          <button type="button" className="btn secondary" onClick={logout}>
+          <button type="button" className="btn secondary btn-sm" onClick={logout}>
             Salir
           </button>
         </div>
       </header>
 
-      <nav className="main-nav" aria-label="Navegación principal">
-        <button
-          type="button"
-          className={`nav-item ${page === "dashboard" ? "active" : ""}`}
-          onClick={() => setPage("dashboard")}
-        >
-          Dashboard
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${page === "activos" ? "active" : ""}`}
-          onClick={() => setPage("activos")}
-        >
-          Activos
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${page === "depositos" ? "active" : ""}`}
-          onClick={() => setPage("depositos")}
-        >
-          Depósitos
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${page === "inventarios" ? "active" : ""}`}
-          onClick={() => setPage("inventarios")}
-        >
-          Inventarios
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${page === "transferencias" ? "active" : ""}`}
-          onClick={() => setPage("transferencias")}
-        >
-          Transferencias
-        </button>
-      </nav>
+      <div className="shell-body">
+        <nav className="side-nav" aria-label="Navegación principal">
+          <div className="nav-group">
+            <span className="nav-group-label">Operación</span>
+            {NAV_OPERACION.map((item) => (
+              <NavButton
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                active={page === item.id}
+                onSelect={setPage}
+              />
+            ))}
+          </div>
+          <div className="nav-group">
+            <span className="nav-group-label">Maestros</span>
+            {NAV_MAESTROS.map((item) => (
+              <NavButton
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                active={page === item.id}
+                onSelect={setPage}
+              />
+            ))}
+          </div>
+        </nav>
 
-      <main className="main">
-        {page === "dashboard" && <DashboardPage />}
-        {page === "activos" && <ActivosPage />}
-        {page === "depositos" && <DepositosPage />}
-        {page === "inventarios" && <InventariosPage />}
-        {page === "transferencias" && <TransferenciasPage />}
-      </main>
-
-      <footer className="footer">
-        <span>Don Nicolás RFID — puerto 5174 (hot reload activo)</span>
-      </footer>
+        <main className="workspace">
+          {page === "dashboard" && <DashboardPage onNavigate={setPage} />}
+          {page === "activos" && <ActivosPage />}
+          {page === "depositos" && <DepositosPage />}
+          {page === "inventarios" && <InventariosPage />}
+          {page === "transferencias" && <TransferenciasPage />}
+        </main>
+      </div>
     </div>
   );
 }

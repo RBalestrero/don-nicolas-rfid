@@ -8,6 +8,7 @@ import type {
   InventarioListItem,
   InventarioReporte,
 } from "../types";
+import PageHeader from "./PageHeader";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -176,14 +177,15 @@ export default function InventariosPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h2>Inventarios</h2>
-      </div>
+      <PageHeader
+        title="Inventarios"
+        subtitle="Conteo cíclico por depósito · pegá EPCs o leé RFID"
+      />
 
       {error && <p className="error">{error}</p>}
 
       <section className="card">
-        <h3>Nuevo inventario</h3>
+        <h3>Nuevo conteo</h3>
         <form className="form inline-form" onSubmit={handleCrear}>
           <label className="field">
             Depósito
@@ -203,17 +205,14 @@ export default function InventariosPage() {
           </label>
           <div className="form-actions">
             <button type="submit" className="btn primary" disabled={busy || !depositoId}>
-              {busy ? "Creando…" : "Crear inventario"}
+              {busy ? "Creando…" : "Iniciar inventario"}
             </button>
           </div>
         </form>
-        <p className="muted">
-          Crea la sesión con el stock esperado del depósito. Sin RFID: pegá EPCs a mano y cerrá.
-        </p>
       </section>
 
       <section className="card">
-        <h3>Últimos inventarios</h3>
+        <h3>Sesiones</h3>
         {loading ? (
           <p className="muted">Cargando…</p>
         ) : lista.length === 0 ? (

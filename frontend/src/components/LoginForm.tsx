@@ -24,7 +24,7 @@ export default function LoginForm() {
   return (
     <section className="card auth-card">
       <h2>Iniciar sesión</h2>
-      <p className="muted">Ingresá con tu cuenta para gestionar activos.</p>
+      <p className="muted">Acceso operativo al WMS de activos RFID.</p>
       <form className="form" onSubmit={handleSubmit}>
         <label className="field">
           <span>Email</span>

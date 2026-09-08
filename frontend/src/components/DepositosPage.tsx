@@ -9,6 +9,7 @@ import type {
   UbicacionCreatePayload,
 } from "../types";
 import DepositoForm from "./DepositoForm";
+import PageHeader from "./PageHeader";
 import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 
@@ -102,16 +103,18 @@ export default function DepositosPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h2>Gestión de depósitos</h2>
+      <PageHeader
+        title="Depósitos"
+        subtitle="Estructura depósito → sector → ubicación y stock"
+      >
         <button
           type="button"
           className="btn primary"
           onClick={() => setShowForm((v) => !v)}
         >
-          {showForm ? "Ocultar formulario" : "+ Nuevo depósito"}
+          {showForm ? "Ocultar" : "+ Nuevo depósito"}
         </button>
-      </div>
+      </PageHeader>
 
       {error && <p className="error">{error}</p>}
 
@@ -127,11 +130,11 @@ export default function DepositosPage() {
 
       <section className="card">
         <div className="section-header">
-          <h3>Depósitos</h3>
+          <h3>Seleccionar depósito</h3>
         </div>
         {loading && <p className="muted">Cargando depósitos...</p>}
         {!loading && depositos.length === 0 && (
-          <p className="muted">No hay depósitos. Creá el primero con el formulario.</p>
+          <p className="empty-state">No hay depósitos. Creá el primero.</p>
         )}
         {!loading && depositos.length > 0 && (
           <div className="deposito-selector" role="listbox" aria-label="Lista de depósitos">
