@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.core.rbac import require_warehouse_write
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
 from app.modules.warehouses.asignacion_service import AsignacionService
@@ -42,7 +43,7 @@ def list_depositos(
 def create_deposito(
     data: DepositoCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = DepositoService(db)
     return service.create_deposito(data)
@@ -89,7 +90,7 @@ def update_deposito(
     deposito_id: uuid.UUID,
     data: DepositoUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = DepositoService(db)
     return service.update_deposito(deposito_id, data)
@@ -99,7 +100,7 @@ def update_deposito(
 def delete_deposito(
     deposito_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = DepositoService(db)
     service.delete_deposito(deposito_id)
@@ -125,7 +126,7 @@ def create_sector(
     deposito_id: uuid.UUID,
     data: SectorCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = SectorService(db)
     return service.create_sector(deposito_id, data)
@@ -148,7 +149,7 @@ def update_sector(
     sector_id: uuid.UUID,
     data: SectorUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = SectorService(db)
     return service.update_sector(deposito_id, sector_id, data)
@@ -161,7 +162,7 @@ def delete_sector(
     deposito_id: uuid.UUID,
     sector_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = SectorService(db)
     service.delete_sector(deposito_id, sector_id)
@@ -194,7 +195,7 @@ def create_ubicacion(
     sector_id: uuid.UUID,
     data: UbicacionCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = UbicacionService(db)
     return service.create_ubicacion(deposito_id, sector_id, data)
@@ -225,7 +226,7 @@ def update_ubicacion(
     ubicacion_id: uuid.UUID,
     data: UbicacionUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = UbicacionService(db)
     return service.update_ubicacion(deposito_id, sector_id, ubicacion_id, data)
@@ -240,7 +241,7 @@ def delete_ubicacion(
     sector_id: uuid.UUID,
     ubicacion_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_warehouse_write),
 ):
     service = UbicacionService(db)
     service.delete_ubicacion(deposito_id, sector_id, ubicacion_id)

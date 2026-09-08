@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.core.rbac import require_transfer_cancel, require_transfer_write
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
 from app.modules.transfers.schemas import (
@@ -26,7 +27,7 @@ router = APIRouter(tags=["Transferencias"])
 def create_transferencia(
     data: TransferenciaCreate,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_transfer_write),
 ):
     return TransferService(db).create(data, current_user)
 
@@ -67,7 +68,7 @@ def confirmar_origen(
     transferencia_id: uuid.UUID,
     data: TransferenciaEpcsRequest,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_transfer_write),
 ):
     return TransferService(db).confirmar_origen(transferencia_id, data)
 
@@ -80,7 +81,7 @@ def confirmar_destino(
     transferencia_id: uuid.UUID,
     data: TransferenciaConfirmarDestinoRequest,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_transfer_write),
 ):
     return TransferService(db).confirmar_destino(transferencia_id, data, current_user)
 
@@ -92,6 +93,6 @@ def confirmar_destino(
 def cancelar_transferencia(
     transferencia_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_transfer_cancel),
 ):
     return TransferService(db).cancelar(transferencia_id)

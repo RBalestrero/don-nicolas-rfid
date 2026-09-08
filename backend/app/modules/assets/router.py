@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.core.rbac import require_assets_write, require_assignment_write
 from app.dependencies import get_current_user
 from app.modules.assets.fotografias_service import FotografiaService
 from app.modules.assets.impresion_service import ImpresionService
@@ -43,7 +44,7 @@ def list_categorias(
 def create_categoria(
     data: CategoriaCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_assets_write),
 ):
     service = CategoriaService(db)
     return service.create_categoria(data)
@@ -64,7 +65,7 @@ def update_categoria(
     categoria_id: uuid.UUID,
     data: CategoriaUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_assets_write),
 ):
     service = CategoriaService(db)
     return service.update_categoria(categoria_id, data)
@@ -74,7 +75,7 @@ def update_categoria(
 def delete_categoria(
     categoria_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    _: Usuario = Depends(require_assets_write),
 ):
     service = CategoriaService(db)
     service.delete_categoria(categoria_id)
@@ -100,7 +101,7 @@ def list_activos(
 def create_activo(
     data: ActivoCreate,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = ActivoService(db)
     return service.create_activo(data, current_user)
@@ -131,7 +132,7 @@ def update_activo(
     activo_id: uuid.UUID,
     data: ActivoUpdate,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = ActivoService(db)
     return service.update_activo(activo_id, data, current_user)
@@ -141,7 +142,7 @@ def update_activo(
 def delete_activo(
     activo_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = ActivoService(db)
     service.delete_activo(activo_id, current_user)
@@ -155,7 +156,7 @@ def asignar_ubicacion_activo(
     activo_id: uuid.UUID,
     data: AsignacionUbicacionRequest,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assignment_write),
 ):
     service = AsignacionService(db)
     return service.asignar_ubicacion(activo_id, data, current_user)
@@ -175,7 +176,7 @@ def get_ubicacion_activo(
 def desasignar_ubicacion_activo(
     activo_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assignment_write),
 ):
     service = AsignacionService(db)
     service.desasignar_ubicacion(activo_id, current_user)
@@ -211,7 +212,7 @@ def imprimir_etiqueta(
     activo_id: uuid.UUID,
     data: EtiquetaImpresionRequest | None = None,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = ImpresionService(db)
     copias = data.copias if data else 1
@@ -228,7 +229,7 @@ async def upload_fotografia(
     file: UploadFile = File(...),
     es_principal: bool = False,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = FotografiaService(db)
     return await service.upload(activo_id, file, current_user, es_principal=es_principal)
@@ -259,7 +260,7 @@ def get_fotografia_archivo(
 def delete_fotografia(
     foto_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_assets_write),
 ):
     service = FotografiaService(db)
     service.delete_fotografia(foto_id, current_user)

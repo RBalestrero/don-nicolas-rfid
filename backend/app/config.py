@@ -6,12 +6,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # development | production
+    app_env: str = "development"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_debug: bool = True
+    # En producción debe ser una clave fuerte (>= 32 chars). Ver validate_security_settings().
     secret_key: str = "dev-secret-key-change-in-production"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    # None = automático (docs on en development, off en production)
+    expose_api_docs: bool | None = None
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -61,6 +66,42 @@ class Settings(BaseSettings):
             for item in self.inventory_mobile_clients.split(",")
             if item.strip()
         }
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in {"production", "prod"}
+
+    @property
+    def docs_enabled(self) -> bool:
+        if self.expose_api_docs is not None:
+            return self.expose_api_docs
+        return not self.is_production
+
+
+WEAK_SECRETS = {
+    "dev-secret-key-change-in-production",
+    "generar-clave-segura-aqui",
+    "changeme",
+    "secret",
+    "password",
+}
+
+
+def validate_security_settings(settings: Settings | None = None) -> None:
+    """Falla el arranque si la config de producción es insegura."""
+    cfg = settings or get_settings()
+    if not cfg.is_production:
+        return
+
+    secret = cfg.secret_key.strip()
+    if len(secret) < 32 or secret.lower() in WEAK_SECRETS:
+        raise RuntimeError(
+            "SECRET_KEY insegura o corta (<32). Definí una clave fuerte en producción."
+        )
+    if cfg.api_debug:
+        raise RuntimeError("API_DEBUG debe ser false en producción (APP_ENV=production).")
+    if cfg.postgres_password.strip().lower() in WEAK_SECRETS or not cfg.postgres_password.strip():
+        raise RuntimeError("POSTGRES_PASSWORD débil o vacío en producción.")
 
 
 @lru_cache

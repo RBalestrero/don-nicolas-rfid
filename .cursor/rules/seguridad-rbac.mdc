@@ -1,0 +1,19 @@
+---
+description: RBAC y seguridad de configuración en producción
+alwaysApply: true
+---
+
+# Seguridad: RBAC y producción
+
+## Roles
+- `admin`: todo
+- `operador_alta`: writes de activos/categorías/fotos/etiquetas + asignación de ubicación
+- `operador_deposito`: writes de depósitos/sectores/ubicaciones, transferencias, inventarios (con `X-Client: mc33`)
+- `supervisor`: lectura + cancelar transferencias; sin altas de maestros
+
+Usar helpers en `app/core/rbac.py` (`require_assets_write`, `require_warehouse_write`, etc.). No dejar writes solo con `get_current_user`.
+
+## Producción
+- `APP_ENV=production` exige `SECRET_KEY` fuerte (≥32), `API_DEBUG=false`, `POSTGRES_PASSWORD` no débil.
+- Docs OpenAPI off por defecto en production (`expose_api_docs`).
+- Inventarios write: rol depósito/admin **y** header `X-Client: mc33`.

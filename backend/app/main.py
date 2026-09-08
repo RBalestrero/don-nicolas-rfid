@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from app.config import get_settings
+from app.config import get_settings, validate_security_settings
 from app.core.security_middleware import (
     RateLimitMiddleware,
     RequestSizeLimitMiddleware,
@@ -18,14 +18,19 @@ from app.modules.transfers.router import router as transfers_router
 from app.modules.warehouses.router import router as warehouses_router
 
 settings = get_settings()
+validate_security_settings(settings)
+
+_docs = "/api/docs" if settings.docs_enabled else None
+_redoc = "/api/redoc" if settings.docs_enabled else None
+_openapi = "/api/openapi.json" if settings.docs_enabled else None
 
 app = FastAPI(
     title="Don Nicolás RFID API",
     description="Sistema de gestión de activos, inventario y stock distribuido",
     version="0.1.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url=_docs,
+    redoc_url=_redoc,
+    openapi_url=_openapi,
 )
 
 # Orden: últimos agregados corren primero en request.
@@ -77,6 +82,11 @@ async def handle_sqlalchemy_error(_request: Request, exc: SQLAlchemyError) -> JS
 @app.on_event("startup")
 def log_registered_routes() -> None:
     import logging
+
+    validate_security_settings(get_settings())
+    if not settings.docs_enabled:
+        logging.getLogger("uvicorn.error").info("OpenAPI docs deshabilitadas (APP_ENV=%s)", settings.app_env)
+        return
 
     paths = sorted(app.openapi()["paths"].keys())
     logging.getLogger("uvicorn.error").info(

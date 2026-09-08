@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_inventory_mobile_client
+from app.core.rbac import require_inventory_write
+from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
 from app.modules.inventory.schemas import (
     InventarioCerrarRequest,
@@ -23,7 +24,7 @@ router = APIRouter(tags=["Inventario"])
 def create_inventario(
     data: InventarioCreate,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(require_inventory_mobile_client),
+    current_user: Usuario = Depends(require_inventory_write),
 ):
     return InventoryService(db).create(data, current_user.id)
 
@@ -66,7 +67,7 @@ def registrar_lecturas(
     inventario_id: uuid.UUID,
     data: InventarioLecturasRequest,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_inventory_mobile_client),
+    _: Usuario = Depends(require_inventory_write),
 ):
     return InventoryService(db).registrar_lecturas(inventario_id, data)
 
@@ -76,6 +77,6 @@ def cerrar_inventario(
     inventario_id: uuid.UUID,
     data: InventarioCerrarRequest | None = None,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_inventory_mobile_client),
+    _: Usuario = Depends(require_inventory_write),
 ):
     return InventoryService(db).cerrar(inventario_id, data or InventarioCerrarRequest())
