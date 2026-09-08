@@ -104,6 +104,80 @@ export interface Transferencia extends TransferenciaListItem {
   detalles: DetalleTransferencia[];
 }
 
+export interface MovimientoItem {
+  id: string;
+  activo_id: string;
+  numero_patrimonial: string | null;
+  descripcion: string | null;
+  usuario_id: string | null;
+  usuario_nombre: string | null;
+  accion: string;
+  cambios: Record<string, unknown> | null;
+  creado_en: string;
+}
+
+export interface MovimientosPage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: MovimientoItem[];
+}
+
+export interface DashboardKpis {
+  activos_activos: number;
+  depositos_activos: number;
+  inventarios_abiertos: number;
+  transferencias_abiertas: number;
+  stock_total_ubicado: number;
+  discrepancias_inventarios_cerrados: {
+    faltantes: number;
+    sobrantes: number;
+    inventarios_con_discrepancia: number;
+  };
+}
+
+export interface StockDepositoResumen {
+  deposito_id: string;
+  deposito_nombre: string;
+  total: number;
+}
+
+export interface TransferenciaResumenDash {
+  id: string;
+  deposito_origen_id: string;
+  deposito_origen_nombre: string | null;
+  deposito_destino_id: string;
+  deposito_destino_nombre: string | null;
+  estado: string;
+  total_activos: number;
+  confirmados_origen: number;
+  confirmados_destino: number;
+  creado_en: string;
+}
+
+export interface InventarioResumenDash {
+  id: string;
+  deposito_id: string;
+  deposito_nombre: string | null;
+  estado: string;
+  total_esperado: number;
+  total_encontrado: number;
+  total_faltante: number;
+  total_sobrante: number;
+  iniciado_en: string;
+  cerrado_en: string | null;
+}
+
+export interface DashboardResumen {
+  kpis: DashboardKpis;
+  stock_por_deposito: StockDepositoResumen[];
+  movimientos_recientes: MovimientoItem[];
+  transferencias_recientes: TransferenciaResumenDash[];
+  inventarios_recientes: InventarioResumenDash[];
+  movimientos_limit: number;
+  ops_limit: number;
+}
+
 export interface CategoriaCreatePayload {
   nombre: string;
   descripcion?: string | null;

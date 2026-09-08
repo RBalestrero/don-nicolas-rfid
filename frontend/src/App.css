@@ -615,3 +615,38 @@
 .checkbox-list li {
   margin-bottom: 0.35rem;
 }
+
+.kpi-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  margin-bottom: 1rem;
+}
+
+.kpi-card {
+  background: #121a27;
+  border: 1px solid #2d3a4f;
+  border-radius: 8px;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kpi-label {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.kpi-value {
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+}
+
+.dash-cols {
+  margin-bottom: 1rem;
+}

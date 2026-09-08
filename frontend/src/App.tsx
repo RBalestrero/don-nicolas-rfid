@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
+import DashboardPage from "./components/DashboardPage";
 import DepositosPage from "./components/DepositosPage";
 import InventariosPage from "./components/InventariosPage";
 import TransferenciasPage from "./components/TransferenciasPage";
@@ -9,7 +10,7 @@ import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
-type Page = "activos" | "depositos" | "inventarios" | "transferencias";
+type Page = "dashboard" | "activos" | "depositos" | "inventarios" | "transferencias";
 
 interface HealthResponse {
   status: string;
@@ -45,7 +46,7 @@ function HealthBadge() {
 
 export default function App() {
   const { user, loading, logout } = useAuth();
-  const [page, setPage] = useState<Page>("activos");
+  const [page, setPage] = useState<Page>("dashboard");
 
   if (loading) {
     return (
@@ -93,6 +94,13 @@ export default function App() {
       <nav className="main-nav" aria-label="Navegación principal">
         <button
           type="button"
+          className={`nav-item ${page === "dashboard" ? "active" : ""}`}
+          onClick={() => setPage("dashboard")}
+        >
+          Dashboard
+        </button>
+        <button
+          type="button"
           className={`nav-item ${page === "activos" ? "active" : ""}`}
           onClick={() => setPage("activos")}
         >
@@ -122,6 +130,7 @@ export default function App() {
       </nav>
 
       <main className="main">
+        {page === "dashboard" && <DashboardPage />}
         {page === "activos" && <ActivosPage />}
         {page === "depositos" && <DepositosPage />}
         {page === "inventarios" && <InventariosPage />}

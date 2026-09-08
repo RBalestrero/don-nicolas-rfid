@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.assets.models import HistorialActivo
+from app.modules.assets.models import Activo, HistorialActivo
 from app.modules.auth.models import Usuario
 
 
@@ -59,7 +59,65 @@ class HistorialService:
             .order_by(HistorialActivo.creado_en.desc())
         )
         registros = list(self.db.scalars(stmt).unique().all())
+        self._attach_usuario_nombres(registros)
+        return registros
 
+    def list_global(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        accion: str | None = None,
+        activo_id: uuid.UUID | None = None,
+        usuario_id: uuid.UUID | None = None,
+        desde: datetime | None = None,
+        hasta: datetime | None = None,
+        search: str | None = None,
+    ) -> tuple[list[HistorialActivo], int]:
+        filters = []
+        if accion:
+            filters.append(HistorialActivo.accion == accion)
+        if activo_id:
+            filters.append(HistorialActivo.activo_id == activo_id)
+        if usuario_id:
+            filters.append(HistorialActivo.usuario_id == usuario_id)
+        if desde:
+            filters.append(HistorialActivo.creado_en >= desde)
+        if hasta:
+            filters.append(HistorialActivo.creado_en <= hasta)
+
+        needs_activo_join = bool(search and search.strip())
+
+        count_stmt = select(func.count()).select_from(HistorialActivo)
+        if needs_activo_join:
+            count_stmt = count_stmt.join(Activo, Activo.id == HistorialActivo.activo_id)
+            filters.append(self._search_filter(search.strip()))
+        if filters:
+            count_stmt = count_stmt.where(*filters)
+        total = int(self.db.scalar(count_stmt) or 0)
+
+        stmt = (
+            select(HistorialActivo)
+            .options(joinedload(HistorialActivo.activo))
+            .order_by(HistorialActivo.creado_en.desc())
+            .offset(max(offset, 0))
+            .limit(min(max(limit, 1), 200))
+        )
+        if needs_activo_join:
+            stmt = stmt.join(Activo, Activo.id == HistorialActivo.activo_id)
+        if filters:
+            stmt = stmt.where(*filters)
+
+        registros = list(self.db.scalars(stmt).unique().all())
+        self._attach_usuario_nombres(registros)
+        return registros, total
+
+    @staticmethod
+    def _search_filter(term: str):
+        like = f"%{term}%"
+        return Activo.numero_patrimonial.ilike(like) | Activo.descripcion.ilike(like)
+
+    def _attach_usuario_nombres(self, registros: list[HistorialActivo]) -> None:
         usuario_ids = {r.usuario_id for r in registros if r.usuario_id}
         usuarios: dict[uuid.UUID, Usuario] = {}
         if usuario_ids:
@@ -70,4 +128,3 @@ class HistorialService:
             registro._usuario_nombre = (  # type: ignore[attr-defined]
                 usuarios[registro.usuario_id].nombre if registro.usuario_id in usuarios else None
             )
-        return registros
