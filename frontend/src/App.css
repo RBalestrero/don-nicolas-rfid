@@ -76,7 +76,13 @@
 .user-chip {
   font-size: 0.8rem;
   display: none;
-  max-width: 12rem;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 16rem;
+  overflow: hidden;
+}
+
+.user-chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -86,9 +92,23 @@
   display: none;
 }
 
+.role-badge {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #dbe7ff;
+  background: rgba(47, 111, 237, 0.22);
+  border: 1px solid rgba(47, 111, 237, 0.35);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  line-height: 1.2;
+}
+
 @media (min-width: 720px) {
   .user-chip {
-    display: inline;
+    display: inline-flex;
   }
 }
 
@@ -535,6 +555,29 @@
   background: var(--danger-bg);
 }
 
+.btn.danger.solid {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn.danger.solid:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--danger);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  padding-inline: 0.5rem;
+}
+
+.btn.ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -706,6 +749,15 @@
 /* —— Tables —— */
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-panel {
+  max-height: min(70vh, 36rem);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .data-table {
@@ -734,6 +786,14 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+}
+
+.data-table.sticky-head thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .data-table td.mono,
@@ -749,6 +809,10 @@
 
 .data-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 /* —— Tabs / chips —— */
@@ -1377,4 +1441,54 @@
 
 .dash-cols {
   margin-bottom: 0;
+}
+
+/* —— Confirm dialog —— */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 12, 20, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+  width: min(100%, 26rem);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: 1.15rem 1.25rem 1.1rem;
+}
+
+.confirm-dialog h3 {
+  font-size: 1.05rem;
+  margin: 0 0 0.45rem;
+}
+
+.confirm-dialog .muted {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.section-header + .table-wrap,
+.section-header + .table-panel,
+.section-header + .muted {
+  margin-top: 0.15rem;
+}
+
+.card.panel-focus {
+  border-color: rgba(47, 111, 237, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(47, 111, 237, 0.12);
 }

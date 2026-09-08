@@ -8,6 +8,18 @@ vi.mock("../lib/api", () => ({
   apiFetch: vi.fn(),
 }));
 
+vi.mock("../lib/usePermissions", () => ({
+  usePermissions: () => ({
+    rol: "admin",
+    roleLabel: "Admin",
+    canWriteAssets: true,
+    canWriteAssignment: true,
+    canWriteWarehouse: true,
+    canWriteTransfer: true,
+    canCancelTransfer: true,
+  }),
+}));
+
 import { apiFetch } from "../lib/api";
 
 const apiFetchMock = vi.mocked(apiFetch);

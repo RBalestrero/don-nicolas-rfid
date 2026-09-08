@@ -16,7 +16,9 @@ import ActivoHistorial from "./ActivoHistorial";
 import ActivosList from "./ActivosList";
 import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
 import CategoriaForm from "./CategoriaForm";
+import ConfirmDialog from "./ConfirmDialog";
 import PageHeader from "./PageHeader";
+import { usePermissions } from "../lib/usePermissions";
 
 async function fetchUbicacionOrNull(activoId: string): Promise<UbicacionAsignada | null> {
   try {
@@ -29,6 +31,7 @@ async function fetchUbicacionOrNull(activoId: string): Promise<UbicacionAsignada
 
 export default function ActivosPage() {
   const toast = useToast();
+  const perms = usePermissions();
   const [activos, setActivos] = useState<Activo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [ubicaciones, setUbicaciones] = useState<Record<string, UbicacionAsignada | null>>({});
@@ -43,6 +46,8 @@ export default function ActivosPage() {
   const [historial, setHistorial] = useState<HistorialEntry[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [tab, setTab] = useState<"activos" | "categorias">("activos");
+  const [confirmBajaId, setConfirmBajaId] = useState<string | null>(null);
+  const [bajaBusy, setBajaBusy] = useState(false);
 
   const loadUbicaciones = useCallback(async (lista: Activo[]) => {
     const entries = await Promise.all(
@@ -178,11 +183,15 @@ export default function ActivosPage() {
   };
 
   const handleDeactivate = async (activoId: string) => {
+    setConfirmBajaId(activoId);
+  };
+
+  const confirmDeactivate = async () => {
+    if (!confirmBajaId) return;
+    const activoId = confirmBajaId;
     const activo = activos.find((a) => a.id === activoId);
     const label = activo?.numero_patrimonial ?? "este activo";
-    if (!window.confirm(`¿Dar de baja ${label}? Dejará de aparecer en el listado.`)) {
-      return;
-    }
+    setBajaBusy(true);
     setActionError(null);
     try {
       await apiFetch<void>(`/activos/${activoId}`, { method: "DELETE" });
@@ -194,10 +203,13 @@ export default function ActivosPage() {
       ) {
         closePanels();
       }
+      setConfirmBajaId(null);
       toast.success(`${label} dado de baja`);
       await loadData();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al dar de baja el activo");
+    } finally {
+      setBajaBusy(false);
     }
   };
 
@@ -279,7 +291,7 @@ export default function ActivosPage() {
 
       {tab === "activos" && (
         <>
-          {showForm && (
+          {showForm && perms.canWriteAssets && (
             <section className="card panel-focus">
               <h3>Alta de activo</h3>
               <ActivoForm
@@ -290,7 +302,7 @@ export default function ActivosPage() {
             </section>
           )}
 
-          {editingActivo && (
+          {editingActivo && perms.canWriteAssets && (
             <section className="card panel-focus">
               <h3>Editar — {editingActivo.numero_patrimonial}</h3>
               <ActivoForm
@@ -304,7 +316,7 @@ export default function ActivosPage() {
             </section>
           )}
 
-          {assigningActivo && (
+          {assigningActivo && perms.canWriteAssignment && (
             <section className="card panel-focus">
               <h3>Ubicación — {assigningActivo.numero_patrimonial}</h3>
               <p className="muted">
@@ -325,7 +337,11 @@ export default function ActivosPage() {
             <section className="card panel-focus">
               <h3>Fotos — {fotosActivo.numero_patrimonial}</h3>
               <p className="muted">{fotosActivo.descripcion}</p>
-              <ActivoFotos key={fotosActivo.id} activoId={fotosActivo.id} />
+              <ActivoFotos
+                key={fotosActivo.id}
+                activoId={fotosActivo.id}
+                canWrite={perms.canWriteAssets}
+              />
               <div className="form-actions">
                 <button type="button" className="btn secondary" onClick={() => setFotosId(null)}>
                   Cerrar
@@ -357,16 +373,18 @@ export default function ActivosPage() {
           <section className="card">
             <div className="section-header">
               <h3>Listado</h3>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => {
-                  closePanels();
-                  setShowForm((v) => !v);
-                }}
-              >
-                {showForm ? "Cancelar" : "+ Nuevo activo"}
-              </button>
+              {perms.canWriteAssets && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    closePanels();
+                    setShowForm((v) => !v);
+                  }}
+                >
+                  {showForm ? "Cancelar" : "+ Nuevo activo"}
+                </button>
+              )}
             </div>
             <ActivosList
               activos={activos}
@@ -382,10 +400,16 @@ export default function ActivosPage() {
               onHistorial={handleToggleHistorial}
               onFotos={handleToggleFotos}
               onDeactivate={handleDeactivate}
-              onCreateRequest={() => {
-                closePanels();
-                setShowForm(true);
-              }}
+              canWriteAssets={perms.canWriteAssets}
+              canWriteAssignment={perms.canWriteAssignment}
+              onCreateRequest={
+                perms.canWriteAssets
+                  ? () => {
+                      closePanels();
+                      setShowForm(true);
+                    }
+                  : undefined
+              }
             />
           </section>
         </>
@@ -393,8 +417,14 @@ export default function ActivosPage() {
 
       {tab === "categorias" && (
         <section className="card">
-          <h3>Categorías</h3>
-          <CategoriaForm onSubmit={handleCreateCategoria} />
+          <div className="section-header">
+            <h3>Categorías</h3>
+          </div>
+          {perms.canWriteAssets ? (
+            <CategoriaForm onSubmit={handleCreateCategoria} />
+          ) : (
+            <p className="muted">Solo lectura — tu rol no puede crear categorías.</p>
+          )}
           {!loading && categorias.length > 0 && (
             <ul className="simple-list">
               {categorias.map((c) => (
@@ -407,6 +437,19 @@ export default function ActivosPage() {
           )}
         </section>
       )}
+
+      <ConfirmDialog
+        open={confirmBajaId !== null}
+        title="Dar de baja activo"
+        description={`¿Confirmás la baja de ${
+          activos.find((a) => a.id === confirmBajaId)?.numero_patrimonial ?? "este activo"
+        }? Dejará de aparecer en el listado operativo.`}
+        confirmLabel="Dar de baja"
+        danger
+        busy={bajaBusy}
+        onConfirm={confirmDeactivate}
+        onCancel={() => setConfirmBajaId(null)}
+      />
     </div>
   );
 }

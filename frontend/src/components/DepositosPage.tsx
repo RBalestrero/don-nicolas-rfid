@@ -15,9 +15,11 @@ import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
 import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
+import { usePermissions } from "../lib/usePermissions";
 
 export default function DepositosPage() {
   const toast = useToast();
+  const perms = usePermissions();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<DepositoDetalle | null>(null);
@@ -114,13 +116,15 @@ export default function DepositosPage() {
         title="Depósitos"
         subtitle="Estructura depósito → sector → ubicación y stock"
       >
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => setShowForm((v) => !v)}
-        >
-          {showForm ? "Cancelar" : "+ Nuevo depósito"}
-        </button>
+        {perms.canWriteWarehouse && (
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "Cancelar" : "+ Nuevo depósito"}
+          </button>
+        )}
       </PageHeader>
 
       {error && (
@@ -129,7 +133,7 @@ export default function DepositosPage() {
         </p>
       )}
 
-      {showForm && (
+      {showForm && perms.canWriteWarehouse && (
         <section className="card panel-focus">
           <h3>Alta de depósito</h3>
           <DepositoForm
@@ -154,9 +158,11 @@ export default function DepositosPage() {
               "Definí códigos de ubicación (A-01, …)",
             ]}
             action={
-              <button type="button" className="btn primary btn-sm" onClick={() => setShowForm(true)}>
-                + Nuevo depósito
-              </button>
+              perms.canWriteWarehouse ? (
+                <button type="button" className="btn primary btn-sm" onClick={() => setShowForm(true)}>
+                  + Nuevo depósito
+                </button>
+              ) : undefined
             }
           />
         )}
@@ -213,7 +219,10 @@ export default function DepositosPage() {
                 )}
 
                 {detalle.sectores.length === 0 ? (
-                  <p className="muted">Sin sectores. Creá uno abajo.</p>
+                  <p className="muted">
+                    Sin sectores.
+                    {perms.canWriteWarehouse ? " Creá uno abajo." : ""}
+                  </p>
                 ) : (
                   <div className="tree">
                     {detalle.sectores.map((sector) => (
@@ -242,19 +251,21 @@ export default function DepositosPage() {
                 )}
               </section>
 
-              <div className="two-col">
-                <section className="card">
-                  <h3>Nuevo sector</h3>
-                  <SectorForm onSubmit={handleCreateSector} />
-                </section>
-                <section className="card">
-                  <h3>Nueva ubicación</h3>
-                  <UbicacionForm
-                    sectores={detalle.sectores}
-                    onSubmit={handleCreateUbicacion}
-                  />
-                </section>
-              </div>
+              {perms.canWriteWarehouse && (
+                <div className="two-col">
+                  <section className="card">
+                    <h3>Nuevo sector</h3>
+                    <SectorForm onSubmit={handleCreateSector} />
+                  </section>
+                  <section className="card">
+                    <h3>Nueva ubicación</h3>
+                    <UbicacionForm
+                      sectores={detalle.sectores}
+                      onSubmit={handleCreateUbicacion}
+                    />
+                  </section>
+                </div>
+              )}
             </>
           )}
 
@@ -271,12 +282,12 @@ export default function DepositosPage() {
               {!stock || stock.total === 0 ? (
                 <p className="muted">No hay activos asignados en este depósito.</p>
               ) : (
-                <div className="table-wrap">
-                  <table className="data-table">
+                <div className="table-wrap table-panel">
+                  <table className="data-table dense sticky-head">
                     <thead>
                       <tr>
                         <th>Patrimonio</th>
-                        <th>Descripción</th>
+                        <th className="col-hide-sm">Descripción</th>
                         <th>Categoría</th>
                         <th>Sector</th>
                         <th>Ubicación</th>
@@ -285,8 +296,8 @@ export default function DepositosPage() {
                     <tbody>
                       {stock.activos.map((a) => (
                         <tr key={a.activo_id}>
-                          <td>{a.numero_patrimonial}</td>
-                          <td>{a.descripcion}</td>
+                          <td className="mono">{a.numero_patrimonial}</td>
+                          <td className="col-hide-sm">{a.descripcion}</td>
                           <td>{a.categoria_nombre}</td>
                           <td>{a.sector_nombre}</td>
                           <td className="mono">{a.ubicacion_codigo}</td>

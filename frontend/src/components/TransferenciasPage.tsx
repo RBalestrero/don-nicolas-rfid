@@ -12,7 +12,9 @@ import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
 import Stepper from "./Stepper";
+import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "../context/ToastContext";
+import { usePermissions } from "../lib/usePermissions";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -44,6 +46,7 @@ function estadoBadgeClass(estado: string): string {
 
 export default function TransferenciasPage() {
   const toast = useToast();
+  const perms = usePermissions();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<TransferenciaListItem[]>([]);
   const [origenId, setOrigenId] = useState("");
@@ -59,6 +62,7 @@ export default function TransferenciasPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(true);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const nombreDeposito = useCallback(
     (id: string) => depositos.find((d) => d.id === id)?.nombre ?? id.slice(0, 8),
@@ -283,7 +287,6 @@ export default function TransferenciasPage() {
 
   const cancelar = async () => {
     if (!activa) return;
-    if (!window.confirm("¿Cancelar esta transferencia?")) return;
     setBusy(true);
     setError(null);
     try {
@@ -291,6 +294,7 @@ export default function TransferenciasPage() {
         method: "POST",
       });
       setActiva(updated);
+      setConfirmCancel(false);
       toast.info("Transferencia cancelada");
       await refreshLista();
     } catch (err) {
@@ -324,16 +328,18 @@ export default function TransferenciasPage() {
         title="Transferencias"
         subtitle="Movimiento entre depósitos con confirmación por EPC"
       >
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => {
-            setShowCreate((v) => !v);
-            if (!showCreate) setActiva(null);
-          }}
-        >
-          {showCreate ? "Cancelar" : "+ Nueva orden"}
-        </button>
+        {perms.canWriteTransfer && (
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => {
+              setShowCreate((v) => !v);
+              if (!showCreate) setActiva(null);
+            }}
+          >
+            {showCreate ? "Cancelar" : "+ Nueva orden"}
+          </button>
+        )}
       </PageHeader>
 
       <Stepper
@@ -356,7 +362,7 @@ export default function TransferenciasPage() {
         </p>
       )}
 
-      {showCreate && (
+      {showCreate && perms.canWriteTransfer && (
         <section className="card panel-focus">
           <h3>Nueva orden</h3>
           <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
@@ -505,7 +511,7 @@ export default function TransferenciasPage() {
                 <button type="button" className="btn secondary" onClick={prefillEpcs}>
                   Completar con EPCs de la orden
                 </button>
-                {activa.estado === "pendiente" && (
+                {activa.estado === "pendiente" && perms.canWriteTransfer && (
                   <button
                     type="button"
                     className="btn primary"
@@ -515,7 +521,7 @@ export default function TransferenciasPage() {
                     Confirmar origen
                   </button>
                 )}
-                {activa.estado === "en_transito" && (
+                {activa.estado === "en_transito" && perms.canWriteTransfer && (
                   <button
                     type="button"
                     className="btn primary"
@@ -525,14 +531,16 @@ export default function TransferenciasPage() {
                     Confirmar destino
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="btn secondary danger"
-                  disabled={busy}
-                  onClick={cancelar}
-                >
-                  Cancelar orden
-                </button>
+                {perms.canCancelTransfer && (
+                  <button
+                    type="button"
+                    className="btn secondary danger"
+                    disabled={busy}
+                    onClick={() => setConfirmCancel(true)}
+                  >
+                    Cancelar orden
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -564,21 +572,23 @@ export default function TransferenciasPage() {
               "Confirmá lecturas en origen y luego en destino",
             ]}
             action={
-              <button
-                type="button"
-                className="btn primary btn-sm"
-                onClick={() => {
-                  setActiva(null);
-                  setShowCreate(true);
-                }}
-              >
-                + Nueva orden
-              </button>
+              perms.canWriteTransfer ? (
+                <button
+                  type="button"
+                  className="btn primary btn-sm"
+                  onClick={() => {
+                    setActiva(null);
+                    setShowCreate(true);
+                  }}
+                >
+                  + Nueva orden
+                </button>
+              ) : undefined
             }
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data-table dense">
+          <div className="table-wrap table-panel">
+            <table className="data-table dense sticky-head">
               <thead>
                 <tr>
                   <th>Estado</th>
@@ -622,6 +632,18 @@ export default function TransferenciasPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar transferencia"
+        description="La orden quedará cancelada y no se podrá confirmar origen ni destino."
+        confirmLabel="Cancelar orden"
+        cancelLabel="Volver"
+        danger
+        busy={busy}
+        onConfirm={cancelar}
+        onCancel={() => setConfirmCancel(false)}
+      />
     </div>
   );
 }

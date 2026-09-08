@@ -2,9 +2,11 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import type { Fotografia } from "../types";
 import AuthImage from "./AuthImage";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface ActivoFotosProps {
   activoId: string;
+  canWrite?: boolean;
 }
 
 function formatBytes(n: number): string {
@@ -13,13 +15,15 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function ActivoFotos({ activoId }: ActivoFotosProps) {
+export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosProps) {
   const [fotos, setFotos] = useState<Fotografia[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [esPrincipal, setEsPrincipal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const loadFotos = useCallback(async () => {
     setLoading(true);
@@ -64,42 +68,50 @@ export default function ActivoFotos({ activoId }: ActivoFotosProps) {
     }
   };
 
-  const handleDelete = async (fotoId: string) => {
-    if (!window.confirm("¿Eliminar esta fotografía?")) return;
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleteBusy(true);
     setError(null);
     try {
-      await apiFetch<void>(`/fotografias/${fotoId}`, { method: "DELETE" });
+      await apiFetch<void>(`/fotografias/${deleteId}`, { method: "DELETE" });
+      setDeleteId(null);
       await loadFotos();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al eliminar la fotografía");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
   return (
     <div className="activo-fotos">
-      <form className="form foto-upload-form" onSubmit={handleUpload} aria-label="Subir fotografía">
-        <label className="field">
-          <span>Archivo de imagen</span>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <label className="field checkbox-field">
-          <input
-            type="checkbox"
-            checked={esPrincipal}
-            onChange={(e) => setEsPrincipal(e.target.checked)}
-          />
-          <span>Marcar como principal</span>
-        </label>
-        <div className="form-actions">
-          <button type="submit" className="btn primary" disabled={uploading || !file}>
-            {uploading ? "Subiendo..." : "Subir foto"}
-          </button>
-        </div>
-      </form>
+      {canWrite ? (
+        <form className="form foto-upload-form" onSubmit={handleUpload} aria-label="Subir fotografía">
+          <label className="field">
+            <span>Archivo de imagen</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <label className="field checkbox-field">
+            <input
+              type="checkbox"
+              checked={esPrincipal}
+              onChange={(e) => setEsPrincipal(e.target.checked)}
+            />
+            <span>Marcar como principal</span>
+          </label>
+          <div className="form-actions">
+            <button type="submit" className="btn primary" disabled={uploading || !file}>
+              {uploading ? "Subiendo..." : "Subir foto"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="muted">Solo lectura — tu rol no puede subir ni eliminar fotos.</p>
+      )}
 
       {error && <p className="error">{error}</p>}
 
@@ -122,18 +134,31 @@ export default function ActivoFotos({ activoId }: ActivoFotosProps) {
                   {formatBytes(foto.tamano_bytes)}
                   {foto.es_principal ? " · Principal" : ""}
                 </span>
-                <button
-                  type="button"
-                  className="btn secondary btn-sm danger"
-                  onClick={() => handleDelete(foto.id)}
-                >
-                  Eliminar
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    className="btn secondary btn-sm danger"
+                    onClick={() => setDeleteId(foto.id)}
+                  >
+                    Eliminar
+                  </button>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        title="Eliminar fotografía"
+        description="La imagen se borrará del activo. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        danger
+        busy={deleteBusy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   );
 }

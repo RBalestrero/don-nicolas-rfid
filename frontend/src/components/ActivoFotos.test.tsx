@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ActivoFotos from "./ActivoFotos";
 import type { Fotografia } from "../types";
@@ -38,14 +38,14 @@ describe("ActivoFotos", () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([]);
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     render(<ActivoFotos activoId="act-1" />);
 
     expect(await screen.findByText("frente.png")).toBeInTheDocument();
     expect(screen.getByText(/Principal/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /eliminar/i }));
+    await user.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith("/fotografias/foto-1", { method: "DELETE" });

@@ -3,6 +3,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DepositosPage from "./DepositosPage";
 
+vi.mock("../lib/usePermissions", () => ({
+  usePermissions: () => ({
+    rol: "admin",
+    roleLabel: "Admin",
+    canWriteAssets: true,
+    canWriteAssignment: true,
+    canWriteWarehouse: true,
+    canWriteTransfer: true,
+    canCancelTransfer: true,
+  }),
+}));
+
 vi.stubGlobal("fetch", vi.fn());
 
 function mockJson(data: unknown, status = 200) {

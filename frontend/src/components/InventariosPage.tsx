@@ -253,8 +253,8 @@ export default function InventariosPage() {
             ]}
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data-table dense">
+          <div className="table-wrap table-panel">
+            <table className="data-table dense sticky-head">
               <thead>
                 <tr>
                   <th>Inicio</th>

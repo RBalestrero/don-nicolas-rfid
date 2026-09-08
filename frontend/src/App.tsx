@@ -6,6 +6,7 @@ import DepositosPage from "./components/DepositosPage";
 import InventariosPage from "./components/InventariosPage";
 import TransferenciasPage from "./components/TransferenciasPage";
 import LoginForm from "./components/LoginForm";
+import { roleLabel } from "./lib/permissions";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -123,7 +124,7 @@ export default function App() {
         <div className="topbar-actions">
           <span className="user-chip muted" title={`${user.nombre} · ${user.rol}`}>
             <span className="user-chip-name">{user.nombre}</span>
-            <span className="user-chip-role"> · {user.rol}</span>
+            <span className="role-badge">{roleLabel(user.rol)}</span>
           </span>
           <HealthBadge />
           <button type="button" className="btn secondary btn-sm" onClick={logout}>

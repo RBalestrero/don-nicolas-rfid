@@ -10,6 +10,7 @@ import type {
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
+import { usePermissions } from "../lib/usePermissions";
 
 export type AppPage =
   | "dashboard"
@@ -67,6 +68,7 @@ interface DashboardPageProps {
 }
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const perms = usePermissions();
   const [resumen, setResumen] = useState<DashboardResumen | null>(null);
   const [filtrados, setFiltrados] = useState<MovimientosPage | null>(null);
   const [accion, setAccion] = useState("");
@@ -209,20 +211,24 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             ]}
             action={
               <div className="getting-started-actions">
-                <button
-                  type="button"
-                  className="btn primary btn-sm"
-                  onClick={() => onNavigate?.("depositos")}
-                >
-                  Ir a depósitos
-                </button>
-                <button
-                  type="button"
-                  className="btn secondary btn-sm"
-                  onClick={() => onNavigate?.("activos")}
-                >
-                  Ir a activos
-                </button>
+                {perms.canWriteWarehouse && (
+                  <button
+                    type="button"
+                    className="btn primary btn-sm"
+                    onClick={() => onNavigate?.("depositos")}
+                  >
+                    Ir a depósitos
+                  </button>
+                )}
+                {perms.canWriteAssets && (
+                  <button
+                    type="button"
+                    className="btn secondary btn-sm"
+                    onClick={() => onNavigate?.("activos")}
+                  >
+                    Ir a activos
+                  </button>
+                )}
               </div>
             }
           />
@@ -305,13 +311,15 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                   >
                     Ver inventarios
                   </button>
-                  <button
-                    type="button"
-                    className="btn secondary btn-sm"
-                    onClick={() => onNavigate?.("transferencias")}
-                  >
-                    Nueva transferencia
-                  </button>
+                  {perms.canWriteTransfer && (
+                    <button
+                      type="button"
+                      className="btn primary btn-sm"
+                      onClick={() => onNavigate?.("transferencias")}
+                    >
+                      Nueva transferencia
+                    </button>
+                  )}
                 </div>
               }
             />
@@ -375,13 +383,15 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               title="Sin depósitos activos"
               description="Sin estructura de depósitos no hay stock ubicado para operar."
               action={
-                <button
-                  type="button"
-                  className="btn primary btn-sm"
-                  onClick={() => onNavigate?.("depositos")}
-                >
-                  Configurar depósitos
-                </button>
+                perms.canWriteWarehouse ? (
+                  <button
+                    type="button"
+                    className="btn primary btn-sm"
+                    onClick={() => onNavigate?.("depositos")}
+                  >
+                    Configurar depósitos
+                  </button>
+                ) : undefined
               }
             />
           ) : (

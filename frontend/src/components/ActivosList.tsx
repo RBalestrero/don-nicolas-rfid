@@ -22,6 +22,8 @@ interface ActivosListProps {
   onFotos: (activoId: string) => void;
   onDeactivate: (activoId: string) => void;
   onCreateRequest?: () => void;
+  canWriteAssets?: boolean;
+  canWriteAssignment?: boolean;
 }
 
 export default function ActivosList({
@@ -39,6 +41,8 @@ export default function ActivosList({
   onFotos,
   onDeactivate,
   onCreateRequest,
+  canWriteAssets = true,
+  canWriteAssignment = true,
 }: ActivosListProps) {
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -73,7 +77,7 @@ export default function ActivosList({
           "Asigná depósito / sector / ubicación",
         ]}
         action={
-          onCreateRequest ? (
+          onCreateRequest && canWriteAssets ? (
             <button type="button" className="btn primary btn-sm" onClick={onCreateRequest}>
               + Nuevo activo
             </button>
@@ -84,12 +88,12 @@ export default function ActivosList({
   }
 
   return (
-    <div className="table-wrap">
-      <table className="data-table dense">
+    <div className="table-wrap table-panel">
+      <table className="data-table dense sticky-head">
         <thead>
           <tr>
             <th>Patrimonio</th>
-            <th>Descripción</th>
+            <th className="col-hide-sm">Descripción</th>
             <th>Categoría</th>
             <th>EPC</th>
             <th>Ubicación</th>
@@ -110,7 +114,7 @@ export default function ActivosList({
             return (
               <tr key={activo.id} className={rowActive ? "row-active" : undefined}>
                 <td className="mono">{activo.numero_patrimonial}</td>
-                <td>{activo.descripcion}</td>
+                <td className="col-hide-sm">{activo.descripcion}</td>
                 <td>{activo.categoria.nombre}</td>
                 <td className="mono">{activo.epc ?? "—"}</td>
                 <td className={ubicacion ? undefined : "text-warn"}>{formatUbicacion(ubicacion)}</td>
@@ -121,32 +125,36 @@ export default function ActivosList({
                 </td>
                 <td>
                   <div className="row-actions">
-                    <button
-                      type="button"
-                      className="btn secondary btn-sm"
-                      aria-pressed={isEditing}
-                      onClick={() => onEdit(activo.id)}
-                    >
-                      {isEditing ? "Cerrar" : "Editar"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn secondary btn-sm"
-                      aria-pressed={isAssigning}
-                      onClick={() => onAssign(activo.id)}
-                    >
-                      {ubicacion
-                        ? isAssigning
-                          ? "Cerrar"
-                          : "Ubicación"
-                        : isAssigning
-                          ? "Cerrar"
-                          : "Asignar"}
-                    </button>
-                    <div className="action-menu" ref={menuOpen ? menuRef : undefined}>
+                    {canWriteAssets && (
                       <button
                         type="button"
                         className="btn secondary btn-sm"
+                        aria-pressed={isEditing}
+                        onClick={() => onEdit(activo.id)}
+                      >
+                        {isEditing ? "Cerrar" : "Editar"}
+                      </button>
+                    )}
+                    {canWriteAssignment && (
+                      <button
+                        type="button"
+                        className="btn secondary btn-sm"
+                        aria-pressed={isAssigning}
+                        onClick={() => onAssign(activo.id)}
+                      >
+                        {ubicacion
+                          ? isAssigning
+                            ? "Cerrar"
+                            : "Ubicación"
+                          : isAssigning
+                            ? "Cerrar"
+                            : "Asignar"}
+                      </button>
+                    )}
+                    <div className="action-menu" ref={menuOpen ? menuRef : undefined}>
+                      <button
+                        type="button"
+                        className="btn ghost btn-sm"
                         aria-expanded={menuOpen}
                         aria-haspopup="menu"
                         aria-label={`Más acciones de ${activo.numero_patrimonial}`}
@@ -176,7 +184,7 @@ export default function ActivosList({
                           >
                             {isHistorial ? "Cerrar historial" : "Historial"}
                           </button>
-                          {ubicacion && (
+                          {canWriteAssignment && ubicacion && (
                             <button
                               type="button"
                               role="menuitem"
@@ -188,7 +196,7 @@ export default function ActivosList({
                               Quitar ubicación
                             </button>
                           )}
-                          {activo.activo && (
+                          {canWriteAssets && activo.activo && (
                             <button
                               type="button"
                               role="menuitem"
