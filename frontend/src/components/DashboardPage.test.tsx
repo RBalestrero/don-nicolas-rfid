@@ -130,4 +130,42 @@ describe("DashboardPage", () => {
     expect(await screen.findByText(/PAT-200/)).toBeInTheDocument();
     expect(screen.getByText(/1 resultado/)).toBeInTheDocument();
   });
+
+  it("muestra guía de puesta en marcha cuando el sistema está vacío", async () => {
+    const onNavigate = vi.fn();
+    apiFetchMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/dashboard/resumen")) {
+        return {
+          ...resumen,
+          kpis: {
+            ...resumen.kpis,
+            activos_activos: 0,
+            depositos_activos: 0,
+            inventarios_abiertos: 0,
+            transferencias_abiertas: 0,
+            stock_total_ubicado: 0,
+            discrepancias_inventarios_cerrados: {
+              faltantes: 0,
+              sobrantes: 0,
+              inventarios_con_discrepancia: 0,
+            },
+          },
+          stock_por_deposito: [],
+          movimientos_recientes: [],
+          transferencias_recientes: [],
+          inventarios_recientes: [],
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const user = userEvent.setup();
+    render(<DashboardPage onNavigate={onNavigate} />);
+
+    expect(await screen.findByText("Puesta en marcha")).toBeInTheDocument();
+    expect(screen.getByText(/creá depósitos con sectores/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /ir a depósitos/i }));
+    expect(onNavigate).toHaveBeenCalledWith("depositos");
+  });
 });

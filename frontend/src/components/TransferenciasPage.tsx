@@ -557,7 +557,12 @@ export default function TransferenciasPage() {
         {loading ? null : lista.length === 0 ? (
           <EmptyState
             title="Sin transferencias"
-            description="Creá una orden para mover activos entre depósitos."
+            description="Mové activos entre depósitos con confirmación por EPC en origen y destino."
+            steps={[
+              "Elegí origen, destino y ubicación de llegada",
+              "Seleccioná activos del stock origen",
+              "Confirmá lecturas en origen y luego en destino",
+            ]}
             action={
               <button
                 type="button"

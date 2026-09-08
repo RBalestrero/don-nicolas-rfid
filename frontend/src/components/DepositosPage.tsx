@@ -12,6 +12,7 @@ import type {
 import DepositoForm from "./DepositoForm";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
+import EmptyState from "./EmptyState";
 import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 
@@ -144,15 +145,20 @@ export default function DepositosPage() {
         </div>
         {loading && <p className="muted">Cargando depósitos...</p>}
         {!loading && depositos.length === 0 && (
-          <div className="empty-state-block" role="status">
-            <p className="empty-state-title">Sin depósitos</p>
-            <p className="empty-state">Creá el primero para armar sectores y ubicaciones.</p>
-            <div className="empty-state-action">
+          <EmptyState
+            title="Sin depósitos"
+            description="La estructura depósito → sector → ubicación es la base del stock."
+            steps={[
+              "Creá el depósito (p. ej. Central)",
+              "Agregá sectores",
+              "Definí códigos de ubicación (A-01, …)",
+            ]}
+            action={
               <button type="button" className="btn primary btn-sm" onClick={() => setShowForm(true)}>
                 + Nuevo depósito
               </button>
-            </div>
-          </div>
+            }
+          />
         )}
         {!loading && depositos.length > 0 && (
           <div className="deposito-selector" role="listbox" aria-label="Lista de depósitos">

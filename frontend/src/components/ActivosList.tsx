@@ -66,7 +66,12 @@ export default function ActivosList({
     return (
       <EmptyState
         title="Sin activos"
-        description="Creá el primero para empezar a ubicar e inventariar."
+        description="Empezá por el maestro patrimonial para poder inventariar y transferir."
+        steps={[
+          "Creá categorías si hace falta",
+          "Alta el activo con EPC si ya tiene etiqueta",
+          "Asigná depósito / sector / ubicación",
+        ]}
         action={
           onCreateRequest ? (
             <button type="button" className="btn primary btn-sm" onClick={onCreateRequest}>

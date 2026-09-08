@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
+import EmptyState from "./EmptyState";
 
 export type AppPage =
   | "dashboard"
@@ -137,7 +138,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   if (loading) {
     return (
       <div className="page">
-        <p className="muted">Cargando operaciones…</p>
+        <PageHeader title="Operaciones" subtitle="Atención pendiente, stock y actividad reciente" />
+        <p className="muted" aria-busy="true">
+          Cargando operaciones…
+        </p>
+        <div className="kpi-grid kpi-skeleton" aria-hidden>
+          <div className="kpi-card skeleton-block" />
+          <div className="kpi-card skeleton-block" />
+          <div className="kpi-card skeleton-block" />
+          <div className="kpi-card skeleton-block" />
+        </div>
       </div>
     );
   }
@@ -164,6 +174,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     kpis.activos_activos > 0
       ? Math.round((kpis.stock_total_ubicado / kpis.activos_activos) * 100)
       : 0;
+  const primerUso =
+    kpis.activos_activos === 0 &&
+    kpis.depositos_activos === 0 &&
+    colaTransferencias.length === 0 &&
+    colaInventarios.length === 0;
 
   return (
     <div className="page">
@@ -180,6 +195,38 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <p className="error" role="alert">
           {error}
         </p>
+      )}
+
+      {primerUso && (
+        <section className="card panel-focus getting-started">
+          <EmptyState
+            title="Puesta en marcha"
+            description="Configurá maestros y empezá a operar el WMS en tres pasos."
+            steps={[
+              "Creá depósitos con sectores y ubicaciones",
+              "Cargá activos y asignales ubicación",
+              "Abrí un inventario o una transferencia",
+            ]}
+            action={
+              <div className="getting-started-actions">
+                <button
+                  type="button"
+                  className="btn primary btn-sm"
+                  onClick={() => onNavigate?.("depositos")}
+                >
+                  Ir a depósitos
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary btn-sm"
+                  onClick={() => onNavigate?.("activos")}
+                >
+                  Ir a activos
+                </button>
+              </div>
+            }
+          />
+        </section>
       )}
 
       <section className="kpi-grid" aria-label="Indicadores operativos">
@@ -238,7 +285,33 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
 
           {colaTransferencias.length === 0 && colaInventarios.length === 0 ? (
-            <p className="empty-state">No hay transferencias ni inventarios abiertos.</p>
+            <EmptyState
+              title="Cola al día"
+              description="No hay transferencias ni inventarios abiertos que requieran atención."
+              steps={
+                primerUso
+                  ? undefined
+                  : ["Usá Inventarios para un conteo", "Usá Transferencias para mover stock"]
+              }
+              action={
+                <div className="getting-started-actions">
+                  <button
+                    type="button"
+                    className="btn secondary btn-sm"
+                    onClick={() => onNavigate?.("inventarios")}
+                  >
+                    Nuevo conteo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary btn-sm"
+                    onClick={() => onNavigate?.("transferencias")}
+                  >
+                    Nueva transferencia
+                  </button>
+                </div>
+              }
+            />
           ) : (
             <ul className="ops-queue">
               {colaTransferencias.map((t: TransferenciaResumenDash) => (
@@ -295,7 +368,19 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             </button>
           </div>
           {resumen.stock_por_deposito.length === 0 ? (
-            <p className="empty-state">Sin depósitos activos.</p>
+            <EmptyState
+              title="Sin depósitos activos"
+              description="Sin estructura de depósitos no hay stock ubicado para operar."
+              action={
+                <button
+                  type="button"
+                  className="btn primary btn-sm"
+                  onClick={() => onNavigate?.("depositos")}
+                >
+                  Configurar depósitos
+                </button>
+              }
+            />
           ) : (
             <ul className="stock-bars" aria-label="Stock por depósito">
               {resumen.stock_por_deposito.map((s) => (
@@ -370,7 +455,21 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         </form>
 
         {movimientosVisibles.length === 0 ? (
-          <p className="empty-state">Sin movimientos para mostrar.</p>
+          <EmptyState
+            title="Sin actividad"
+            description={
+              filtrados
+                ? "Ningún movimiento coincide con el filtro."
+                : "Cuando creés, asignes o transfieras activos, aparecerán aquí."
+            }
+            action={
+              filtrados ? (
+                <button type="button" className="btn secondary btn-sm" onClick={limpiarFiltro}>
+                  Limpiar filtro
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="table-wrap">
             <table className="data-table dense">
@@ -379,7 +478,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <th>Cuándo</th>
                   <th>Acción</th>
                   <th>Activo</th>
-                  <th>Usuario</th>
+                  <th className="col-hide-sm">Usuario</th>
                 </tr>
               </thead>
               <tbody>
@@ -390,10 +489,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <td>
                       <span className="mono">{m.numero_patrimonial ?? "—"}</span>
                       {m.descripcion && (
-                        <span className="muted"> · {m.descripcion}</span>
+                        <span className="muted desc-hide-sm"> · {m.descripcion}</span>
                       )}
                     </td>
-                    <td className="muted">{m.usuario_nombre ?? "Sistema"}</td>
+                    <td className="muted col-hide-sm">{m.usuario_nombre ?? "Sistema"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -435,17 +435,53 @@
 }
 
 .toolbar-field {
-  min-width: 140px;
+  min-width: 0;
+  flex: 1 1 100%;
+}
+
+@media (min-width: 640px) {
+  .toolbar-field {
+    min-width: 140px;
+    flex: 0 1 auto;
+  }
 }
 
 .toolbar-field.grow {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .toolbar-field.grow {
+    min-width: 180px;
+  }
 }
 
 .toolbar-actions {
   display: flex;
   gap: 0.4rem;
+  width: 100%;
+}
+
+.toolbar-actions > .btn {
+  flex: 1;
+}
+
+@media (min-width: 640px) {
+  .toolbar-actions {
+    width: auto;
+  }
+
+  .toolbar-actions > .btn {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 639px) {
+  .col-hide-sm,
+  .desc-hide-sm {
+    display: none;
+  }
 }
 
 /* —— Buttons —— */
@@ -564,8 +600,32 @@
   margin: 0 0 0.25rem;
 }
 
+.empty-state-steps {
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.empty-state-steps li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .empty-state-action {
   margin-top: 0.75rem;
+}
+
+.getting-started-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.getting-started .empty-state-block {
+  padding: 0.35rem 0;
 }
 
 .text-warn {
@@ -965,12 +1025,13 @@
 /* —— Dashboard KPIs —— */
 .kpi-grid {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.5rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 @media (min-width: 900px) {
   .kpi-grid {
+    gap: 0.65rem;
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
@@ -979,12 +1040,20 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.85rem;
+  padding: 0.7rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
   text-align: left;
   color: inherit;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .kpi-card {
+    padding: 0.85rem;
+    gap: 0.2rem;
+  }
 }
 
 .kpi-card.interactive {
@@ -994,6 +1063,11 @@
 .kpi-card.interactive:hover {
   border-color: var(--border-strong);
   background: #1a2433;
+}
+
+.kpi-card.interactive:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .kpi-card.tone-warn {
@@ -1010,21 +1084,57 @@
 
 .kpi-label {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
+  line-height: 1.25;
+}
+
+@media (min-width: 900px) {
+  .kpi-label {
+    font-size: 0.75rem;
+  }
 }
 
 .kpi-value {
-  font-size: 1.65rem;
+  font-size: 1.4rem;
   font-weight: 650;
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
 
+@media (min-width: 900px) {
+  .kpi-value {
+    font-size: 1.65rem;
+  }
+}
+
 .kpi-hint {
   color: var(--text-faint);
-  font-size: 0.72rem;
-  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  margin-top: 0.1rem;
+  line-height: 1.3;
+}
+
+.skeleton-block {
+  min-height: 4.5rem;
+  background: linear-gradient(
+    90deg,
+    var(--bg-panel) 0%,
+    var(--bg-input) 50%,
+    var(--bg-panel) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shine 1.2s ease-in-out infinite;
+  border-style: dashed;
+}
+
+@keyframes skeleton-shine {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .dash-layout {
@@ -1048,9 +1158,9 @@
 .ops-item {
   width: 100%;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.65rem;
-  align-items: center;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem 0.65rem;
+  align-items: start;
   text-align: left;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -1058,6 +1168,23 @@
   padding: 0.55rem 0.65rem;
   color: inherit;
   cursor: pointer;
+}
+
+.ops-item .ops-time {
+  grid-column: 2;
+  justify-self: start;
+}
+
+@media (min-width: 640px) {
+  .ops-item {
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+  }
+
+  .ops-item .ops-time {
+    grid-column: auto;
+    justify-self: auto;
+  }
 }
 
 .ops-item:hover {

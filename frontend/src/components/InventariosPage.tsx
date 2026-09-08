@@ -349,7 +349,12 @@ export default function InventariosPage() {
         ) : lista.length === 0 ? (
           <EmptyState
             title="Sin inventarios"
-            description="Iniciá un conteo para comparar stock esperado vs leído."
+            description="El conteo compara lo esperado en el depósito con los EPCs leídos."
+            steps={[
+              "Elegí el depósito a contar",
+              "Registrá lecturas RFID o pegá EPCs",
+              "Cerrá para ver faltantes y sobrantes",
+            ]}
             action={
               <button type="button" className="btn primary btn-sm" onClick={() => setShowCreate(true)}>
                 + Nuevo conteo
