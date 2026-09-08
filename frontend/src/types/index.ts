@@ -113,3 +113,17 @@ export interface StockDeposito {
   total: number;
   activos: StockActivoDetalle[];
 }
+
+export interface UbicacionAsignada {
+  activo_id: string;
+  ubicacion_id: string;
+  ubicacion_codigo: string;
+  sector_id: string;
+  sector_nombre: string;
+  deposito_id: string;
+  deposito_nombre: string;
+}
+
+export interface AsignacionUbicacionPayload {
+  ubicacion_id: string;
+}

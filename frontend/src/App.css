@@ -422,3 +422,22 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.data-table tr.row-active {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.asignacion-form {
+  margin-top: 0.75rem;
+}
