@@ -69,7 +69,54 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
 
   const response = await fetch(`${API_URL}${path}`, { headers });
   if (!response.ok) {
-    throw new ApiError(response.statusText || "Error al descargar archivo", response.status);
+    let message = response.statusText || "Error al descargar archivo";
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "string") message = body.detail;
+    } catch {
+      // statusText
+    }
+    throw new ApiError(message, response.status);
   }
   return response.blob();
+}
+
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match?.[1] ?? fallback;
+}
+
+export async function downloadReport(path: string, fallbackName: string): Promise<void> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    let message = response.statusText || "Error al descargar reporte";
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "string") message = body.detail;
+    } catch {
+      // statusText
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const filename = filenameFromDisposition(
+    response.headers.get("Content-Disposition"),
+    fallbackName,
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

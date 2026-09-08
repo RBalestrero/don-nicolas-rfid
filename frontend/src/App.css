@@ -895,6 +895,24 @@
   min-width: 2px;
 }
 
+.section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.export-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.export-error {
+  font-size: 0.75rem;
+}
+
 /* legacy aliases kept for older markup */
 .main-nav {
   display: none;

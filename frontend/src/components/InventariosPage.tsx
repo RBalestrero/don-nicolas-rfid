@@ -9,6 +9,7 @@ import type {
   InventarioReporte,
 } from "../types";
 import PageHeader from "./PageHeader";
+import ExportButtons from "./ExportButtons";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -268,9 +269,18 @@ export default function InventariosPage() {
             <h3>
               Inventario · {depositoNombre}
             </h3>
-            <span className={`badge ${activo.estado === "cerrado" ? "ok" : "warn"}`}>
-              {activo.estado}
-            </span>
+            <div className="section-header-right">
+              <span className={`badge ${activo.estado === "cerrado" ? "ok" : "warn"}`}>
+                {activo.estado}
+              </span>
+              {activo.estado === "cerrado" && (
+                <ExportButtons
+                  basePath={`/reportes/inventarios/${activo.id}`}
+                  filenameBase={`inventario_${activo.id.slice(0, 8)}`}
+                  formats={["xlsx", "csv", "pdf"]}
+                />
+              )}
+            </div>
           </div>
           <p className="muted mono">ID {activo.id}</p>
           <div className="status-grid inventario-metrics">

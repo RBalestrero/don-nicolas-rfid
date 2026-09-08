@@ -101,7 +101,7 @@ class TransferService:
             select(Transferencia)
             .options(selectinload(Transferencia.detalles))
             .order_by(Transferencia.creado_en.desc())
-            .limit(min(limit, 200))
+            .limit(min(max(limit, 1), 10_000))
         )
         if estado is not None:
             stmt = stmt.where(Transferencia.estado == estado)

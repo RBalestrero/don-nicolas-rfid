@@ -101,7 +101,7 @@ class HistorialService:
             .options(joinedload(HistorialActivo.activo))
             .order_by(HistorialActivo.creado_en.desc())
             .offset(max(offset, 0))
-            .limit(min(max(limit, 1), 200))
+            .limit(min(max(limit, 1), 10_000))
         )
         if needs_activo_join:
             stmt = stmt.join(Activo, Activo.id == HistorialActivo.activo_id)

@@ -2,11 +2,13 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
+from app.modules.reports.export_service import ExportService
 from app.modules.reports.schemas import DashboardResumen, MovimientosPage
 from app.modules.reports.service import ReportsService
 
@@ -49,3 +51,73 @@ def list_movimientos(
         hasta=hasta,
         search=search,
     )
+
+
+@router.get("/reportes/movimientos")
+def export_movimientos(
+    formato: str = Query("xlsx", description="csv | xlsx"),
+    accion: str | None = None,
+    activo_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    desde: datetime | None = None,
+    hasta: datetime | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+) -> Response:
+    return ExportService(db).export_movimientos(
+        formato=formato,
+        accion=accion,
+        activo_id=activo_id,
+        usuario_id=usuario_id,
+        desde=desde,
+        hasta=hasta,
+        search=search,
+    )
+
+
+@router.get("/reportes/stock/{deposito_id}")
+def export_stock(
+    deposito_id: uuid.UUID,
+    formato: str = Query("xlsx", description="csv | xlsx"),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+) -> Response:
+    return ExportService(db).export_stock(deposito_id, formato=formato)
+
+
+@router.get("/reportes/inventarios/{inventario_id}")
+def export_inventario(
+    inventario_id: uuid.UUID,
+    formato: str = Query("xlsx", description="csv | xlsx | pdf"),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+) -> Response:
+    return ExportService(db).export_inventario(inventario_id, formato=formato)
+
+
+@router.get("/reportes/transferencias")
+def export_transferencias(
+    formato: str = Query("xlsx", description="csv | xlsx"),
+    estado: str | None = None,
+    deposito_origen_id: uuid.UUID | None = None,
+    deposito_destino_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+) -> Response:
+    return ExportService(db).export_transferencias(
+        formato=formato,
+        estado=estado,
+        deposito_origen_id=deposito_origen_id,
+        deposito_destino_id=deposito_destino_id,
+    )
+
+
+@router.get("/reportes/transferencias/{transferencia_id}")
+def export_transferencia_detalle(
+    transferencia_id: uuid.UUID,
+    formato: str = Query("xlsx", description="csv | xlsx"),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+) -> Response:
+    return ExportService(db).export_transferencia_detalle(transferencia_id, formato=formato)

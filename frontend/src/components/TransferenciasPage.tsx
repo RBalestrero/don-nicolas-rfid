@@ -9,6 +9,7 @@ import type {
   TransferenciaListItem,
 } from "../types";
 import PageHeader from "./PageHeader";
+import ExportButtons from "./ExportButtons";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -392,7 +393,14 @@ export default function TransferenciasPage() {
       </section>
 
       <section className="card">
-        <h3>Órdenes</h3>
+        <div className="section-header">
+          <h3>Órdenes</h3>
+          <ExportButtons
+            basePath="/reportes/transferencias"
+            filenameBase="transferencias"
+            disabled={lista.length === 0}
+          />
+        </div>
         {lista.length === 0 ? (
           <p className="muted">Todavía no hay transferencias.</p>
         ) : (
@@ -451,9 +459,13 @@ export default function TransferenciasPage() {
 
       {activa && (
         <section className="card">
-          <h3>
-            Transferencia — {estadoLabel(activa.estado)}
-          </h3>
+          <div className="section-header">
+            <h3>Transferencia — {estadoLabel(activa.estado)}</h3>
+            <ExportButtons
+              basePath={`/reportes/transferencias/${activa.id}`}
+              filenameBase={`transferencia_${activa.id.slice(0, 8)}`}
+            />
+          </div>
           <p className="muted">
             {nombreDeposito(activa.deposito_origen_id)} →{" "}
             {nombreDeposito(activa.deposito_destino_id)}

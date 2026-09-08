@@ -50,7 +50,7 @@ class ReportsService:
         )
         return MovimientosPage(
             total=total,
-            limit=min(max(limit, 1), 200),
+            limit=min(max(limit, 1), 10_000),
             offset=max(offset, 0),
             items=[self._to_movimiento(r) for r in registros],
         )

@@ -8,6 +8,7 @@ import type {
   TransferenciaResumenDash,
 } from "../types";
 import PageHeader from "./PageHeader";
+import ExportButtons from "./ExportButtons";
 
 export type AppPage =
   | "dashboard"
@@ -311,11 +312,21 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       <section className="card panel">
         <div className="section-header">
           <h3>Actividad</h3>
-          {filtrados && (
-            <span className="muted">
-              {filtrados.total} resultado{filtrados.total === 1 ? "" : "s"}
-            </span>
-          )}
+          <div className="section-header-right">
+            {filtrados && (
+              <span className="muted">
+                {filtrados.total} resultado{filtrados.total === 1 ? "" : "s"}
+              </span>
+            )}
+            <ExportButtons
+              basePath="/reportes/movimientos"
+              filenameBase="movimientos"
+              query={{
+                accion: accion || undefined,
+                search: search.trim() || undefined,
+              }}
+            />
+          </div>
         </div>
 
         <form className="toolbar" onSubmit={aplicarFiltro} aria-label="Filtrar movimientos">

@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import DepositoForm from "./DepositoForm";
 import PageHeader from "./PageHeader";
+import ExportButtons from "./ExportButtons";
 import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 
@@ -232,7 +233,14 @@ export default function DepositosPage() {
 
           {tab === "stock" && (
             <section className="card">
-              <h3>Stock en {detalle.nombre}</h3>
+              <div className="section-header">
+                <h3>Stock en {detalle.nombre}</h3>
+                <ExportButtons
+                  basePath={`/reportes/stock/${detalle.id}`}
+                  filenameBase={`stock_${detalle.nombre}`}
+                  disabled={!stock || stock.total === 0}
+                />
+              </div>
               {!stock || stock.total === 0 ? (
                 <p className="muted">No hay activos asignados en este depósito.</p>
               ) : (
