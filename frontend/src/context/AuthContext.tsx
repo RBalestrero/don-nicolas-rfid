@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, clearToken, getToken, setToken } from "../lib/api";
+import { apiFetch, clearToken, getToken, setToken, UNAUTHORIZED_EVENT } from "../lib/api";
 import type { User } from "../types";
 
 interface AuthContextValue {
@@ -49,6 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => clearToken())
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
   const value = useMemo(

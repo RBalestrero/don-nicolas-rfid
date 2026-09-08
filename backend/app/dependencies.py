@@ -1,15 +1,18 @@
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import get_settings
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.modules.auth.models import Usuario
 
 security = HTTPBearer()
+
+CLIENT_HEADER = "X-Client"
 
 
 def get_current_user(
@@ -39,3 +42,43 @@ def get_current_user(
         )
 
     return user
+
+
+def require_roles(*roles: str):
+    allowed = {r.lower() for r in roles}
+
+    def _dependency(current_user: Usuario = Depends(get_current_user)) -> Usuario:
+        rol = (current_user.rol.nombre if current_user.rol else "").lower()
+        if rol not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "FORBIDDEN_ROLE",
+                    "message": "No tenés permisos para esta operación",
+                },
+            )
+        return current_user
+
+    return _dependency
+
+
+def require_inventory_mobile_client(
+    request: Request,
+    current_user: Usuario = Depends(get_current_user),
+    x_client: str | None = Header(default=None, alias=CLIENT_HEADER),
+) -> Usuario:
+    """Inventarios write: solo clientes móviles autorizados (APK MC33)."""
+    settings = get_settings()
+    client = (x_client or request.headers.get(CLIENT_HEADER) or "").strip().lower()
+    if client not in settings.inventory_mobile_clients_set:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "INVENTORY_MOBILE_ONLY",
+                "message": (
+                    "El alta, las lecturas y el cierre de inventarios solo se permiten "
+                    "desde la APK en el dispositivo MC33. Usá la web para auditar."
+                ),
+            },
+        )
+    return current_user

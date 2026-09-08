@@ -23,6 +23,16 @@ class Settings(BaseSettings):
 
     upload_dir: str = "./uploads"
     max_upload_size_mb: int = 10
+    max_request_body_mb: int = 12
+
+    rate_limit_enabled: bool = True
+    login_rate_limit_per_minute: int = 10
+    api_rate_limit_per_minute: int = 300
+    login_max_failures: int = 5
+    login_lockout_seconds: int = 300
+
+    # Clientes móviles autorizados a operar inventarios (header X-Client)
+    inventory_mobile_clients: str = "mc33,mc33-apk"
 
     zebra_printer_host: str = "192.168.1.100"
     zebra_printer_port: int = 9100
@@ -43,6 +53,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def inventory_mobile_clients_set(self) -> set[str]:
+        return {
+            item.strip().lower()
+            for item in self.inventory_mobile_clients.split(",")
+            if item.strip()
+        }
 
 
 @lru_cache

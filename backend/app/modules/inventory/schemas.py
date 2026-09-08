@@ -1,7 +1,22 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+EPC_MAX_LEN = 96
+EPC_LIST_MAX = 5000
+
+
+def _normalize_epcs(epcs: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for raw in epcs:
+        epc = raw.strip().upper()
+        if not epc:
+            continue
+        if len(epc) > EPC_MAX_LEN:
+            raise ValueError(f"Cada EPC puede tener como máximo {EPC_MAX_LEN} caracteres")
+        cleaned.append(epc)
+    return cleaned
 
 
 class InventarioCreate(BaseModel):
@@ -11,11 +26,21 @@ class InventarioCreate(BaseModel):
 
 
 class InventarioLecturasRequest(BaseModel):
-    epcs: list[str] = Field(default_factory=list, max_length=5000)
+    epcs: list[str] = Field(default_factory=list, max_length=EPC_LIST_MAX)
+
+    @field_validator("epcs")
+    @classmethod
+    def validate_epcs(cls, value: list[str]) -> list[str]:
+        return _normalize_epcs(value)
 
 
 class InventarioCerrarRequest(BaseModel):
-    epcs: list[str] = Field(default_factory=list, max_length=5000)
+    epcs: list[str] = Field(default_factory=list, max_length=EPC_LIST_MAX)
+
+    @field_validator("epcs")
+    @classmethod
+    def validate_epcs(cls, value: list[str]) -> list[str]:
+        return _normalize_epcs(value)
 
 
 class DetalleInventarioResponse(BaseModel):

@@ -79,3 +79,21 @@ def auth_headers(client: TestClient, admin_user) -> dict[str, str]:
     )
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def mobile_auth_headers(auth_headers: dict[str, str]) -> dict[str, str]:
+    return {**auth_headers, "X-Client": "mc33"}
+
+
+@pytest.fixture(autouse=True)
+def reset_security_state():
+    from app.core.rate_limit import api_rate_limiter, login_lockout, login_rate_limiter
+
+    api_rate_limiter.clear()
+    login_rate_limiter.clear()
+    login_lockout.clear()
+    yield
+    api_rate_limiter.clear()
+    login_rate_limiter.clear()
+    login_lockout.clear()

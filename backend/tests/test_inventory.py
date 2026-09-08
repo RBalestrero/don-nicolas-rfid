@@ -7,26 +7,26 @@ def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
-def _setup_inventario_base(client: TestClient, auth_headers: dict) -> dict:
+def _setup_inventario_base(client: TestClient, mobile_auth_headers: dict) -> dict:
     deposito = client.post(
         "/api/v1/depositos",
         json={"nombre": _unique("Dep Inv")},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     sector = client.post(
         f"/api/v1/depositos/{deposito['id']}/sectores",
         json={"nombre": "Sector Inv"},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     ubic = client.post(
         f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}/ubicaciones",
         json={"codigo": "INV-01"},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     cat = client.post(
         "/api/v1/categorias",
         json={"nombre": _unique("CatInv")},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
 
     def crear_con_epc(desc: str, epc: str) -> dict:
@@ -38,12 +38,12 @@ def _setup_inventario_base(client: TestClient, auth_headers: dict) -> dict:
                 "categoria_id": cat["id"],
                 "epc": epc,
             },
-            headers=auth_headers,
+            headers=mobile_auth_headers,
         ).json()
         client.post(
             f"/api/v1/activos/{activo['id']}/asignar-ubicacion",
             json={"ubicacion_id": ubic["id"]},
-            headers=auth_headers,
+            headers=mobile_auth_headers,
         )
         return activo
 
@@ -60,13 +60,13 @@ def _setup_inventario_base(client: TestClient, auth_headers: dict) -> dict:
     }
 
 
-def test_inventario_esperado_vs_leido(client: TestClient, auth_headers):
-    setup = _setup_inventario_base(client, auth_headers)
+def test_inventario_esperado_vs_leido(client: TestClient, mobile_auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
 
     created = client.post(
         "/api/v1/inventarios",
         json={"deposito_id": setup["deposito"]["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert created.status_code == 201
     inv = created.json()
@@ -78,7 +78,7 @@ def test_inventario_esperado_vs_leido(client: TestClient, auth_headers):
     lecturas = client.post(
         f"/api/v1/inventarios/{inv['id']}/lecturas",
         json={"epcs": ["E200001", "E200002", "E299999"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert lecturas.status_code == 200
     mid = lecturas.json()
@@ -89,7 +89,7 @@ def test_inventario_esperado_vs_leido(client: TestClient, auth_headers):
     cerrado = client.post(
         f"/api/v1/inventarios/{inv['id']}/cerrar",
         json={"epcs": []},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert cerrado.status_code == 200
     result = cerrado.json()
@@ -106,21 +106,21 @@ def test_inventario_esperado_vs_leido(client: TestClient, auth_headers):
     assert estados["E299999"] == "sobrante"
 
 
-def test_inventario_cerrar_con_lecturas_finales(client: TestClient, auth_headers):
-    setup = _setup_inventario_base(client, auth_headers)
+def test_inventario_cerrar_con_lecturas_finales(client: TestClient, mobile_auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
     inv = client.post(
         "/api/v1/inventarios",
         json={
             "deposito_id": setup["deposito"]["id"],
             "sector_id": setup["sector"]["id"],
         },
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
 
     cerrado = client.post(
         f"/api/v1/inventarios/{inv['id']}/cerrar",
         json={"epcs": setup["epcs"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert cerrado.status_code == 200
     result = cerrado.json()
@@ -129,36 +129,36 @@ def test_inventario_cerrar_con_lecturas_finales(client: TestClient, auth_headers
     assert result["resumen"]["total_sobrante"] == 0
 
 
-def test_inventario_no_reabre(client: TestClient, auth_headers):
-    setup = _setup_inventario_base(client, auth_headers)
+def test_inventario_no_reabre(client: TestClient, mobile_auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
     inv = client.post(
         "/api/v1/inventarios",
         json={"deposito_id": setup["deposito"]["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
-    client.post(f"/api/v1/inventarios/{inv['id']}/cerrar", json={}, headers=auth_headers)
+    client.post(f"/api/v1/inventarios/{inv['id']}/cerrar", json={}, headers=mobile_auth_headers)
     again = client.post(
         f"/api/v1/inventarios/{inv['id']}/lecturas",
         json={"epcs": ["E200001"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert again.status_code == 409
 
 
-def test_reporte_discrepancias_y_listado(client: TestClient, auth_headers):
-    setup = _setup_inventario_base(client, auth_headers)
+def test_reporte_discrepancias_y_listado(client: TestClient, mobile_auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
     inv = client.post(
         "/api/v1/inventarios",
         json={"deposito_id": setup["deposito"]["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     client.post(
         f"/api/v1/inventarios/{inv['id']}/cerrar",
         json={"epcs": ["E200001", "E299999"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
 
-    reporte = client.get(f"/api/v1/inventarios/{inv['id']}/reporte", headers=auth_headers)
+    reporte = client.get(f"/api/v1/inventarios/{inv['id']}/reporte", headers=mobile_auth_headers)
     assert reporte.status_code == 200
     data = reporte.json()
     assert data["tiene_discrepancias"] is True
@@ -173,7 +173,7 @@ def test_reporte_discrepancias_y_listado(client: TestClient, auth_headers):
     lista = client.get(
         "/api/v1/inventarios",
         params={"deposito_id": setup["deposito"]["id"], "estado": "cerrado"},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     assert lista.status_code == 200
     items = lista.json()
@@ -183,19 +183,19 @@ def test_reporte_discrepancias_y_listado(client: TestClient, auth_headers):
     assert items[0]["total_sobrante"] == 1
 
 
-def test_reporte_sin_discrepancias(client: TestClient, auth_headers):
-    setup = _setup_inventario_base(client, auth_headers)
+def test_reporte_sin_discrepancias(client: TestClient, mobile_auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
     inv = client.post(
         "/api/v1/inventarios",
         json={"deposito_id": setup["deposito"]["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     cerrado = client.post(
         f"/api/v1/inventarios/{inv['id']}/cerrar",
         json={"epcs": setup["epcs"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
-    reporte = client.get(f"/api/v1/inventarios/{cerrado['id']}/reporte", headers=auth_headers).json()
+    reporte = client.get(f"/api/v1/inventarios/{cerrado['id']}/reporte", headers=mobile_auth_headers).json()
     assert reporte["tiene_discrepancias"] is False
     assert reporte["coincidencia_pct"] == 100.0
     assert len(reporte["faltantes"]) == 0

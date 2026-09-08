@@ -9,26 +9,26 @@ def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
-def _seed(client: TestClient, auth_headers: dict) -> dict:
+def _seed(client: TestClient, mobile_auth_headers: dict) -> dict:
     dep = client.post(
         "/api/v1/depositos",
         json={"nombre": _unique("DepExp")},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     sec = client.post(
         f"/api/v1/depositos/{dep['id']}/sectores",
         json={"nombre": "Sector Exp"},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     ubi = client.post(
         f"/api/v1/depositos/{dep['id']}/sectores/{sec['id']}/ubicaciones",
         json={"codigo": "E-01"},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     cat = client.post(
         "/api/v1/categorias",
         json={"nombre": _unique("CatExp")},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     epc = f"E280EXP{_unique('')[:6]}".upper()
     activo = client.post(
@@ -39,28 +39,28 @@ def _seed(client: TestClient, auth_headers: dict) -> dict:
             "categoria_id": cat["id"],
             "epc": epc,
         },
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     client.post(
         f"/api/v1/activos/{activo['id']}/asignar-ubicacion",
         json={"ubicacion_id": ubi["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     inv = client.post(
         "/api/v1/inventarios",
         json={"deposito_id": dep["id"]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     ).json()
     client.post(
         f"/api/v1/inventarios/{inv['id']}/cerrar",
         json={"epcs": [epc]},
-        headers=auth_headers,
+        headers=mobile_auth_headers,
     )
     return {"deposito": dep, "activo": activo, "inventario": inv, "epc": epc}
 
 
-def test_export_movimientos_xlsx(client: TestClient, auth_headers):
-    _seed(client, auth_headers)
+def test_export_movimientos_xlsx(client: TestClient, mobile_auth_headers, auth_headers):
+    _seed(client, mobile_auth_headers)
     response = client.get(
         "/api/v1/reportes/movimientos",
         params={"formato": "xlsx"},
@@ -77,8 +77,8 @@ def test_export_movimientos_xlsx(client: TestClient, auth_headers):
     assert ws.max_row >= 2
 
 
-def test_export_stock_csv(client: TestClient, auth_headers):
-    seed = _seed(client, auth_headers)
+def test_export_stock_csv(client: TestClient, mobile_auth_headers, auth_headers):
+    seed = _seed(client, mobile_auth_headers)
     response = client.get(
         f"/api/v1/reportes/stock/{seed['deposito']['id']}",
         params={"formato": "csv"},
@@ -91,8 +91,8 @@ def test_export_stock_csv(client: TestClient, auth_headers):
     assert seed["activo"]["numero_patrimonial"] in text
 
 
-def test_export_inventario_pdf_y_xlsx(client: TestClient, auth_headers):
-    seed = _seed(client, auth_headers)
+def test_export_inventario_pdf_y_xlsx(client: TestClient, mobile_auth_headers, auth_headers):
+    seed = _seed(client, mobile_auth_headers)
     inv_id = seed["inventario"]["id"]
 
     xlsx = client.get(
@@ -115,7 +115,7 @@ def test_export_inventario_pdf_y_xlsx(client: TestClient, auth_headers):
     assert pdf.content[:4] == b"%PDF"
 
 
-def test_export_formato_invalido(client: TestClient, auth_headers):
+def test_export_formato_invalido(client: TestClient, mobile_auth_headers, auth_headers):
     response = client.get(
         "/api/v1/reportes/movimientos",
         params={"formato": "docx"},

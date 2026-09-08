@@ -19,14 +19,12 @@ class ApiClient(
 
     private val authInterceptor = Interceptor { chain ->
         val token = tokenProvider()
-        val request = if (token.isNullOrBlank()) {
-            chain.request()
-        } else {
-            chain.request().newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
+        val builder = chain.request().newBuilder()
+            .header("X-Client", "mc33")
+        if (!token.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $token")
         }
-        chain.proceed(request)
+        chain.proceed(builder.build())
     }
 
     private val okHttp: OkHttpClient = OkHttpClient.Builder()

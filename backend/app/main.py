@@ -4,6 +4,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.config import get_settings
+from app.core.security_middleware import (
+    RateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.database import check_database_connection
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
@@ -23,6 +28,10 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
+# Orden: últimos agregados corren primero en request.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
