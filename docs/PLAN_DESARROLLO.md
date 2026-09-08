@@ -212,7 +212,7 @@ Una tarea se considera terminada cuando:
 | Requisitos | `docs/REQUISITOS.md` | Nuevos requisitos del cliente |
 | Arquitectura | `docs/ARQUITECTURA.md` | Cambios estructurales |
 | API | Auto-generada (OpenAPI/Swagger) | Cada endpoint nuevo |
-| Manual de despliegue | `docs/DESPLIEGUE.md` | Fase 5 |
+| Manual de despliegue / producción | `docs/PRODUCCION.md` | Checklist go-live (env, HTTPS, roles, backups) |
 | Manual de usuario | `docs/MANUAL_USUARIO.md` | Fase 5 |
 | ADRs (decisiones) | `docs/adr/` | Decisiones técnicas relevantes |
 
