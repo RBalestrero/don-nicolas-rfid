@@ -441,3 +441,51 @@
 .asignacion-form {
   margin-top: 0.75rem;
 }
+
+.inline-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inline-form .form-actions {
+  justify-content: flex-start;
+}
+
+.inventario-metrics {
+  margin: 1rem 0;
+}
+
+.status-item {
+  background: #121a27;
+  border: 1px solid #2d3a4f;
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.status-label {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.reporte-panel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #2d3a4f;
+}
+
+.reporte-block {
+  margin-top: 0.75rem;
+}
+
+.reporte-block h4 {
+  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.compact-list {
+  max-height: 220px;
+  overflow: auto;
+}
