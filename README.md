@@ -29,6 +29,7 @@ Solución integral de identificación y trazabilidad mediante tecnología **RFID
 | [Arquitectura](docs/ARQUITECTURA.md) | Diagramas, módulos, flujos y seguridad |
 | [Estructura del Proyecto](docs/ESTRUCTURA_PROYECTO.md) | Árbol de directorios y convenciones |
 | [Producción / go-live](docs/PRODUCCION.md) | Checklist de variables, HTTPS, roles, backups y pendientes al salir a prod |
+| [Despliegue y hosting](docs/DESPLIEGUE.md) | Estructura del sistema, qué hostear, redes MC33 y topología recomendada |
 | [ADRs](docs/adr/) | Registro de decisiones arquitectónicas |
 | [Configuración GitHub](docs/GITHUB_SETUP.md) | Autenticación `gh`, push y scope `workflow` |
 

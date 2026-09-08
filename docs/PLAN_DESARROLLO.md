@@ -212,7 +212,8 @@ Una tarea se considera terminada cuando:
 | Requisitos | `docs/REQUISITOS.md` | Nuevos requisitos del cliente |
 | Arquitectura | `docs/ARQUITECTURA.md` | Cambios estructurales |
 | API | Auto-generada (OpenAPI/Swagger) | Cada endpoint nuevo |
-| Manual de despliegue / producción | `docs/PRODUCCION.md` | Checklist go-live (env, HTTPS, roles, backups) |
+| Manual de despliegue / hosting | `docs/DESPLIEGUE.md` | Qué se hostea, topología, redes MC33, Compose vs prod |
+| Checklist go-live / seguridad prod | `docs/PRODUCCION.md` | Variables, HTTPS, roles, backups |
 | Manual de usuario | `docs/MANUAL_USUARIO.md` | Fase 5 |
 | ADRs (decisiones) | `docs/adr/` | Decisiones técnicas relevantes |
 

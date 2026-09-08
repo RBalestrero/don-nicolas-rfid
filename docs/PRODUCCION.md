@@ -3,6 +3,8 @@
 Documento operativo para cuando el sistema pase de desarrollo/LAN a un entorno de **producción** (o staging serio).  
 No hace falta aplicar todo hoy: usalo como guía al momento del despliegue.
 
+**Cómo está armado el sistema y cómo hostearlo:** ver [`DESPLIEGUE.md`](DESPLIEGUE.md).
+
 Relacionado: `.env.example`, `backend/app/config.py` (`validate_security_settings`), reglas Cursor `seguridad-rbac.mdc` e `inventarios-mc33.mdc`.
 
 ---
