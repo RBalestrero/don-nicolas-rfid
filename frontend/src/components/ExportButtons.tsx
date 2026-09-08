@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { downloadReport } from "../lib/api";
+import { useToast } from "../context/ToastContext";
 
 interface ExportButtonsProps {
   /** Path relativo sin query, ej. /reportes/movimientos */
@@ -18,6 +19,7 @@ export default function ExportButtons({
   query,
   disabled,
 }: ExportButtonsProps) {
+  const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,8 +35,11 @@ export default function ExportButtons({
       }
       const ext = formato === "xlsx" ? "xlsx" : formato;
       await downloadReport(`${basePath}?${params.toString()}`, `${filenameBase}.${ext}`);
+      toast.success(`Exportado ${formato.toUpperCase()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al exportar");
+      const message = err instanceof Error ? err.message : "Error al exportar";
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(null);
     }

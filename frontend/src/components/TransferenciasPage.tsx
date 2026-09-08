@@ -12,6 +12,7 @@ import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
 import Stepper from "./Stepper";
+import { useToast } from "../context/ToastContext";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -42,6 +43,7 @@ function estadoBadgeClass(estado: string): string {
 }
 
 export default function TransferenciasPage() {
+  const toast = useToast();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<TransferenciaListItem[]>([]);
   const [origenId, setOrigenId] = useState("");
@@ -207,6 +209,7 @@ export default function TransferenciasPage() {
       setSelectedIds([]);
       setNotas("");
       setShowCreate(false);
+      toast.success("Transferencia creada");
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al crear la transferencia");
@@ -242,6 +245,7 @@ export default function TransferenciasPage() {
       );
       setActiva(updated);
       setEpcsText("");
+      toast.success("Origen confirmado · en tránsito");
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al confirmar origen");
@@ -268,6 +272,7 @@ export default function TransferenciasPage() {
       );
       setActiva(updated);
       setEpcsText("");
+      toast.success("Destino confirmado · transferencia completada");
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al confirmar destino");
@@ -286,6 +291,7 @@ export default function TransferenciasPage() {
         method: "POST",
       });
       setActiva(updated);
+      toast.info("Transferencia cancelada");
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cancelar");

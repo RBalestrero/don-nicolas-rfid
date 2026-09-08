@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../lib/api";
+import { useToast } from "../context/ToastContext";
 import type {
   Activo,
   ActivoCreatePayload,
@@ -27,6 +28,7 @@ async function fetchUbicacionOrNull(activoId: string): Promise<UbicacionAsignada
 }
 
 export default function ActivosPage() {
+  const toast = useToast();
   const [activos, setActivos] = useState<Activo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [ubicaciones, setUbicaciones] = useState<Record<string, UbicacionAsignada | null>>({});
@@ -88,6 +90,7 @@ export default function ActivosPage() {
       body: JSON.stringify(data),
     });
     setShowForm(false);
+    toast.success("Activo creado");
     await loadData();
   };
 
@@ -100,6 +103,7 @@ export default function ActivosPage() {
         body: JSON.stringify(data),
       });
       setEditingId(null);
+      toast.success("Activo actualizado");
       await loadData();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al actualizar el activo");
@@ -112,6 +116,7 @@ export default function ActivosPage() {
       method: "POST",
       body: JSON.stringify(data),
     });
+    toast.success("Categoría creada");
     await loadData();
   };
 
@@ -189,6 +194,7 @@ export default function ActivosPage() {
       ) {
         closePanels();
       }
+      toast.success(`${label} dado de baja`);
       await loadData();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al dar de baja el activo");
@@ -208,6 +214,7 @@ export default function ActivosPage() {
       );
       setUbicaciones((prev) => ({ ...prev, [assigningId]: assigned }));
       setAssigningId(null);
+      toast.success("Ubicación asignada");
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al asignar ubicación");
       throw err;
@@ -220,6 +227,7 @@ export default function ActivosPage() {
       await apiFetch<void>(`/activos/${activoId}/ubicacion`, { method: "DELETE" });
       setUbicaciones((prev) => ({ ...prev, [activoId]: null }));
       if (assigningId === activoId) setAssigningId(null);
+      toast.success("Ubicación quitada");
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al quitar ubicación");
     }

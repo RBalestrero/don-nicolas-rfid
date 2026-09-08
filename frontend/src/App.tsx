@@ -68,7 +68,10 @@ function NavButton({
     <button
       type="button"
       className={`nav-item ${active ? "active" : ""}`}
-      onClick={() => onSelect(id)}
+      onClick={(e) => {
+        onSelect(id);
+        e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+      }}
       aria-current={active ? "page" : undefined}
     >
       {label}
@@ -118,8 +121,9 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <span className="user-chip muted">
-            {user.nombre} · {user.rol}
+          <span className="user-chip muted" title={`${user.nombre} · ${user.rol}`}>
+            <span className="user-chip-name">{user.nombre}</span>
+            <span className="user-chip-role"> · {user.rol}</span>
           </span>
           <HealthBadge />
           <button type="button" className="btn secondary btn-sm" onClick={logout}>
@@ -130,29 +134,31 @@ export default function App() {
 
       <div className="shell-body">
         <nav className="side-nav" aria-label="Navegación principal">
-          <div className="nav-group">
-            <span className="nav-group-label">Operación</span>
-            {NAV_OPERACION.map((item) => (
-              <NavButton
-                key={item.id}
-                id={item.id}
-                label={item.label}
-                active={page === item.id}
-                onSelect={setPage}
-              />
-            ))}
-          </div>
-          <div className="nav-group">
-            <span className="nav-group-label">Maestros</span>
-            {NAV_MAESTROS.map((item) => (
-              <NavButton
-                key={item.id}
-                id={item.id}
-                label={item.label}
-                active={page === item.id}
-                onSelect={setPage}
-              />
-            ))}
+          <div className="nav-scroll">
+            <div className="nav-group">
+              <span className="nav-group-label">Operación</span>
+              {NAV_OPERACION.map((item) => (
+                <NavButton
+                  key={item.id}
+                  id={item.id}
+                  label={item.label}
+                  active={page === item.id}
+                  onSelect={setPage}
+                />
+              ))}
+            </div>
+            <div className="nav-group">
+              <span className="nav-group-label">Maestros</span>
+              {NAV_MAESTROS.map((item) => (
+                <NavButton
+                  key={item.id}
+                  id={item.id}
+                  label={item.label}
+                  active={page === item.id}
+                  onSelect={setPage}
+                />
+              ))}
+            </div>
           </div>
         </nav>
 

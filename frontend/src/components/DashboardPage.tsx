@@ -145,7 +145,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   if (!resumen) {
     return (
       <div className="page">
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         <button type="button" className="btn primary" onClick={loadResumen}>
           Reintentar
         </button>
@@ -172,7 +176,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         </button>
       </PageHeader>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
 
       <section className="kpi-grid" aria-label="Indicadores operativos">
         <button

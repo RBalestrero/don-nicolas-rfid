@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { useToast } from "../context/ToastContext";
 import type {
   Deposito,
   DepositoCreatePayload,
@@ -15,6 +16,7 @@ import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 
 export default function DepositosPage() {
+  const toast = useToast();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<DepositoDetalle | null>(null);
@@ -78,6 +80,7 @@ export default function DepositosPage() {
     });
     setShowForm(false);
     setSelectedId(created.id);
+    toast.success("Depósito creado");
     await loadDepositos();
   };
 
@@ -87,6 +90,7 @@ export default function DepositosPage() {
       method: "POST",
       body: JSON.stringify(data),
     });
+    toast.success("Sector creado");
     await loadDetalle(selectedId);
   };
 
@@ -99,6 +103,7 @@ export default function DepositosPage() {
       method: "POST",
       body: JSON.stringify(data),
     });
+    toast.success("Ubicación creada");
     await loadDetalle(selectedId);
   };
 

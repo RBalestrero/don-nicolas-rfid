@@ -12,6 +12,7 @@ import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
 import Stepper from "./Stepper";
+import { useToast } from "../context/ToastContext";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -52,6 +53,7 @@ function DetalleList({ title, items }: { title: string; items: DetalleInventario
 }
 
 export default function InventariosPage() {
+  const toast = useToast();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<InventarioListItem[]>([]);
   const [depositoId, setDepositoId] = useState("");
@@ -115,6 +117,8 @@ export default function InventariosPage() {
       });
       setActivo(created);
       setEpcsText("");
+      setShowCreate(false);
+      toast.success("Inventario iniciado");
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al crear inventario");
@@ -157,6 +161,8 @@ export default function InventariosPage() {
         body: JSON.stringify({ epcs }),
       });
       setActivo(updated);
+      setEpcsText("");
+      toast.success(`Lecturas registradas (${epcs.length})`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrar lecturas");
     } finally {
@@ -177,6 +183,11 @@ export default function InventariosPage() {
       setActivo(closed);
       const rep = await apiFetch<InventarioReporte>(`/inventarios/${closed.id}/reporte`);
       setReporte(rep);
+      toast.success(
+        rep.tiene_discrepancias
+          ? `Inventario cerrado · ${rep.coincidencia_pct.toFixed(0)}% coincidencia`
+          : "Inventario cerrado sin discrepancias",
+      );
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cerrar inventario");
