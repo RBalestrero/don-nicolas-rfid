@@ -27,7 +27,7 @@ describe("ExportButtons", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /^xlsx$/i }));
+    await user.click(screen.getByRole("button", { name: /exportar xlsx/i }));
     await waitFor(() => {
       expect(downloadMock).toHaveBeenCalledWith(
         "/reportes/movimientos?formato=xlsx&accion=creacion",
@@ -35,7 +35,7 @@ describe("ExportButtons", () => {
       );
     });
 
-    await user.click(screen.getByRole("button", { name: /^csv$/i }));
+    await user.click(screen.getByRole("button", { name: /exportar csv/i }));
     await waitFor(() => {
       expect(downloadMock).toHaveBeenCalledWith(
         "/reportes/movimientos?formato=csv&accion=creacion",

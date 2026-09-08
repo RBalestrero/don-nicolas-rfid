@@ -10,6 +10,8 @@ import type {
 } from "../types";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
+import EmptyState from "./EmptyState";
+import Stepper from "./Stepper";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -33,6 +35,12 @@ function estadoLabel(estado: string): string {
   }
 }
 
+function estadoBadgeClass(estado: string): string {
+  if (estado === "completada") return "ok";
+  if (estado === "cancelada") return "danger";
+  return "warn";
+}
+
 export default function TransferenciasPage() {
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<TransferenciaListItem[]>([]);
@@ -48,6 +56,7 @@ export default function TransferenciasPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(true);
 
   const nombreDeposito = useCallback(
     (id: string) => depositos.find((d) => d.id === id)?.nombre ?? id.slice(0, 8),
@@ -90,6 +99,10 @@ export default function TransferenciasPage() {
   useEffect(() => {
     loadBase();
   }, [loadBase]);
+
+  useEffect(() => {
+    if (activa) setShowCreate(false);
+  }, [activa?.id]);
 
   useEffect(() => {
     if (!origenId) {
@@ -193,6 +206,7 @@ export default function TransferenciasPage() {
       setEpcsText("");
       setSelectedIds([]);
       setNotas("");
+      setShowCreate(false);
       await refreshLista();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al crear la transferencia");
@@ -208,6 +222,7 @@ export default function TransferenciasPage() {
       const data = await apiFetch<Transferencia>(`/transferencias/${id}`);
       setActiva(data);
       setEpcsText("");
+      setShowCreate(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al abrir transferencia");
     } finally {
@@ -289,182 +304,160 @@ export default function TransferenciasPage() {
     );
   };
 
+  const stepIndex = !activa
+    ? 0
+    : activa.estado === "pendiente"
+      ? 1
+      : activa.estado === "en_transito"
+        ? 2
+        : 3;
+
   return (
     <div className="page">
       <PageHeader
         title="Transferencias"
         subtitle="Movimiento entre depósitos con confirmación por EPC"
+      >
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            setShowCreate((v) => !v);
+            if (!showCreate) setActiva(null);
+          }}
+        >
+          {showCreate ? "Cancelar" : "+ Nueva orden"}
+        </button>
+      </PageHeader>
+
+      <Stepper
+        steps={[
+          { id: "crear", label: "Crear" },
+          { id: "origen", label: "Origen" },
+          { id: "destino", label: "Destino" },
+        ]}
+        current={stepIndex}
       />
 
-      {error && <p className="error">{error}</p>}
-      {loading && <p className="muted">Cargando...</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && (
+        <p className="muted" aria-busy="true">
+          Cargando…
+        </p>
+      )}
 
-      <section className="card">
-        <h3>Nueva orden</h3>
-        <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
-          <div className="two-col">
+      {showCreate && (
+        <section className="card panel-focus">
+          <h3>Nueva orden</h3>
+          <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
+            <div className="two-col">
+              <label className="field">
+                <span>Depósito origen</span>
+                <select value={origenId} onChange={(e) => setOrigenId(e.target.value)} required>
+                  {depositos.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Depósito destino</span>
+                <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} required>
+                  {depositos.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <label className="field">
-              <span>Depósito origen</span>
-              <select value={origenId} onChange={(e) => setOrigenId(e.target.value)} required>
-                {depositos.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.nombre}
-                  </option>
-                ))}
+              <span>Ubicación destino</span>
+              <select
+                value={ubicacionDestinoId}
+                onChange={(e) => setUbicacionDestinoId(e.target.value)}
+                required
+                disabled={ubicacionesDestino.length === 0}
+              >
+                {ubicacionesDestino.length === 0 ? (
+                  <option value="">Sin ubicaciones en destino</option>
+                ) : (
+                  ubicacionesDestino.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
-            <label className="field">
-              <span>Depósito destino</span>
-              <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} required>
-                {depositos.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
 
-          <label className="field">
-            <span>Ubicación destino</span>
-            <select
-              value={ubicacionDestinoId}
-              onChange={(e) => setUbicacionDestinoId(e.target.value)}
-              required
-              disabled={ubicacionesDestino.length === 0}
-            >
-              {ubicacionesDestino.length === 0 ? (
-                <option value="">Sin ubicaciones en destino</option>
+            <label className="field">
+              <span>Notas (opcional)</span>
+              <input
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                maxLength={2000}
+                placeholder="Motivo o referencia"
+              />
+            </label>
+
+            <fieldset className="stock-picker">
+              <legend>Activos en origen ({stock?.total ?? 0})</legend>
+              {!stock || stock.activos.length === 0 ? (
+                <p className="muted">No hay activos con ubicación en el depósito origen.</p>
               ) : (
-                ubicacionesDestino.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Notas (opcional)</span>
-            <input
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              maxLength={2000}
-              placeholder="Motivo o referencia"
-            />
-          </label>
-
-          <fieldset className="stock-picker">
-            <legend>Activos en origen ({stock?.total ?? 0})</legend>
-            {!stock || stock.activos.length === 0 ? (
-              <p className="muted">No hay activos con ubicación en el depósito origen.</p>
-            ) : (
-              <ul className="simple-list checkbox-list">
-                {stock.activos.map((a) => (
-                  <li key={a.activo_id}>
-                    <label className="checkbox-field">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(a.activo_id)}
-                        onChange={() => toggleActivo(a.activo_id)}
-                      />
-                      <span>
-                        <strong>{a.numero_patrimonial}</strong> — {a.descripcion}
-                        {a.epc && <span className="muted mono"> · {a.epc}</span>}
-                        <span className="muted">
-                          {" "}
-                          · {a.sector_nombre}/{a.ubicacion_codigo}
+                <ul className="simple-list checkbox-list">
+                  {stock.activos.map((a) => (
+                    <li key={a.activo_id}>
+                      <label className="checkbox-field">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(a.activo_id)}
+                          onChange={() => toggleActivo(a.activo_id)}
+                        />
+                        <span>
+                          <strong>{a.numero_patrimonial}</strong> — {a.descripcion}
+                          {a.epc && <span className="muted mono"> · {a.epc}</span>}
+                          <span className="muted">
+                            {" "}
+                            · {a.sector_nombre}/{a.ubicacion_codigo}
+                          </span>
                         </span>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </fieldset>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </fieldset>
 
-          <div className="form-actions">
-            <button type="submit" className="btn primary" disabled={busy}>
-              {busy ? "Creando..." : "Crear transferencia"}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card">
-        <div className="section-header">
-          <h3>Órdenes</h3>
-          <ExportButtons
-            basePath="/reportes/transferencias"
-            filenameBase="transferencias"
-            disabled={lista.length === 0}
-          />
-        </div>
-        {lista.length === 0 ? (
-          <p className="muted">Todavía no hay transferencias.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Estado</th>
-                  <th>Origen</th>
-                  <th>Destino</th>
-                  <th>Activos</th>
-                  <th>Creada</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lista.map((t) => (
-                  <tr key={t.id} className={activa?.id === t.id ? "row-active" : undefined}>
-                    <td>
-                      <span
-                        className={`badge ${
-                          t.estado === "completada"
-                            ? "ok"
-                            : t.estado === "cancelada"
-                              ? "warn"
-                              : "ok"
-                        }`}
-                      >
-                        {estadoLabel(t.estado)}
-                      </span>
-                    </td>
-                    <td>{nombreDeposito(t.deposito_origen_id)}</td>
-                    <td>{nombreDeposito(t.deposito_destino_id)}</td>
-                    <td>
-                      {t.confirmados_destino}/{t.total_activos}
-                    </td>
-                    <td className="muted">
-                      {new Date(t.creado_en).toLocaleString("es-AR")}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn secondary btn-sm"
-                        onClick={() => abrir(t.id)}
-                      >
-                        Abrir
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+            <div className="form-actions">
+              <button type="submit" className="btn primary" disabled={busy}>
+                {busy ? "Creando…" : "Crear transferencia"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {activa && (
-        <section className="card">
+        <section className="card panel-focus">
           <div className="section-header">
             <h3>Transferencia — {estadoLabel(activa.estado)}</h3>
-            <ExportButtons
-              basePath={`/reportes/transferencias/${activa.id}`}
-              filenameBase={`transferencia_${activa.id.slice(0, 8)}`}
-            />
+            <div className="section-header-right">
+              <span className={`badge ${estadoBadgeClass(activa.estado)}`}>
+                {estadoLabel(activa.estado)}
+              </span>
+              <ExportButtons
+                basePath={`/reportes/transferencias/${activa.id}`}
+                filenameBase={`transferencia_${activa.id.slice(0, 8)}`}
+              />
+            </div>
           </div>
           <p className="muted">
             {nombreDeposito(activa.deposito_origen_id)} →{" "}
@@ -499,6 +492,7 @@ export default function TransferenciasPage() {
                   onChange={(e) => setEpcsText(e.target.value)}
                   rows={4}
                   placeholder="Uno por línea, coma o espacio"
+                  aria-label="EPCs leídos"
                 />
               </label>
               <div className="form-actions">
@@ -525,7 +519,12 @@ export default function TransferenciasPage() {
                     Confirmar destino
                   </button>
                 )}
-                <button type="button" className="btn secondary danger" disabled={busy} onClick={cancelar}>
+                <button
+                  type="button"
+                  className="btn secondary danger"
+                  disabled={busy}
+                  onClick={cancelar}
+                >
                   Cancelar orden
                 </button>
               </div>
@@ -539,6 +538,79 @@ export default function TransferenciasPage() {
           </div>
         </section>
       )}
+
+      <section className="card">
+        <div className="section-header">
+          <h3>Órdenes</h3>
+          <ExportButtons
+            basePath="/reportes/transferencias"
+            filenameBase="transferencias"
+            disabled={lista.length === 0}
+          />
+        </div>
+        {loading ? null : lista.length === 0 ? (
+          <EmptyState
+            title="Sin transferencias"
+            description="Creá una orden para mover activos entre depósitos."
+            action={
+              <button
+                type="button"
+                className="btn primary btn-sm"
+                onClick={() => {
+                  setActiva(null);
+                  setShowCreate(true);
+                }}
+              >
+                + Nueva orden
+              </button>
+            }
+          />
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table dense">
+              <thead>
+                <tr>
+                  <th>Estado</th>
+                  <th>Origen</th>
+                  <th>Destino</th>
+                  <th>Activos</th>
+                  <th>Creada</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((t) => (
+                  <tr key={t.id} className={activa?.id === t.id ? "row-active" : undefined}>
+                    <td>
+                      <span className={`badge ${estadoBadgeClass(t.estado)}`}>
+                        {estadoLabel(t.estado)}
+                      </span>
+                    </td>
+                    <td>{nombreDeposito(t.deposito_origen_id)}</td>
+                    <td>{nombreDeposito(t.deposito_destino_id)}</td>
+                    <td>
+                      {t.confirmados_destino}/{t.total_activos}
+                    </td>
+                    <td className="muted">
+                      {new Date(t.creado_en).toLocaleString("es-AR")}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn secondary btn-sm"
+                        onClick={() => abrir(t.id)}
+                        disabled={busy}
+                      >
+                        Abrir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

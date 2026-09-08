@@ -89,9 +89,12 @@ describe("InventariosPage", () => {
     await user.selectOptions(screen.getByLabelText(/depósito para inventario/i), "dep-1");
     await user.click(screen.getByRole("button", { name: /iniciar inventario/i }));
 
-    expect(await screen.findByText("en_curso")).toBeInTheDocument();
+    expect(await screen.findByText("En curso")).toBeInTheDocument();
     expect(screen.getByLabelText(/epcs leídos/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cerrar inventario/i })).toBeInTheDocument();
-    expect(screen.getByText(/E280AAA/)).toBeInTheDocument();
+    expect(screen.getByText(/Esperados con EPC:\s*1/)).toBeInTheDocument();
+    expect(screen.getByText("Esperado").closest(".status-item")?.querySelector("strong")).toHaveTextContent(
+      "2",
+    );
   });
 });

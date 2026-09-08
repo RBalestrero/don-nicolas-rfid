@@ -113,14 +113,18 @@ export default function DepositosPage() {
           className="btn primary"
           onClick={() => setShowForm((v) => !v)}
         >
-          {showForm ? "Ocultar" : "+ Nuevo depósito"}
+          {showForm ? "Cancelar" : "+ Nuevo depósito"}
         </button>
       </PageHeader>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
 
       {showForm && (
-        <section className="card">
+        <section className="card panel-focus">
           <h3>Alta de depósito</h3>
           <DepositoForm
             onSubmit={handleCreateDeposito}
@@ -135,7 +139,15 @@ export default function DepositosPage() {
         </div>
         {loading && <p className="muted">Cargando depósitos...</p>}
         {!loading && depositos.length === 0 && (
-          <p className="empty-state">No hay depósitos. Creá el primero.</p>
+          <div className="empty-state-block" role="status">
+            <p className="empty-state-title">Sin depósitos</p>
+            <p className="empty-state">Creá el primero para armar sectores y ubicaciones.</p>
+            <div className="empty-state-action">
+              <button type="button" className="btn primary btn-sm" onClick={() => setShowForm(true)}>
+                + Nuevo depósito
+              </button>
+            </div>
+          </div>
         )}
         {!loading && depositos.length > 0 && (
           <div className="deposito-selector" role="listbox" aria-label="Lista de depósitos">
@@ -157,9 +169,11 @@ export default function DepositosPage() {
 
       {detalle && (
         <>
-          <div className="tabs">
+          <div className="tabs" role="tablist" aria-label="Vista del depósito">
             <button
               type="button"
+              role="tab"
+              aria-selected={tab === "estructura"}
               className={`tab ${tab === "estructura" ? "active" : ""}`}
               onClick={() => setTab("estructura")}
             >
@@ -167,6 +181,8 @@ export default function DepositosPage() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={tab === "stock"}
               className={`tab ${tab === "stock" ? "active" : ""}`}
               onClick={() => setTab("stock")}
             >

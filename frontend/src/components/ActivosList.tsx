@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import type { Activo, UbicacionAsignada } from "../types";
+import EmptyState from "./EmptyState";
 
 function formatUbicacion(ubicacion: UbicacionAsignada | null | undefined): string {
   if (!ubicacion) return "Sin ubicación";
@@ -19,6 +21,7 @@ interface ActivosListProps {
   onHistorial: (activoId: string) => void;
   onFotos: (activoId: string) => void;
   onDeactivate: (activoId: string) => void;
+  onCreateRequest?: () => void;
 }
 
 export default function ActivosList({
@@ -35,18 +38,49 @@ export default function ActivosList({
   onHistorial,
   onFotos,
   onDeactivate,
+  onCreateRequest,
 }: ActivosListProps) {
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuId) return;
+    const onDocClick = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [menuId]);
+
   if (loading) {
-    return <p className="muted">Cargando activos...</p>;
+    return (
+      <p className="muted" aria-busy="true" aria-live="polite">
+        Cargando activos…
+      </p>
+    );
   }
 
   if (activos.length === 0) {
-    return <p className="muted">No hay activos registrados. Creá el primero con el formulario.</p>;
+    return (
+      <EmptyState
+        title="Sin activos"
+        description="Creá el primero para empezar a ubicar e inventariar."
+        action={
+          onCreateRequest ? (
+            <button type="button" className="btn primary btn-sm" onClick={onCreateRequest}>
+              + Nuevo activo
+            </button>
+          ) : undefined
+        }
+      />
+    );
   }
 
   return (
     <div className="table-wrap">
-      <table className="data-table">
+      <table className="data-table dense">
         <thead>
           <tr>
             <th>Patrimonio</th>
@@ -66,13 +100,15 @@ export default function ActivosList({
             const isHistorial = historialId === activo.id;
             const isFotos = fotosId === activo.id;
             const rowActive = isAssigning || isEditing || isHistorial || isFotos;
+            const menuOpen = menuId === activo.id;
+
             return (
               <tr key={activo.id} className={rowActive ? "row-active" : undefined}>
-                <td>{activo.numero_patrimonial}</td>
+                <td className="mono">{activo.numero_patrimonial}</td>
                 <td>{activo.descripcion}</td>
                 <td>{activo.categoria.nombre}</td>
                 <td className="mono">{activo.epc ?? "—"}</td>
-                <td>{formatUbicacion(ubicacion)}</td>
+                <td className={ubicacion ? undefined : "text-warn"}>{formatUbicacion(ubicacion)}</td>
                 <td>
                   <span className={`badge ${activo.activo ? "ok" : "warn"}`}>
                     {activo.activo ? "Activo" : "Inactivo"}
@@ -83,6 +119,7 @@ export default function ActivosList({
                     <button
                       type="button"
                       className="btn secondary btn-sm"
+                      aria-pressed={isEditing}
                       onClick={() => onEdit(activo.id)}
                     >
                       {isEditing ? "Cerrar" : "Editar"}
@@ -90,48 +127,78 @@ export default function ActivosList({
                     <button
                       type="button"
                       className="btn secondary btn-sm"
-                      onClick={() => onFotos(activo.id)}
-                    >
-                      {isFotos ? "Cerrar fotos" : "Fotos"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn secondary btn-sm"
-                      onClick={() => onHistorial(activo.id)}
-                    >
-                      {isHistorial ? "Cerrar historial" : "Historial"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn secondary btn-sm"
+                      aria-pressed={isAssigning}
                       onClick={() => onAssign(activo.id)}
                     >
                       {ubicacion
                         ? isAssigning
                           ? "Cerrar"
-                          : "Cambiar"
+                          : "Ubicación"
                         : isAssigning
                           ? "Cerrar"
                           : "Asignar"}
                     </button>
-                    {ubicacion && (
+                    <div className="action-menu" ref={menuOpen ? menuRef : undefined}>
                       <button
                         type="button"
                         className="btn secondary btn-sm"
-                        onClick={() => onUnassign(activo.id)}
+                        aria-expanded={menuOpen}
+                        aria-haspopup="menu"
+                        aria-label={`Más acciones de ${activo.numero_patrimonial}`}
+                        onClick={() => setMenuId(menuOpen ? null : activo.id)}
                       >
-                        Quitar
+                        Más
                       </button>
-                    )}
-                    {activo.activo && (
-                      <button
-                        type="button"
-                        className="btn secondary btn-sm danger"
-                        onClick={() => onDeactivate(activo.id)}
-                      >
-                        Dar de baja
-                      </button>
-                    )}
+                      {menuOpen && (
+                        <div className="action-menu-panel" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuId(null);
+                              onFotos(activo.id);
+                            }}
+                          >
+                            {isFotos ? "Cerrar fotos" : "Fotos"}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuId(null);
+                              onHistorial(activo.id);
+                            }}
+                          >
+                            {isHistorial ? "Cerrar historial" : "Historial"}
+                          </button>
+                          {ubicacion && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuId(null);
+                                onUnassign(activo.id);
+                              }}
+                            >
+                              Quitar ubicación
+                            </button>
+                          )}
+                          {activo.activo && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="danger"
+                              onClick={() => {
+                                setMenuId(null);
+                                onDeactivate(activo.id);
+                              }}
+                            >
+                              Dar de baja
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </td>
               </tr>

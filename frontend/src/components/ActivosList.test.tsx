@@ -44,7 +44,7 @@ const noopHandlers = {
 };
 
 describe("ActivosList", () => {
-  it("muestra ubicación asignada y dispara acciones", async () => {
+  it("muestra ubicación asignada y dispara acciones densas", async () => {
     const user = userEvent.setup();
     const onAssign = vi.fn();
     const onUnassign = vi.fn();
@@ -73,22 +73,26 @@ describe("ActivosList", () => {
 
     expect(screen.getByText(/Central \/ Sector A \/ A-01/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /cambiar/i }));
+    await user.click(screen.getByRole("button", { name: /^ubicación$/i }));
     expect(onAssign).toHaveBeenCalledWith("act-1");
-
-    await user.click(screen.getByRole("button", { name: /quitar/i }));
-    expect(onUnassign).toHaveBeenCalledWith("act-1");
 
     await user.click(screen.getByRole("button", { name: /^editar$/i }));
     expect(onEdit).toHaveBeenCalledWith("act-1");
 
-    await user.click(screen.getByRole("button", { name: /^fotos$/i }));
+    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^fotos$/i }));
     expect(onFotos).toHaveBeenCalledWith("act-1");
 
-    await user.click(screen.getByRole("button", { name: /^historial$/i }));
+    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^historial$/i }));
     expect(onHistorial).toHaveBeenCalledWith("act-1");
 
-    await user.click(screen.getByRole("button", { name: /dar de baja/i }));
+    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
+    await user.click(screen.getByRole("menuitem", { name: /quitar ubicación/i }));
+    expect(onUnassign).toHaveBeenCalledWith("act-1");
+
+    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
+    await user.click(screen.getByRole("menuitem", { name: /dar de baja/i }));
     expect(onDeactivate).toHaveBeenCalledWith("act-1");
   });
 

@@ -192,6 +192,6 @@ describe("TransferenciasPage", () => {
       );
     });
 
-    expect(await screen.findByText(/En tránsito/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Transferencia — En tránsito/i })).toBeInTheDocument();
   });
 });

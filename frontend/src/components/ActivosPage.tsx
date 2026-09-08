@@ -236,9 +236,11 @@ export default function ActivosPage() {
         title="Activos"
         subtitle="Alta, ubicación, fotos e historial patrimonial"
       >
-        <div className="tabs">
+        <div className="tabs" role="tablist" aria-label="Sección de activos">
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === "activos"}
             className={`tab ${tab === "activos" ? "active" : ""}`}
             onClick={() => setTab("activos")}
           >
@@ -246,6 +248,8 @@ export default function ActivosPage() {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === "categorias"}
             className={`tab ${tab === "categorias" ? "active" : ""}`}
             onClick={() => setTab("categorias")}
           >
@@ -254,47 +258,47 @@ export default function ActivosPage() {
         </div>
       </PageHeader>
 
-      {error && <p className="error">{error}</p>}
-      {actionError && <p className="error">{actionError}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {actionError && (
+        <p className="error" role="alert">
+          {actionError}
+        </p>
+      )}
 
       {tab === "activos" && (
         <>
-          <section className="card">
-            <div className="section-header">
-              <h3>Listado</h3>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => {
-                  closePanels();
-                  setShowForm((v) => !v);
-                }}
-              >
-                {showForm ? "Ocultar" : "+ Nuevo"}
-              </button>
-            </div>
-            <ActivosList
-              activos={activos}
-              ubicaciones={ubicaciones}
-              loading={loading}
-              assigningId={assigningId}
-              editingId={editingId}
-              historialId={historialId}
-              fotosId={fotosId}
-              onAssign={handleToggleAssign}
-              onUnassign={handleUnassign}
-              onEdit={handleToggleEdit}
-              onHistorial={handleToggleHistorial}
-              onFotos={handleToggleFotos}
-              onDeactivate={handleDeactivate}
-            />
-          </section>
+          {showForm && (
+            <section className="card panel-focus">
+              <h3>Alta de activo</h3>
+              <ActivoForm
+                categorias={categorias}
+                onSubmit={handleCreateActivo}
+                onCancel={() => setShowForm(false)}
+              />
+            </section>
+          )}
+
+          {editingActivo && (
+            <section className="card panel-focus">
+              <h3>Editar — {editingActivo.numero_patrimonial}</h3>
+              <ActivoForm
+                key={editingActivo.id}
+                categorias={categorias}
+                initial={editingActivo}
+                onSubmit={handleUpdateActivo}
+                onCancel={() => setEditingId(null)}
+                submitLabel="Guardar cambios"
+              />
+            </section>
+          )}
 
           {assigningActivo && (
-            <section className="card">
-              <h3>
-                Asignar ubicación — {assigningActivo.numero_patrimonial}
-              </h3>
+            <section className="card panel-focus">
+              <h3>Ubicación — {assigningActivo.numero_patrimonial}</h3>
               <p className="muted">
                 {assigningActivo.descripcion}
                 {ubicaciones[assigningActivo.id]
@@ -309,23 +313,9 @@ export default function ActivosPage() {
             </section>
           )}
 
-          {editingActivo && (
-            <section className="card">
-              <h3>Editar activo — {editingActivo.numero_patrimonial}</h3>
-              <ActivoForm
-                key={editingActivo.id}
-                categorias={categorias}
-                initial={editingActivo}
-                onSubmit={handleUpdateActivo}
-                onCancel={() => setEditingId(null)}
-                submitLabel="Guardar cambios"
-              />
-            </section>
-          )}
-
           {fotosActivo && (
-            <section className="card">
-              <h3>Fotografías — {fotosActivo.numero_patrimonial}</h3>
+            <section className="card panel-focus">
+              <h3>Fotos — {fotosActivo.numero_patrimonial}</h3>
               <p className="muted">{fotosActivo.descripcion}</p>
               <ActivoFotos key={fotosActivo.id} activoId={fotosActivo.id} />
               <div className="form-actions">
@@ -337,7 +327,7 @@ export default function ActivosPage() {
           )}
 
           {historialActivo && (
-            <section className="card">
+            <section className="card panel-focus">
               <h3>Historial — {historialActivo.numero_patrimonial}</h3>
               <p className="muted">{historialActivo.descripcion}</p>
               <ActivoHistorial entries={historial} loading={historialLoading} />
@@ -356,22 +346,46 @@ export default function ActivosPage() {
             </section>
           )}
 
-          {showForm && (
-            <section className="card">
-              <h3>Alta de activo</h3>
-              <ActivoForm
-                categorias={categorias}
-                onSubmit={handleCreateActivo}
-                onCancel={() => setShowForm(false)}
-              />
-            </section>
-          )}
+          <section className="card">
+            <div className="section-header">
+              <h3>Listado</h3>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => {
+                  closePanels();
+                  setShowForm((v) => !v);
+                }}
+              >
+                {showForm ? "Cancelar" : "+ Nuevo activo"}
+              </button>
+            </div>
+            <ActivosList
+              activos={activos}
+              ubicaciones={ubicaciones}
+              loading={loading}
+              assigningId={assigningId}
+              editingId={editingId}
+              historialId={historialId}
+              fotosId={fotosId}
+              onAssign={handleToggleAssign}
+              onUnassign={handleUnassign}
+              onEdit={handleToggleEdit}
+              onHistorial={handleToggleHistorial}
+              onFotos={handleToggleFotos}
+              onDeactivate={handleDeactivate}
+              onCreateRequest={() => {
+                closePanels();
+                setShowForm(true);
+              }}
+            />
+          </section>
         </>
       )}
 
       {tab === "categorias" && (
         <section className="card">
-          <h3>Nueva categoría</h3>
+          <h3>Categorías</h3>
           <CategoriaForm onSubmit={handleCreateCategoria} />
           {!loading && categorias.length > 0 && (
             <ul className="simple-list">

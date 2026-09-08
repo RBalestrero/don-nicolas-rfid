@@ -431,6 +431,134 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
+  align-items: center;
+}
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 20;
+  min-width: 10.5rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.action-menu-panel button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-menu-panel button:hover,
+.action-menu-panel button:focus-visible {
+  background: var(--bg-input);
+  outline: none;
+}
+
+.action-menu-panel button.danger {
+  color: var(--danger);
+}
+
+.panel-focus {
+  border-color: rgba(47, 111, 237, 0.35);
+  box-shadow: 0 0 0 1px rgba(47, 111, 237, 0.12);
+}
+
+.empty-state-block {
+  padding: 1.25rem 0.25rem;
+  text-align: left;
+}
+
+.empty-state-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.empty-state-action {
+  margin-top: 0.75rem;
+}
+
+.text-warn {
+  color: var(--warn);
+}
+
+.stepper {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.stepper-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.stepper-item.done {
+  color: var(--ok);
+}
+
+.stepper-item.done .stepper-index {
+  background: var(--ok-bg);
+  border-color: transparent;
+  color: var(--ok);
+}
+
+.stepper-item.current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stepper-item.current .stepper-index {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn:focus-visible,
+.tab:focus-visible,
+.nav-item:focus-visible,
+.deposito-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* —— Tables —— */

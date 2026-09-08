@@ -59,9 +59,9 @@ describe("DepositosPage", () => {
     render(<DepositosPage />);
 
     expect(await screen.findByRole("heading", { name: /^depósitos$/i })).toBeInTheDocument();
-    expect(await screen.findByText(/no hay depósitos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sin depósitos/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /\+ nuevo depósito/i }));
+    await user.click(screen.getAllByRole("button", { name: /\+ nuevo depósito/i })[0]);
     await user.type(screen.getByLabelText(/^nombre$/i), "Depósito Central");
     await user.click(screen.getByRole("button", { name: /crear depósito/i }));
 

@@ -10,12 +10,20 @@ import type {
 } from "../types";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
+import EmptyState from "./EmptyState";
+import Stepper from "./Stepper";
 
 function parseEpcs(raw: string): string[] {
   return raw
     .split(/[\s,;]+/)
     .map((e) => e.trim().toUpperCase())
     .filter((e) => e.length > 0);
+}
+
+function estadoInventario(estado: string): string {
+  if (estado === "en_curso") return "En curso";
+  if (estado === "cerrado") return "Cerrado";
+  return estado;
 }
 
 function DetalleList({ title, items }: { title: string; items: DetalleInventario[] }) {
@@ -53,6 +61,7 @@ export default function InventariosPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(true);
 
   const depositoNombre = useMemo(() => {
     const id = activo?.deposito_id ?? depositoId;
@@ -79,6 +88,10 @@ export default function InventariosPage() {
   useEffect(() => {
     loadDepositosYLista();
   }, [loadDepositosYLista]);
+
+  useEffect(() => {
+    if (activo) setShowCreate(false);
+  }, [activo?.id]);
 
   const refreshLista = async () => {
     const items = await apiFetch<InventarioListItem[]>("/inventarios?limit=30");
@@ -175,103 +188,70 @@ export default function InventariosPage() {
   const esperados = (activo?.detalles ?? []).filter(
     (d) => d.estado === "esperado" || d.estado === "faltante" || d.estado === "encontrado",
   );
+  const stepIndex = !activo ? 0 : activo.estado === "en_curso" ? 1 : 2;
 
   return (
     <div className="page">
       <PageHeader
         title="Inventarios"
         subtitle="Conteo cíclico por depósito · pegá EPCs o leé RFID"
+      >
+        <button type="button" className="btn primary" onClick={() => setShowCreate((v) => !v)}>
+          {showCreate ? "Cancelar" : "+ Nuevo conteo"}
+        </button>
+      </PageHeader>
+
+      <Stepper
+        steps={[
+          { id: "iniciar", label: "Iniciar" },
+          { id: "lecturas", label: "Lecturas" },
+          { id: "cerrar", label: "Cerrar / reporte" },
+        ]}
+        current={stepIndex}
       />
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
 
-      <section className="card">
-        <h3>Nuevo conteo</h3>
-        <form className="form inline-form" onSubmit={handleCrear}>
-          <label className="field">
-            Depósito
-            <select
-              value={depositoId}
-              onChange={(e) => setDepositoId(e.target.value)}
-              disabled={loading || busy}
-              aria-label="Depósito para inventario"
-            >
-              <option value="">Seleccioná un depósito</option>
-              {depositos.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="form-actions">
-            <button type="submit" className="btn primary" disabled={busy || !depositoId}>
-              {busy ? "Creando…" : "Iniciar inventario"}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card">
-        <h3>Sesiones</h3>
-        {loading ? (
-          <p className="muted">Cargando…</p>
-        ) : lista.length === 0 ? (
-          <p className="muted">Todavía no hay inventarios.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Inicio</th>
-                  <th>Estado</th>
-                  <th>Esp</th>
-                  <th>OK</th>
-                  <th>Falt</th>
-                  <th>Sobr</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lista.map((item) => (
-                  <tr key={item.id} className={activo?.id === item.id ? "row-active" : undefined}>
-                    <td>{new Date(item.iniciado_en).toLocaleString()}</td>
-                    <td>
-                      <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
-                        {item.estado}
-                      </span>
-                    </td>
-                    <td>{item.total_esperado}</td>
-                    <td>{item.total_encontrado}</td>
-                    <td>{item.total_faltante}</td>
-                    <td>{item.total_sobrante}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn secondary btn-sm"
-                        onClick={() => handleAbrir(item.id)}
-                        disabled={busy}
-                      >
-                        Abrir
-                      </button>
-                    </td>
-                  </tr>
+      {showCreate && (
+        <section className="card panel-focus">
+          <h3>Nuevo conteo</h3>
+          <form className="form inline-form" onSubmit={handleCrear}>
+            <label className="field">
+              Depósito
+              <select
+                value={depositoId}
+                onChange={(e) => setDepositoId(e.target.value)}
+                disabled={loading || busy}
+                aria-label="Depósito para inventario"
+              >
+                <option value="">Seleccioná un depósito</option>
+                {depositos.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </select>
+            </label>
+            <div className="form-actions">
+              <button type="submit" className="btn primary" disabled={busy || !depositoId}>
+                {busy ? "Creando…" : "Iniciar inventario"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {activo && (
-        <section className="card">
+        <section className="card panel-focus">
           <div className="section-header">
-            <h3>
-              Inventario · {depositoNombre}
-            </h3>
+            <h3>Inventario · {depositoNombre}</h3>
             <div className="section-header-right">
               <span className={`badge ${activo.estado === "cerrado" ? "ok" : "warn"}`}>
-                {activo.estado}
+                {estadoInventario(activo.estado)}
               </span>
               {activo.estado === "cerrado" && (
                 <ExportButtons
@@ -309,7 +289,7 @@ export default function InventariosPage() {
                 <textarea
                   value={epcsText}
                   onChange={(e) => setEpcsText(e.target.value)}
-                  rows={6}
+                  rows={5}
                   placeholder={"E280117000000211D6A6B53D\nE280..."}
                   disabled={busy}
                   aria-label="EPCs leídos"
@@ -324,29 +304,13 @@ export default function InventariosPage() {
                 >
                   Registrar lecturas
                 </button>
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={handleCerrar}
-                  disabled={busy}
-                >
+                <button type="button" className="btn primary" onClick={handleCerrar} disabled={busy}>
                   Cerrar inventario
                 </button>
               </div>
-              <h4>Esperados con EPC ({esperados.filter((d) => d.epc).length})</h4>
-              <ul className="simple-list compact-list">
-                {esperados
-                  .filter((d) => d.epc)
-                  .slice(0, 40)
-                  .map((d) => (
-                    <li key={d.id} className="mono">
-                      {d.epc} · {d.numero_patrimonial ?? "—"}
-                    </li>
-                  ))}
-                {esperados.filter((d) => d.epc).length > 40 && (
-                  <li className="muted">… y más</li>
-                )}
-              </ul>
+              <p className="muted">
+                Esperados con EPC: {esperados.filter((d) => d.epc).length}
+              </p>
             </>
           )}
 
@@ -364,6 +328,67 @@ export default function InventariosPage() {
           )}
         </section>
       )}
+
+      <section className="card">
+        <h3>Sesiones</h3>
+        {loading ? (
+          <p className="muted" aria-busy="true">
+            Cargando…
+          </p>
+        ) : lista.length === 0 ? (
+          <EmptyState
+            title="Sin inventarios"
+            description="Iniciá un conteo para comparar stock esperado vs leído."
+            action={
+              <button type="button" className="btn primary btn-sm" onClick={() => setShowCreate(true)}>
+                + Nuevo conteo
+              </button>
+            }
+          />
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table dense">
+              <thead>
+                <tr>
+                  <th>Inicio</th>
+                  <th>Estado</th>
+                  <th>Esp</th>
+                  <th>OK</th>
+                  <th>Falt</th>
+                  <th>Sobr</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((item) => (
+                  <tr key={item.id} className={activo?.id === item.id ? "row-active" : undefined}>
+                    <td>{new Date(item.iniciado_en).toLocaleString("es-AR")}</td>
+                    <td>
+                      <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
+                        {estadoInventario(item.estado)}
+                      </span>
+                    </td>
+                    <td>{item.total_esperado}</td>
+                    <td>{item.total_encontrado}</td>
+                    <td>{item.total_faltante}</td>
+                    <td>{item.total_sobrante}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn secondary btn-sm"
+                        onClick={() => handleAbrir(item.id)}
+                        disabled={busy}
+                      >
+                        Abrir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -48,6 +48,7 @@ export default function ExportButtons({
           type="button"
           className="btn secondary btn-sm"
           disabled={disabled || busy !== null}
+          aria-label={`Exportar ${formato.toUpperCase()}`}
           onClick={() => download(formato)}
         >
           {busy === formato ? "…" : formato.toUpperCase()}
