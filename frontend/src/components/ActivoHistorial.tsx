@@ -9,6 +9,7 @@ const ACCION_LABELS: Record<string, string> = {
   etiqueta_impresa: "Impresión de etiqueta",
   foto_agregada: "Foto agregada",
   foto_eliminada: "Foto eliminada",
+  transferencia: "Transferencia",
 };
 
 function formatAccion(accion: string): string {

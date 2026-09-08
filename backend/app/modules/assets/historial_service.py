@@ -28,6 +28,7 @@ class HistorialService:
     ACCION_ETIQUETA_IMPRESA = "etiqueta_impresa"
     ACCION_ASIGNACION_UBICACION = "asignacion_ubicacion"
     ACCION_DESASIGNACION_UBICACION = "desasignacion_ubicacion"
+    ACCION_TRANSFERENCIA = "transferencia"
 
     def __init__(self, db: Session):
         self.db = db

@@ -3,12 +3,13 @@ import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
 import DepositosPage from "./components/DepositosPage";
 import InventariosPage from "./components/InventariosPage";
+import TransferenciasPage from "./components/TransferenciasPage";
 import LoginForm from "./components/LoginForm";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
-type Page = "activos" | "depositos" | "inventarios";
+type Page = "activos" | "depositos" | "inventarios" | "transferencias";
 
 interface HealthResponse {
   status: string;
@@ -111,12 +112,20 @@ export default function App() {
         >
           Inventarios
         </button>
+        <button
+          type="button"
+          className={`nav-item ${page === "transferencias" ? "active" : ""}`}
+          onClick={() => setPage("transferencias")}
+        >
+          Transferencias
+        </button>
       </nav>
 
       <main className="main">
         {page === "activos" && <ActivosPage />}
         {page === "depositos" && <DepositosPage />}
         {page === "inventarios" && <InventariosPage />}
+        {page === "transferencias" && <TransferenciasPage />}
       </main>
 
       <footer className="footer">

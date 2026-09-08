@@ -65,6 +65,45 @@ export interface Fotografia {
   url: string;
 }
 
+export interface TransferenciaCreatePayload {
+  deposito_origen_id: string;
+  deposito_destino_id: string;
+  activo_ids: string[];
+  ubicacion_destino_id?: string | null;
+  notas?: string | null;
+}
+
+export interface DetalleTransferencia {
+  id: string;
+  activo_id: string;
+  epc: string | null;
+  numero_patrimonial: string | null;
+  descripcion: string | null;
+  ubicacion_origen_id: string | null;
+  confirmado_origen: boolean;
+  confirmado_destino: boolean;
+}
+
+export interface TransferenciaListItem {
+  id: string;
+  deposito_origen_id: string;
+  deposito_destino_id: string;
+  ubicacion_destino_id: string | null;
+  estado: string;
+  total_activos: number;
+  confirmados_origen: number;
+  confirmados_destino: number;
+  creado_en: string;
+  enviado_en: string | null;
+  completado_en: string | null;
+}
+
+export interface Transferencia extends TransferenciaListItem {
+  usuario_id: string | null;
+  notas: string | null;
+  detalles: DetalleTransferencia[];
+}
+
 export interface CategoriaCreatePayload {
   nombre: string;
   descripcion?: string | null;
