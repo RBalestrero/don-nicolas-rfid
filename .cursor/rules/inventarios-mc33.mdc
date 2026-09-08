@@ -1,0 +1,11 @@
+---
+description: Inventarios solo desde APK MC33; web es auditoría
+alwaysApply: true
+---
+
+# Inventarios: canal operativo
+
+- Los inventarios (iniciar, lecturas RFID, cerrar) se realizan **únicamente** con la APK en el dispositivo **MC33**.
+- En la **web**, Inventarios es **solo consulta/auditoría**: listar sesiones, ver métricas/detalle/reporte, exportar. No ofrecer alta, pegado de EPCs, registrar lecturas ni cerrar desde el frontend web.
+- No reintroducir flujos de conteo en web (stepper de ejecución, “Nuevo conteo”, etc.). Copy y empty states deben orientar al MC33.
+- El dashboard puede enlazar a inventarios para auditar abiertos/discrepancias, no para “iniciar conteo” en web.

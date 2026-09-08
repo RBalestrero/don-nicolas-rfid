@@ -205,7 +205,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             steps={[
               "Creá depósitos con sectores y ubicaciones",
               "Cargá activos y asignales ubicación",
-              "Abrí un inventario o una transferencia",
+              "Hacé inventarios desde la APK MC33 y transferencias desde web o móvil",
             ]}
             action={
               <div className="getting-started-actions">
@@ -247,7 +247,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         >
           <span className="kpi-label">Inventarios abiertos</span>
           <strong className="kpi-value">{kpis.inventarios_abiertos}</strong>
-          <span className="kpi-hint">Ir a conteo</span>
+          <span className="kpi-hint">Ir a auditoría</span>
         </button>
 
         <button
@@ -291,7 +291,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
               steps={
                 primerUso
                   ? undefined
-                  : ["Usá Inventarios para un conteo", "Usá Transferencias para mover stock"]
+                  : [
+                      "Los inventarios se operan en la APK MC33; acá los auditás",
+                      "Usá Transferencias para mover stock entre depósitos",
+                    ]
               }
               action={
                 <div className="getting-started-actions">
@@ -300,7 +303,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     className="btn secondary btn-sm"
                     onClick={() => onNavigate?.("inventarios")}
                   >
-                    Nuevo conteo
+                    Ver inventarios
                   </button>
                   <button
                     type="button"

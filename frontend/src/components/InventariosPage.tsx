@@ -1,25 +1,15 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import type {
   Deposito,
   DetalleInventario,
   Inventario,
-  InventarioCreatePayload,
   InventarioListItem,
   InventarioReporte,
 } from "../types";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
-import Stepper from "./Stepper";
-import { useToast } from "../context/ToastContext";
-
-function parseEpcs(raw: string): string[] {
-  return raw
-    .split(/[\s,;]+/)
-    .map((e) => e.trim().toUpperCase())
-    .filter((e) => e.length > 0);
-}
 
 function estadoInventario(estado: string): string {
   if (estado === "en_curso") return "En curso";
@@ -52,33 +42,37 @@ function DetalleList({ title, items }: { title: string; items: DetalleInventario
   );
 }
 
+function groupDetalles(detalles: DetalleInventario[]) {
+  return {
+    encontrados: detalles.filter((d) => d.estado === "encontrado"),
+    faltantes: detalles.filter((d) => d.estado === "faltante" || d.estado === "esperado"),
+    sobrantes: detalles.filter((d) => d.estado === "sobrante"),
+  };
+}
+
 export default function InventariosPage() {
-  const toast = useToast();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<InventarioListItem[]>([]);
-  const [depositoId, setDepositoId] = useState("");
   const [activo, setActivo] = useState<Inventario | null>(null);
   const [reporte, setReporte] = useState<InventarioReporte | null>(null);
-  const [epcsText, setEpcsText] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(true);
 
   const depositoNombre = useMemo(() => {
-    const id = activo?.deposito_id ?? depositoId;
-    return depositos.find((d) => d.id === id)?.nombre ?? id;
-  }, [depositos, activo, depositoId]);
+    if (!activo) return "";
+    return depositos.find((d) => d.id === activo.deposito_id)?.nombre ?? activo.deposito_id;
+  }, [depositos, activo]);
 
-  const loadDepositosYLista = useCallback(async () => {
+  const loadLista = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const deps = await apiFetch<Deposito[]>("/depositos");
-      const activos = deps.filter((d) => d.activo);
-      setDepositos(activos);
-      setDepositoId((current) => current || activos[0]?.id || "");
-      const items = await apiFetch<InventarioListItem[]>("/inventarios?limit=30");
+      const [deps, items] = await Promise.all([
+        apiFetch<Deposito[]>("/depositos"),
+        apiFetch<InventarioListItem[]>("/inventarios?limit=50"),
+      ]);
+      setDepositos(deps.filter((d) => d.activo));
       setLista(items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar inventarios");
@@ -88,44 +82,8 @@ export default function InventariosPage() {
   }, []);
 
   useEffect(() => {
-    loadDepositosYLista();
-  }, [loadDepositosYLista]);
-
-  useEffect(() => {
-    if (activo) setShowCreate(false);
-  }, [activo?.id]);
-
-  const refreshLista = async () => {
-    const items = await apiFetch<InventarioListItem[]>("/inventarios?limit=30");
-    setLista(items);
-  };
-
-  const handleCrear = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!depositoId) {
-      setError("Seleccioná un depósito");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setReporte(null);
-    try {
-      const payload: InventarioCreatePayload = { deposito_id: depositoId };
-      const created = await apiFetch<Inventario>("/inventarios", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      setActivo(created);
-      setEpcsText("");
-      setShowCreate(false);
-      toast.success("Inventario iniciado");
-      await refreshLista();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear inventario");
-    } finally {
-      setBusy(false);
-    }
-  };
+    loadLista();
+  }, [loadLista]);
 
   const handleAbrir = async (id: string) => {
     setBusy(true);
@@ -134,7 +92,6 @@ export default function InventariosPage() {
     try {
       const inv = await apiFetch<Inventario>(`/inventarios/${id}`);
       setActivo(inv);
-      setEpcsText("");
       if (inv.estado === "cerrado") {
         const rep = await apiFetch<InventarioReporte>(`/inventarios/${id}/reporte`);
         setReporte(rep);
@@ -146,114 +103,33 @@ export default function InventariosPage() {
     }
   };
 
-  const handleRegistrarLecturas = async () => {
-    if (!activo) return;
-    const epcs = parseEpcs(epcsText);
-    if (epcs.length === 0) {
-      setError("Pegá al menos un EPC");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await apiFetch<Inventario>(`/inventarios/${activo.id}/lecturas`, {
-        method: "POST",
-        body: JSON.stringify({ epcs }),
-      });
-      setActivo(updated);
-      setEpcsText("");
-      toast.success(`Lecturas registradas (${epcs.length})`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al registrar lecturas");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const avance =
+    activo && activo.resumen.total_esperado > 0
+      ? Math.round((activo.resumen.total_encontrado / activo.resumen.total_esperado) * 100)
+      : null;
 
-  const handleCerrar = async () => {
-    if (!activo) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const epcs = parseEpcs(epcsText);
-      const closed = await apiFetch<Inventario>(`/inventarios/${activo.id}/cerrar`, {
-        method: "POST",
-        body: JSON.stringify({ epcs }),
-      });
-      setActivo(closed);
-      const rep = await apiFetch<InventarioReporte>(`/inventarios/${closed.id}/reporte`);
-      setReporte(rep);
-      toast.success(
-        rep.tiene_discrepancias
-          ? `Inventario cerrado · ${rep.coincidencia_pct.toFixed(0)}% coincidencia`
-          : "Inventario cerrado sin discrepancias",
-      );
-      await refreshLista();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cerrar inventario");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const esperados = (activo?.detalles ?? []).filter(
-    (d) => d.estado === "esperado" || d.estado === "faltante" || d.estado === "encontrado",
-  );
-  const stepIndex = !activo ? 0 : activo.estado === "en_curso" ? 1 : 2;
+  const detalleGrupos = activo ? groupDetalles(activo.detalles) : null;
 
   return (
     <div className="page">
       <PageHeader
         title="Inventarios"
-        subtitle="Conteo cíclico por depósito · pegá EPCs o leé RFID"
+        subtitle="Auditoría de conteos realizados con la APK en el MC33"
       >
-        <button type="button" className="btn primary" onClick={() => setShowCreate((v) => !v)}>
-          {showCreate ? "Cancelar" : "+ Nuevo conteo"}
+        <button type="button" className="btn secondary" onClick={loadLista} disabled={loading || busy}>
+          Actualizar
         </button>
       </PageHeader>
 
-      <Stepper
-        steps={[
-          { id: "iniciar", label: "Iniciar" },
-          { id: "lecturas", label: "Lecturas" },
-          { id: "cerrar", label: "Cerrar / reporte" },
-        ]}
-        current={stepIndex}
-      />
+      <p className="info-banner" role="note">
+        El alta, las lecturas RFID y el cierre se hacen solo desde la APK en el dispositivo MC33.
+        Acá consultás el avance, el reporte de discrepancias y exportás para auditoría.
+      </p>
 
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
-      )}
-
-      {showCreate && (
-        <section className="card panel-focus">
-          <h3>Nuevo conteo</h3>
-          <form className="form inline-form" onSubmit={handleCrear}>
-            <label className="field">
-              Depósito
-              <select
-                value={depositoId}
-                onChange={(e) => setDepositoId(e.target.value)}
-                disabled={loading || busy}
-                aria-label="Depósito para inventario"
-              >
-                <option value="">Seleccioná un depósito</option>
-                {depositos.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="form-actions">
-              <button type="submit" className="btn primary" disabled={busy || !depositoId}>
-                {busy ? "Creando…" : "Iniciar inventario"}
-              </button>
-            </div>
-          </form>
-        </section>
       )}
 
       {activo && (
@@ -273,7 +149,18 @@ export default function InventariosPage() {
               )}
             </div>
           </div>
-          <p className="muted mono">ID {activo.id}</p>
+          <p className="muted">
+            <span className="mono">ID {activo.id}</span>
+            {" · "}
+            Inicio {new Date(activo.iniciado_en).toLocaleString("es-AR")}
+            {activo.cerrado_en && (
+              <>
+                {" · "}
+                Cierre {new Date(activo.cerrado_en).toLocaleString("es-AR")}
+              </>
+            )}
+          </p>
+
           <div className="status-grid inventario-metrics">
             <div className="status-item">
               <span className="status-label">Esperado</span>
@@ -294,40 +181,16 @@ export default function InventariosPage() {
           </div>
 
           {activo.estado === "en_curso" && (
-            <>
-              <label className="field">
-                EPCs leídos (uno por línea, o separados por coma)
-                <textarea
-                  value={epcsText}
-                  onChange={(e) => setEpcsText(e.target.value)}
-                  rows={5}
-                  placeholder={"E280117000000211D6A6B53D\nE280..."}
-                  disabled={busy}
-                  aria-label="EPCs leídos"
-                />
-              </label>
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="btn secondary"
-                  onClick={handleRegistrarLecturas}
-                  disabled={busy}
-                >
-                  Registrar lecturas
-                </button>
-                <button type="button" className="btn primary" onClick={handleCerrar} disabled={busy}>
-                  Cerrar inventario
-                </button>
-              </div>
-              <p className="muted">
-                Esperados con EPC: {esperados.filter((d) => d.epc).length}
-              </p>
-            </>
+            <p className="muted">
+              Conteo en curso en el MC33
+              {avance !== null ? ` · avance aprox. ${avance}%` : ""}.
+              Actualizá para ver lecturas nuevas sincronizadas.
+            </p>
           )}
 
-          {reporte && (
+          {reporte ? (
             <div className="reporte-panel">
-              <h3>Reporte</h3>
+              <h3>Reporte de auditoría</h3>
               <p>
                 Coincidencia <strong>{reporte.coincidencia_pct.toFixed(1)}%</strong>
                 {reporte.tiene_discrepancias ? " · hay discrepancias" : " · sin discrepancias"}
@@ -336,30 +199,58 @@ export default function InventariosPage() {
               <DetalleList title="Sobrantes" items={reporte.sobrantes} />
               <DetalleList title="Encontrados" items={reporte.encontrados} />
             </div>
+          ) : (
+            detalleGrupos && (
+              <div className="reporte-panel">
+                <h3>Detalle parcial</h3>
+                <DetalleList title="Encontrados" items={detalleGrupos.encontrados} />
+                <DetalleList title="Pendientes / faltantes" items={detalleGrupos.faltantes} />
+                <DetalleList title="Sobrantes" items={detalleGrupos.sobrantes} />
+              </div>
+            )
           )}
+
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => {
+                setActivo(null);
+                setReporte(null);
+              }}
+            >
+              Cerrar detalle
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={busy}
+              onClick={() => handleAbrir(activo.id)}
+            >
+              {busy ? "Actualizando…" : "Refrescar"}
+            </button>
+          </div>
         </section>
       )}
 
       <section className="card">
-        <h3>Sesiones</h3>
+        <div className="section-header">
+          <h3>Sesiones</h3>
+          <span className="muted">{lista.length} registro{lista.length === 1 ? "" : "s"}</span>
+        </div>
         {loading ? (
           <p className="muted" aria-busy="true">
             Cargando…
           </p>
         ) : lista.length === 0 ? (
           <EmptyState
-            title="Sin inventarios"
-            description="El conteo compara lo esperado en el depósito con los EPCs leídos."
+            title="Sin inventarios para auditar"
+            description="Los conteos se inician y cierran solo desde la APK en el MC33."
             steps={[
-              "Elegí el depósito a contar",
-              "Registrá lecturas RFID o pegá EPCs",
-              "Cerrá para ver faltantes y sobrantes",
+              "En el MC33 elegí depósito e iniciá el inventario",
+              "Registrá lecturas RFID con el gatillo",
+              "Cerrá el conteo en la APK y auditá el reporte acá",
             ]}
-            action={
-              <button type="button" className="btn primary btn-sm" onClick={() => setShowCreate(true)}>
-                + Nuevo conteo
-              </button>
-            }
           />
         ) : (
           <div className="table-wrap">
@@ -367,6 +258,7 @@ export default function InventariosPage() {
               <thead>
                 <tr>
                   <th>Inicio</th>
+                  <th>Depósito</th>
                   <th>Estado</th>
                   <th>Esp</th>
                   <th>OK</th>
@@ -379,6 +271,10 @@ export default function InventariosPage() {
                 {lista.map((item) => (
                   <tr key={item.id} className={activo?.id === item.id ? "row-active" : undefined}>
                     <td>{new Date(item.iniciado_en).toLocaleString("es-AR")}</td>
+                    <td>
+                      {depositos.find((d) => d.id === item.deposito_id)?.nombre ??
+                        item.deposito_id.slice(0, 8)}
+                    </td>
                     <td>
                       <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
                         {estadoInventario(item.estado)}
@@ -395,7 +291,7 @@ export default function InventariosPage() {
                         onClick={() => handleAbrir(item.id)}
                         disabled={busy}
                       >
-                        Abrir
+                        Auditar
                       </button>
                     </td>
                   </tr>

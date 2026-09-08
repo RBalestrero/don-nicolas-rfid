@@ -852,6 +852,17 @@
   margin-bottom: 1rem;
 }
 
+.info-banner {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius);
+  background: rgba(56, 189, 248, 0.08);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
 /* —— Inventario metrics —— */
 .status-grid {
   display: grid;
