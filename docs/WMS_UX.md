@@ -11,9 +11,11 @@ Resumen de patrones observados en WMS / logistics UX (Manhattan/SAP-style ops UI
 
 ## Tablas operativas
 - Cabecera sticky, densidad compacta, mono en EPC/patrimonial.
-- Toolbar de filtros encima de la grilla (no enterrada).
-- Empty states con pasos de onboarding / siguiente acción.
+- Toolbar de filtros encima de la grilla (Activos, Transferencias, Inventarios, stock de Depósitos).
+- Contador `filtrados / total` en el header de sección.
+- Empty states con pasos de onboarding / siguiente acción / limpiar filtro.
 - En móvil: columnas prioritarias; el resto se oculta (`col-hide-sm`).
+- Filas con discrepancias resaltadas (`row-disc`); métricas numéricas alineadas a la derecha.
 
 ## Confirmaciones
 - Diálogo inline en lugar de `window.confirm` para bajas/cancelaciones (menos fricción, más control).

@@ -10,6 +10,10 @@ import type {
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
+import {
+  filterInventarios,
+  hasActiveInventariosFilters,
+} from "../lib/filterInventarios";
 
 function estadoInventario(estado: string): string {
   if (estado === "en_curso") return "En curso";
@@ -17,9 +21,17 @@ function estadoInventario(estado: string): string {
   return estado;
 }
 
-function DetalleList({ title, items }: { title: string; items: DetalleInventario[] }) {
+function DetalleList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: DetalleInventario[];
+  tone?: "danger" | "warn" | "ok";
+}) {
   return (
-    <div className="reporte-block">
+    <div className={`reporte-block ${tone ? `tone-${tone}` : ""}`}>
       <h4>
         {title} ({items.length})
       </h4>
@@ -58,6 +70,30 @@ export default function InventariosPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState("");
+  const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
+
+  const nombreDeposito = useCallback(
+    (id: string) => depositos.find((d) => d.id === id)?.nombre ?? id.slice(0, 8),
+    [depositos],
+  );
+
+  const filterOpts = useMemo(
+    () => ({ search, estado: estadoFilter, soloDiscrepancias }),
+    [search, estadoFilter, soloDiscrepancias],
+  );
+  const filtersActive = hasActiveInventariosFilters(filterOpts);
+  const listaFiltrada = useMemo(
+    () => filterInventarios(lista, filterOpts, nombreDeposito),
+    [lista, filterOpts, nombreDeposito],
+  );
+
+  const clearFilters = () => {
+    setSearch("");
+    setEstadoFilter("");
+    setSoloDiscrepancias(false);
+  };
 
   const depositoNombre = useMemo(() => {
     if (!activo) return "";
@@ -166,15 +202,19 @@ export default function InventariosPage() {
               <span className="status-label">Esperado</span>
               <strong>{activo.resumen.total_esperado}</strong>
             </div>
-            <div className="status-item">
+            <div className="status-item tone-ok">
               <span className="status-label">Encontrado</span>
               <strong>{activo.resumen.total_encontrado}</strong>
             </div>
-            <div className="status-item">
+            <div
+              className={`status-item ${activo.resumen.total_faltante > 0 ? "tone-danger" : ""}`}
+            >
               <span className="status-label">Faltante</span>
               <strong>{activo.resumen.total_faltante}</strong>
             </div>
-            <div className="status-item">
+            <div
+              className={`status-item ${activo.resumen.total_sobrante > 0 ? "tone-warn" : ""}`}
+            >
               <span className="status-label">Sobrante</span>
               <strong>{activo.resumen.total_sobrante}</strong>
             </div>
@@ -195,17 +235,21 @@ export default function InventariosPage() {
                 Coincidencia <strong>{reporte.coincidencia_pct.toFixed(1)}%</strong>
                 {reporte.tiene_discrepancias ? " · hay discrepancias" : " · sin discrepancias"}
               </p>
-              <DetalleList title="Faltantes" items={reporte.faltantes} />
-              <DetalleList title="Sobrantes" items={reporte.sobrantes} />
-              <DetalleList title="Encontrados" items={reporte.encontrados} />
+              <DetalleList title="Faltantes" items={reporte.faltantes} tone="danger" />
+              <DetalleList title="Sobrantes" items={reporte.sobrantes} tone="warn" />
+              <DetalleList title="Encontrados" items={reporte.encontrados} tone="ok" />
             </div>
           ) : (
             detalleGrupos && (
               <div className="reporte-panel">
                 <h3>Detalle parcial</h3>
-                <DetalleList title="Encontrados" items={detalleGrupos.encontrados} />
-                <DetalleList title="Pendientes / faltantes" items={detalleGrupos.faltantes} />
-                <DetalleList title="Sobrantes" items={detalleGrupos.sobrantes} />
+                <DetalleList title="Encontrados" items={detalleGrupos.encontrados} tone="ok" />
+                <DetalleList
+                  title="Pendientes / faltantes"
+                  items={detalleGrupos.faltantes}
+                  tone="danger"
+                />
+                <DetalleList title="Sobrantes" items={detalleGrupos.sobrantes} tone="warn" />
               </div>
             )
           )}
@@ -236,8 +280,49 @@ export default function InventariosPage() {
       <section className="card">
         <div className="section-header">
           <h3>Sesiones</h3>
-          <span className="muted">{lista.length} registro{lista.length === 1 ? "" : "s"}</span>
+          <span className="muted">
+            {listaFiltrada.length}
+            {filtersActive ? ` / ${lista.length}` : ""} registro
+            {listaFiltrada.length === 1 ? "" : "s"}
+          </span>
         </div>
+
+        {lista.length > 0 && (
+          <div className="toolbar" role="search" aria-label="Filtrar inventarios">
+            <label className="field toolbar-field grow">
+              <span>Buscar</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Depósito o estado"
+              />
+            </label>
+            <label className="field toolbar-field">
+              <span>Estado</span>
+              <select value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="en_curso">En curso</option>
+                <option value="cerrado">Cerrado</option>
+              </select>
+            </label>
+            <label className="field toolbar-field checkbox-field toolbar-check">
+              <input
+                type="checkbox"
+                checked={soloDiscrepancias}
+                onChange={(e) => setSoloDiscrepancias(e.target.checked)}
+              />
+              <span>Solo discrepancias</span>
+            </label>
+            {filtersActive && (
+              <div className="toolbar-actions">
+                <button type="button" className="btn secondary" onClick={clearFilters}>
+                  Limpiar
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <p className="muted" aria-busy="true">
             Cargando…
@@ -252,6 +337,16 @@ export default function InventariosPage() {
               "Cerrá el conteo en la APK y auditá el reporte acá",
             ]}
           />
+        ) : listaFiltrada.length === 0 ? (
+          <EmptyState
+            title="Sin coincidencias"
+            description="Ninguna sesión coincide con los filtros actuales."
+            action={
+              <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
+                Limpiar filtros
+              </button>
+            }
+          />
         ) : (
           <div className="table-wrap table-panel">
             <table className="data-table dense sticky-head">
@@ -260,42 +355,54 @@ export default function InventariosPage() {
                   <th>Inicio</th>
                   <th>Depósito</th>
                   <th>Estado</th>
-                  <th>Esp</th>
-                  <th>OK</th>
-                  <th>Falt</th>
-                  <th>Sobr</th>
+                  <th className="num">Esp</th>
+                  <th className="num">OK</th>
+                  <th className="num">Falt</th>
+                  <th className="num">Sobr</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((item) => (
-                  <tr key={item.id} className={activo?.id === item.id ? "row-active" : undefined}>
-                    <td>{new Date(item.iniciado_en).toLocaleString("es-AR")}</td>
-                    <td>
-                      {depositos.find((d) => d.id === item.deposito_id)?.nombre ??
-                        item.deposito_id.slice(0, 8)}
-                    </td>
-                    <td>
-                      <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
-                        {estadoInventario(item.estado)}
-                      </span>
-                    </td>
-                    <td>{item.total_esperado}</td>
-                    <td>{item.total_encontrado}</td>
-                    <td>{item.total_faltante}</td>
-                    <td>{item.total_sobrante}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn secondary btn-sm"
-                        onClick={() => handleAbrir(item.id)}
-                        disabled={busy}
-                      >
-                        Auditar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {listaFiltrada.map((item) => {
+                  const hasDisc = item.total_faltante > 0 || item.total_sobrante > 0;
+                  return (
+                    <tr
+                      key={item.id}
+                      className={[
+                        activo?.id === item.id ? "row-active" : "",
+                        hasDisc && item.estado === "cerrado" ? "row-disc" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <td>{new Date(item.iniciado_en).toLocaleString("es-AR")}</td>
+                      <td>{nombreDeposito(item.deposito_id)}</td>
+                      <td>
+                        <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
+                          {estadoInventario(item.estado)}
+                        </span>
+                      </td>
+                      <td className="num">{item.total_esperado}</td>
+                      <td className="num">{item.total_encontrado}</td>
+                      <td className={`num ${item.total_faltante > 0 ? "text-danger" : ""}`}>
+                        {item.total_faltante}
+                      </td>
+                      <td className={`num ${item.total_sobrante > 0 ? "text-warn" : ""}`}>
+                        {item.total_sobrante}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn secondary btn-sm"
+                          onClick={() => handleAbrir(item.id)}
+                          disabled={busy}
+                        >
+                          Auditar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

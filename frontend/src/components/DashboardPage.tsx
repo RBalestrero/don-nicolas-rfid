@@ -484,8 +484,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             }
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data-table dense">
+          <div className="table-wrap table-panel">
+            <table className="data-table dense sticky-head">
               <thead>
                 <tr>
                   <th>Cuándo</th>

@@ -664,7 +664,7 @@ export default function TransferenciasPage() {
                   <th>Estado</th>
                   <th>Origen</th>
                   <th>Destino</th>
-                  <th>Activos</th>
+                  <th className="num">Activos</th>
                   <th>Creada</th>
                   <th></th>
                 </tr>
@@ -679,7 +679,7 @@ export default function TransferenciasPage() {
                     </td>
                     <td>{nombreDeposito(t.deposito_origen_id)}</td>
                     <td>{nombreDeposito(t.deposito_destino_id)}</td>
-                    <td>
+                    <td className="num">
                       {t.confirmados_destino}/{t.total_activos}
                     </td>
                     <td className="muted">

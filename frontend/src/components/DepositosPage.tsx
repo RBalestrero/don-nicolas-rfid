@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useToast } from "../context/ToastContext";
 import type {
@@ -28,6 +28,7 @@ export default function DepositosPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState<"estructura" | "stock">("estructura");
+  const [stockSearch, setStockSearch] = useState("");
 
   const loadDepositos = useCallback(async () => {
     setLoading(true);
@@ -70,11 +71,30 @@ export default function DepositosPage() {
   useEffect(() => {
     if (selectedId) {
       loadDetalle(selectedId);
+      setStockSearch("");
     } else {
       setDetalle(null);
       setStock(null);
     }
   }, [selectedId, loadDetalle]);
+
+  const stockFiltrado = useMemo(() => {
+    if (!stock) return [];
+    const q = stockSearch.trim().toLowerCase();
+    if (!q) return stock.activos;
+    return stock.activos.filter((a) =>
+      [
+        a.numero_patrimonial,
+        a.descripcion,
+        a.categoria_nombre,
+        a.sector_nombre,
+        a.ubicacion_codigo,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [stock, stockSearch]);
 
   const handleCreateDeposito = async (data: DepositoCreatePayload) => {
     const created = await apiFetch<Deposito>("/depositos", {
@@ -273,39 +293,86 @@ export default function DepositosPage() {
             <section className="card">
               <div className="section-header">
                 <h3>Stock en {detalle.nombre}</h3>
-                <ExportButtons
-                  basePath={`/reportes/stock/${detalle.id}`}
-                  filenameBase={`stock_${detalle.nombre}`}
-                  disabled={!stock || stock.total === 0}
-                />
+                <div className="section-header-right">
+                  {stock && stock.total > 0 && (
+                    <span className="muted">
+                      {stockFiltrado.length}
+                      {stockSearch.trim() ? ` / ${stock.total}` : ""} activos
+                    </span>
+                  )}
+                  <ExportButtons
+                    basePath={`/reportes/stock/${detalle.id}`}
+                    filenameBase={`stock_${detalle.nombre}`}
+                    disabled={!stock || stock.total === 0}
+                  />
+                </div>
               </div>
               {!stock || stock.total === 0 ? (
                 <p className="muted">No hay activos asignados en este depósito.</p>
               ) : (
-                <div className="table-wrap table-panel">
-                  <table className="data-table dense sticky-head">
-                    <thead>
-                      <tr>
-                        <th>Patrimonio</th>
-                        <th className="col-hide-sm">Descripción</th>
-                        <th>Categoría</th>
-                        <th>Sector</th>
-                        <th>Ubicación</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stock.activos.map((a) => (
-                        <tr key={a.activo_id}>
-                          <td className="mono">{a.numero_patrimonial}</td>
-                          <td className="col-hide-sm">{a.descripcion}</td>
-                          <td>{a.categoria_nombre}</td>
-                          <td>{a.sector_nombre}</td>
-                          <td className="mono">{a.ubicacion_codigo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="toolbar" role="search" aria-label="Filtrar stock">
+                    <label className="field toolbar-field grow">
+                      <span>Buscar en stock</span>
+                      <input
+                        value={stockSearch}
+                        onChange={(e) => setStockSearch(e.target.value)}
+                        placeholder="Patrimonial, categoría, sector o ubicación"
+                      />
+                    </label>
+                    {stockSearch.trim() && (
+                      <div className="toolbar-actions">
+                        <button
+                          type="button"
+                          className="btn secondary"
+                          onClick={() => setStockSearch("")}
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {stockFiltrado.length === 0 ? (
+                    <EmptyState
+                      title="Sin coincidencias"
+                      description="Ningún activo del stock coincide con la búsqueda."
+                      action={
+                        <button
+                          type="button"
+                          className="btn secondary btn-sm"
+                          onClick={() => setStockSearch("")}
+                        >
+                          Limpiar búsqueda
+                        </button>
+                      }
+                    />
+                  ) : (
+                    <div className="table-wrap table-panel">
+                      <table className="data-table dense sticky-head">
+                        <thead>
+                          <tr>
+                            <th>Patrimonio</th>
+                            <th className="col-hide-sm">Descripción</th>
+                            <th>Categoría</th>
+                            <th>Sector</th>
+                            <th>Ubicación</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stockFiltrado.map((a) => (
+                            <tr key={a.activo_id}>
+                              <td className="mono">{a.numero_patrimonial}</td>
+                              <td className="col-hide-sm">{a.descripcion}</td>
+                              <td>{a.categoria_nombre}</td>
+                              <td>{a.sector_nombre}</td>
+                              <td className="mono">{a.ubicacion_codigo}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}

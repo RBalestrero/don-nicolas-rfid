@@ -125,7 +125,9 @@ describe("InventariosPage", () => {
     expect(screen.queryByRole("button", { name: /nuevo conteo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /iniciar inventario/i })).not.toBeInTheDocument();
 
-    expect(await screen.findByText("Cerrado")).toBeInTheDocument();
+    expect(await screen.findByText("Central")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cerrado" })).toBeInTheDocument();
+    expect(screen.getAllByText("Cerrado").length).toBeGreaterThanOrEqual(1);
     await user.click(screen.getByRole("button", { name: /^auditar$/i }));
 
     expect(await screen.findByText(/reporte de auditoría/i)).toBeInTheDocument();
