@@ -16,5 +16,6 @@ class UserResponse(BaseModel):
     email: str
     nombre: str
     rol: str
+    permisos: list[str] = []
 
     model_config = {"from_attributes": True}

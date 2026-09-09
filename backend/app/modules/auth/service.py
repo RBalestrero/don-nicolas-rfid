@@ -1,8 +1,8 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.security import verify_password
-from app.modules.auth.models import Usuario
+from app.modules.auth.models import Rol, Usuario
 
 
 class AuthRepository:
@@ -12,7 +12,7 @@ class AuthRepository:
     def get_by_email(self, email: str) -> Usuario | None:
         stmt = (
             select(Usuario)
-            .options(joinedload(Usuario.rol))
+            .options(joinedload(Usuario.rol).selectinload(Rol.permisos))
             .where(Usuario.email == email)
         )
         return self.db.scalars(stmt).first()

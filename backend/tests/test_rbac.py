@@ -86,7 +86,7 @@ def test_operador_alta_puede_crear_categoria_pero_no_deposito(
         headers=operador_alta_headers,
     )
     assert dep.status_code == 403
-    assert dep.json()["detail"]["code"] == "FORBIDDEN_ROLE"
+    assert dep.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
 
 
 def test_operador_alta_no_puede_crear_transferencia(client: TestClient, operador_alta_headers):
@@ -101,7 +101,7 @@ def test_operador_alta_no_puede_crear_transferencia(client: TestClient, operador
         headers=operador_alta_headers,
     )
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "FORBIDDEN_ROLE"
+    assert response.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
 
 
 def test_supervisor_puede_leer_dashboard(client: TestClient, supervisor_headers):
@@ -120,7 +120,7 @@ def test_supervisor_no_puede_crear_activo(client: TestClient, supervisor_headers
         headers=supervisor_headers,
     )
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "FORBIDDEN_ROLE"
+    assert response.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
 
 
 def test_production_rejects_weak_secret():

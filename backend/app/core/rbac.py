@@ -1,18 +1,21 @@
-"""Roles y dependencias RBAC del sistema.
-
-Roles sembrados (migración 001):
-- admin: acceso total
-- operador_deposito: depósitos, ubicaciones, inventarios (MC33), transferencias
-- operador_alta: alta/edición de activos, categorías, fotos, etiquetas
-- supervisor: lectura + cancelar transferencias / auditoría
-"""
+"""RBAC del sistema basado en permisos asignables a roles."""
 
 from __future__ import annotations
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config import get_settings
-from app.dependencies import CLIENT_HEADER, get_current_user, require_roles
+from app.core.permissions import (
+    PERM_ASSETS_ASSIGNMENT,
+    PERM_ASSETS_WRITE,
+    PERM_INVENTORY_WRITE,
+    PERM_ROLES_MANAGE,
+    PERM_TRANSFER_CANCEL,
+    PERM_TRANSFER_WRITE,
+    PERM_USERS_MANAGE,
+    PERM_WAREHOUSE_WRITE,
+)
+from app.dependencies import CLIENT_HEADER, require_any_permission, require_permission
 from app.modules.auth.models import Usuario
 
 ROLE_ADMIN = "admin"
@@ -20,27 +23,24 @@ ROLE_OPERADOR_DEPOSITO = "operador_deposito"
 ROLE_OPERADOR_ALTA = "operador_alta"
 ROLE_SUPERVISOR = "supervisor"
 
-ROLES_ASSETS_WRITE = (ROLE_ADMIN, ROLE_OPERADOR_ALTA, ROLE_OPERADOR_DEPOSITO)
-ROLES_ASSIGNMENT_WRITE = (ROLE_ADMIN, ROLE_OPERADOR_ALTA, ROLE_OPERADOR_DEPOSITO)
-ROLES_WAREHOUSE_WRITE = (ROLE_ADMIN, ROLE_OPERADOR_DEPOSITO)
-ROLES_TRANSFER_WRITE = (ROLE_ADMIN, ROLE_OPERADOR_DEPOSITO)
-ROLES_TRANSFER_CANCEL = (ROLE_ADMIN, ROLE_OPERADOR_DEPOSITO, ROLE_SUPERVISOR)
-ROLES_INVENTORY_WRITE = (ROLE_ADMIN, ROLE_OPERADOR_DEPOSITO)
-
-require_assets_write = require_roles(*ROLES_ASSETS_WRITE)
-require_assignment_write = require_roles(*ROLES_ASSIGNMENT_WRITE)
-require_warehouse_write = require_roles(*ROLES_WAREHOUSE_WRITE)
-require_transfer_write = require_roles(*ROLES_TRANSFER_WRITE)
-require_transfer_cancel = require_roles(*ROLES_TRANSFER_CANCEL)
-require_admin = require_roles(ROLE_ADMIN)
+require_assets_write = require_permission(PERM_ASSETS_WRITE)
+require_assignment_write = require_permission(PERM_ASSETS_ASSIGNMENT)
+require_warehouse_write = require_permission(PERM_WAREHOUSE_WRITE)
+require_transfer_write = require_permission(PERM_TRANSFER_WRITE)
+require_transfer_cancel = require_permission(PERM_TRANSFER_CANCEL)
+require_users_manage = require_permission(PERM_USERS_MANAGE)
+require_roles_manage = require_permission(PERM_ROLES_MANAGE)
+require_users_or_roles_manage = require_any_permission(PERM_USERS_MANAGE, PERM_ROLES_MANAGE)
+# Compat: "admin" ahora = permiso de gestionar usuarios
+require_admin = require_users_manage
 
 
 def require_inventory_write(
     request: Request,
-    current_user: Usuario = Depends(require_roles(*ROLES_INVENTORY_WRITE)),
+    current_user: Usuario = Depends(require_permission(PERM_INVENTORY_WRITE)),
     x_client: str | None = Header(default=None, alias=CLIENT_HEADER),
 ) -> Usuario:
-    """Writes de inventario: rol operativo + cliente MC33."""
+    """Writes de inventario: permiso operativo + cliente MC33."""
     settings = get_settings()
     client = (x_client or request.headers.get(CLIENT_HEADER) or "").strip().lower()
     if client not in settings.inventory_mobile_clients_set:

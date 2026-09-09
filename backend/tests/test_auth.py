@@ -40,3 +40,5 @@ def test_me_endpoint(client: TestClient, admin_user):
     data = response.json()
     assert data["email"] == ADMIN_EMAIL
     assert data["rol"] == "admin"
+    assert "users.manage" in data["permisos"]
+    assert "roles.manage" in data["permisos"]

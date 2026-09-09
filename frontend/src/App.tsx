@@ -7,7 +7,7 @@ import InventariosPage from "./components/InventariosPage";
 import TransferenciasPage from "./components/TransferenciasPage";
 import UsuariosPage from "./components/UsuariosPage";
 import LoginForm from "./components/LoginForm";
-import { canManageUsers, roleLabel } from "./lib/permissions";
+import { canManageRoles, canManageUsers, roleLabel } from "./lib/permissions";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -84,7 +84,7 @@ function NavButton({
 export default function App() {
   const { user, loading, logout } = useAuth();
   const [page, setPage] = useState<AppPage>("dashboard");
-  const showUsuarios = canManageUsers(user?.rol);
+  const showUsuarios = canManageUsers(user?.permisos, user?.rol) || canManageRoles(user?.permisos, user?.rol);
 
   const navAdmin = useMemo(
     () => (showUsuarios ? ([{ id: "usuarios" as AppPage, label: "Usuarios" }] as const) : []),

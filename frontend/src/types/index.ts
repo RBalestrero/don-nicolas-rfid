@@ -25,12 +25,24 @@ export interface User {
   email: string;
   nombre: string;
   rol: string;
+  permisos?: string[];
 }
 
 export interface RolCatalogo {
   id: string;
   nombre: string;
   descripcion: string | null;
+  es_sistema?: boolean;
+  permisos?: string[];
+  usuarios_count?: number;
+}
+
+export interface PermisoCatalogo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  modulo: string;
 }
 
 export interface UsuarioAdmin {
@@ -58,6 +70,18 @@ export interface UsuarioUpdatePayload {
   password?: string;
   rol?: string;
   activo?: boolean;
+}
+
+export interface RolCreatePayload {
+  nombre: string;
+  descripcion?: string | null;
+  permisos: string[];
+}
+
+export interface RolUpdatePayload {
+  nombre?: string;
+  descripcion?: string | null;
+  permisos?: string[];
 }
 
 export interface ActivoCreatePayload {

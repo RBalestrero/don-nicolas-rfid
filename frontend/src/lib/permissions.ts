@@ -1,39 +1,83 @@
-/** Permisos de UI alineados con backend/app/core/rbac.py */
+/** Permisos de UI alineados con backend/app/core/permissions.py */
+
+export const PERM = {
+  USERS_MANAGE: "users.manage",
+  ROLES_MANAGE: "roles.manage",
+  ASSETS_WRITE: "assets.write",
+  ASSETS_ASSIGNMENT: "assets.assignment",
+  WAREHOUSE_WRITE: "warehouse.write",
+  TRANSFER_WRITE: "transfer.write",
+  TRANSFER_CANCEL: "transfer.cancel",
+  INVENTORY_WRITE: "inventory.write",
+} as const;
+
+export type PermissionCode = (typeof PERM)[keyof typeof PERM];
 
 export type AppRole = "admin" | "operador_deposito" | "operador_alta" | "supervisor" | string;
 
-const ASSETS_WRITE = new Set(["admin", "operador_alta", "operador_deposito"]);
-const ASSIGNMENT_WRITE = new Set(["admin", "operador_alta", "operador_deposito"]);
-const WAREHOUSE_WRITE = new Set(["admin", "operador_deposito"]);
-const TRANSFER_WRITE = new Set(["admin", "operador_deposito"]);
-const TRANSFER_CANCEL = new Set(["admin", "operador_deposito", "supervisor"]);
+/** Fallback histórico si /me aún no trae permisos */
+const ROLE_FALLBACK: Record<string, string[]> = {
+  admin: Object.values(PERM),
+  operador_deposito: [
+    PERM.ASSETS_WRITE,
+    PERM.ASSETS_ASSIGNMENT,
+    PERM.WAREHOUSE_WRITE,
+    PERM.TRANSFER_WRITE,
+    PERM.TRANSFER_CANCEL,
+    PERM.INVENTORY_WRITE,
+  ],
+  operador_alta: [PERM.ASSETS_WRITE, PERM.ASSETS_ASSIGNMENT],
+  supervisor: [PERM.TRANSFER_CANCEL],
+};
 
 export function normalizeRole(rol: string | null | undefined): string {
   return (rol ?? "").trim().toLowerCase();
 }
 
-export function canWriteAssets(rol: string | null | undefined): boolean {
-  return ASSETS_WRITE.has(normalizeRole(rol));
+export function effectivePermissions(
+  permisos: string[] | null | undefined,
+  rol: string | null | undefined,
+): string[] {
+  if (permisos && permisos.length > 0) {
+    return permisos.map((p) => p.toLowerCase());
+  }
+  return ROLE_FALLBACK[normalizeRole(rol)] ?? [];
 }
 
-export function canWriteAssignment(rol: string | null | undefined): boolean {
-  return ASSIGNMENT_WRITE.has(normalizeRole(rol));
+export function hasPermission(
+  permisos: string[] | null | undefined,
+  code: string,
+  rol?: string | null,
+): boolean {
+  return effectivePermissions(permisos, rol).includes(code.toLowerCase());
 }
 
-export function canWriteWarehouse(rol: string | null | undefined): boolean {
-  return WAREHOUSE_WRITE.has(normalizeRole(rol));
+export function canWriteAssets(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.ASSETS_WRITE, rol);
 }
 
-export function canWriteTransfer(rol: string | null | undefined): boolean {
-  return TRANSFER_WRITE.has(normalizeRole(rol));
+export function canWriteAssignment(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.ASSETS_ASSIGNMENT, rol);
 }
 
-export function canCancelTransfer(rol: string | null | undefined): boolean {
-  return TRANSFER_CANCEL.has(normalizeRole(rol));
+export function canWriteWarehouse(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.WAREHOUSE_WRITE, rol);
 }
 
-export function canManageUsers(rol: string | null | undefined): boolean {
-  return normalizeRole(rol) === "admin";
+export function canWriteTransfer(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.TRANSFER_WRITE, rol);
+}
+
+export function canCancelTransfer(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.TRANSFER_CANCEL, rol);
+}
+
+export function canManageUsers(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.USERS_MANAGE, rol);
+}
+
+export function canManageRoles(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.ROLES_MANAGE, rol);
 }
 
 export function roleLabel(rol: string | null | undefined): string {

@@ -6,12 +6,11 @@ alwaysApply: true
 # Seguridad: RBAC y producción
 
 ## Roles
-- `admin`: todo
-- `operador_alta`: writes de activos/categorías/fotos/etiquetas + asignación de ubicación
-- `operador_deposito`: writes de depósitos/sectores/ubicaciones, transferencias, inventarios (con `X-Client: mc33`)
-- `supervisor`: lectura + cancelar transferencias; sin altas de maestros
+- `admin`: todo (semilla; en runtime se usan **permisos** del rol)
+- Permisos asignables: `users.manage`, `roles.manage`, `assets.write`, `assets.assignment`, `warehouse.write`, `transfer.write`, `transfer.cancel`, `inventory.write`
+- Helpers en `app/core/rbac.py` (`require_assets_write`, etc.) validan permisos del rol, no solo el nombre.
 
-Usar helpers en `app/core/rbac.py` (`require_assets_write`, `require_warehouse_write`, etc.). No dejar writes solo con `get_current_user`.
+Usar helpers en `app/core/rbac.py`. No dejar writes solo con `get_current_user`.
 
 ## Producción
 - `APP_ENV=production` exige `SECRET_KEY` fuerte (≥32), `API_DEBUG=false`, `POSTGRES_PASSWORD` no débil.

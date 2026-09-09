@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canCancelTransfer,
+  canManageRoles,
   canManageUsers,
   canWriteAssets,
   canWriteTransfer,
@@ -10,20 +11,27 @@ import {
 
 describe("permissions", () => {
   it("operador_alta escribe activos pero no depósitos ni transferencias", () => {
-    expect(canWriteAssets("operador_alta")).toBe(true);
-    expect(canWriteWarehouse("operador_alta")).toBe(false);
-    expect(canWriteTransfer("operador_alta")).toBe(false);
+    expect(canWriteAssets(undefined, "operador_alta")).toBe(true);
+    expect(canWriteWarehouse(undefined, "operador_alta")).toBe(false);
+    expect(canWriteTransfer(undefined, "operador_alta")).toBe(false);
   });
 
   it("supervisor cancela transferencias pero no crea activos", () => {
-    expect(canCancelTransfer("supervisor")).toBe(true);
-    expect(canWriteAssets("supervisor")).toBe(false);
-    expect(canWriteTransfer("supervisor")).toBe(false);
+    expect(canCancelTransfer(undefined, "supervisor")).toBe(true);
+    expect(canWriteAssets(undefined, "supervisor")).toBe(false);
+    expect(canWriteTransfer(undefined, "supervisor")).toBe(false);
   });
 
-  it("solo admin gestiona usuarios", () => {
-    expect(canManageUsers("admin")).toBe(true);
-    expect(canManageUsers("supervisor")).toBe(false);
+  it("admin gestiona usuarios y roles", () => {
+    expect(canManageUsers(undefined, "admin")).toBe(true);
+    expect(canManageRoles(undefined, "admin")).toBe(true);
+    expect(canManageUsers(undefined, "supervisor")).toBe(false);
+  });
+
+  it("respeta permisos explícitos del token", () => {
+    expect(canWriteAssets(["assets.write"])).toBe(true);
+    expect(canWriteWarehouse(["assets.write"])).toBe(false);
+    expect(canManageUsers(["users.manage", "roles.manage"])).toBe(true);
   });
 
   it("etiqueta roles legibles", () => {

@@ -11,6 +11,7 @@ from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
 from app.modules.auth.schemas import LoginRequest, TokenResponse, UserResponse
 from app.modules.auth.service import AuthService
+from app.modules.auth.users_service import permissions_for_user
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 logger = logging.getLogger("don_nicolas.auth")
@@ -95,4 +96,5 @@ def get_current_user_info(current_user: Usuario = Depends(get_current_user)) -> 
         email=current_user.email,
         nombre=current_user.nombre,
         rol=current_user.rol.nombre,
+        permisos=permissions_for_user(current_user),
     )
