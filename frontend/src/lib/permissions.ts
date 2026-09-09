@@ -9,6 +9,7 @@ export const PERM = {
   TRANSFER_WRITE: "transfer.write",
   TRANSFER_CANCEL: "transfer.cancel",
   INVENTORY_WRITE: "inventory.write",
+  INVENTORY_AUDIT: "inventory.audit",
 } as const;
 
 export type PermissionCode = (typeof PERM)[keyof typeof PERM];
@@ -25,9 +26,10 @@ const ROLE_FALLBACK: Record<string, string[]> = {
     PERM.TRANSFER_WRITE,
     PERM.TRANSFER_CANCEL,
     PERM.INVENTORY_WRITE,
+    PERM.INVENTORY_AUDIT,
   ],
   operador_alta: [PERM.ASSETS_WRITE, PERM.ASSETS_ASSIGNMENT],
-  supervisor: [PERM.TRANSFER_CANCEL],
+  supervisor: [PERM.TRANSFER_CANCEL, PERM.INVENTORY_AUDIT],
 };
 
 export function normalizeRole(rol: string | null | undefined): string {
@@ -78,6 +80,10 @@ export function canManageUsers(permisos?: string[] | null, rol?: string | null):
 
 export function canManageRoles(permisos?: string[] | null, rol?: string | null): boolean {
   return hasPermission(permisos, PERM.ROLES_MANAGE, rol);
+}
+
+export function canAuditInventory(permisos?: string[] | null, rol?: string | null): boolean {
+  return hasPermission(permisos, PERM.INVENTORY_AUDIT, rol);
 }
 
 export function roleLabel(rol: string | null | undefined): string {

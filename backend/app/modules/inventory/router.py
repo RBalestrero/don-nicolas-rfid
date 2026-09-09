@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.core.rbac import require_inventory_write
+from app.core.rbac import require_inventory_audit, require_inventory_write
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
 from app.modules.inventory.schemas import (
+    InventarioAuditarRequest,
     InventarioCerrarRequest,
     InventarioCreate,
     InventarioLecturasRequest,
@@ -80,3 +81,14 @@ def cerrar_inventario(
     _: Usuario = Depends(require_inventory_write),
 ):
     return InventoryService(db).cerrar(inventario_id, data or InventarioCerrarRequest())
+
+
+@router.post("/inventarios/{inventario_id}/auditar", response_model=InventarioResponse)
+def auditar_inventario(
+    inventario_id: uuid.UUID,
+    data: InventarioAuditarRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_inventory_audit),
+):
+    """Marca un inventario cerrado como auditado/visto (web; no requiere MC33)."""
+    return InventoryService(db).auditar(inventario_id, data, current_user.id)

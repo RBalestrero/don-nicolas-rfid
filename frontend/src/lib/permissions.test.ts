@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  canAuditInventory,
   canCancelTransfer,
   canManageRoles,
   canManageUsers,
@@ -16,8 +17,9 @@ describe("permissions", () => {
     expect(canWriteTransfer(undefined, "operador_alta")).toBe(false);
   });
 
-  it("supervisor cancela transferencias pero no crea activos", () => {
+  it("supervisor cancela transferencias y audita inventarios, pero no crea activos", () => {
     expect(canCancelTransfer(undefined, "supervisor")).toBe(true);
+    expect(canAuditInventory(undefined, "supervisor")).toBe(true);
     expect(canWriteAssets(undefined, "supervisor")).toBe(false);
     expect(canWriteTransfer(undefined, "supervisor")).toBe(false);
   });

@@ -3,6 +3,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InventariosPage from "./InventariosPage";
 
+vi.mock("../lib/usePermissions", () => ({
+  usePermissions: () => ({
+    rol: "admin",
+    roleLabel: "Admin",
+    canWriteAssets: true,
+    canWriteAssignment: true,
+    canWriteWarehouse: true,
+    canWriteTransfer: true,
+    canCancelTransfer: true,
+    canAuditInventory: true,
+  }),
+}));
+
 const deposito = {
   id: "dep-1",
   nombre: "Central",
@@ -26,6 +39,10 @@ const inventarioListItem = {
   total_sobrante: 0,
   iniciado_en: "2024-01-01T12:00:00Z",
   cerrado_en: "2024-01-01T13:00:00Z",
+  auditado: false,
+  auditado_en: null,
+  auditado_por_id: null,
+  comentario_auditoria: null,
 };
 
 const inventario = {
@@ -65,6 +82,10 @@ const reporte = {
   estado: "cerrado",
   iniciado_en: "2024-01-01T12:00:00Z",
   cerrado_en: "2024-01-01T13:00:00Z",
+  auditado: false,
+  auditado_en: null,
+  auditado_por_id: null,
+  comentario_auditoria: null,
   coincidencia_pct: 50,
   tiene_discrepancias: true,
   resumen: inventario.resumen,
@@ -72,6 +93,14 @@ const reporte = {
   faltantes: [inventario.detalles[1]],
   sobrantes: [],
   sin_epc: [],
+};
+
+const inventarioAuditado = {
+  ...inventario,
+  auditado: true,
+  auditado_en: "2024-01-01T14:00:00Z",
+  auditado_por_id: "u-1",
+  comentario_auditoria: "Faltante localizado en rack B",
 };
 
 describe("InventariosPage", () => {
@@ -94,7 +123,10 @@ describe("InventariosPage", () => {
         if (url.endsWith("/inventarios/inv-1/reporte") && method === "GET") {
           return { ok: true, status: 200, json: async () => reporte };
         }
-        if (method === "POST") {
+        if (url.includes("/inventarios/inv-1/auditar") && method === "POST") {
+          return { ok: true, status: 200, json: async () => inventarioAuditado };
+        }
+        if (method === "POST" && url.includes("/inventarios") && !url.includes("/auditar")) {
           return {
             ok: false,
             status: 405,
@@ -128,6 +160,7 @@ describe("InventariosPage", () => {
     expect(await screen.findByText("Central")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Cerrado" })).toBeInTheDocument();
     expect(screen.getAllByText("Cerrado").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Pendiente")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^auditar$/i }));
 
     expect(await screen.findByText(/reporte de auditoría/i)).toBeInTheDocument();
@@ -136,6 +169,7 @@ describe("InventariosPage", () => {
     expect(screen.getByText("PAT-2")).toBeInTheDocument();
     expect(screen.queryByLabelText(/epcs leídos/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cerrar inventario/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /marcar como auditada/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
@@ -143,5 +177,31 @@ describe("InventariosPage", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+  });
+
+  it("marca un inventario cerrado como auditado con comentario", async () => {
+    const user = userEvent.setup();
+    render(<InventariosPage />);
+
+    await user.click(await screen.findByRole("button", { name: /^auditar$/i }));
+    const marcar = await screen.findByRole("button", { name: /marcar como auditada/i });
+
+    const comentario = screen.getByPlaceholderText(/faltantes localizados/i);
+    await user.clear(comentario);
+    await user.type(comentario, "Faltante localizado en rack B");
+    await user.click(marcar);
+
+    await waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/inventarios/inv-1/auditar"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /actualizar comentario/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Auditada").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole("button", { name: /marcar como auditada/i })).not.toBeInTheDocument();
   });
 });

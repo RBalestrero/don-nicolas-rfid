@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { useToast } from "../context/ToastContext";
 import type {
   Deposito,
   DetalleInventario,
@@ -14,6 +15,7 @@ import {
   filterInventarios,
   hasActiveInventariosFilters,
 } from "../lib/filterInventarios";
+import { usePermissions } from "../lib/usePermissions";
 
 function estadoInventario(estado: string): string {
   if (estado === "en_curso") return "En curso";
@@ -63,6 +65,8 @@ function groupDetalles(detalles: DetalleInventario[]) {
 }
 
 export default function InventariosPage() {
+  const toast = useToast();
+  const perms = usePermissions();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [lista, setLista] = useState<InventarioListItem[]>([]);
   const [activo, setActivo] = useState<Inventario | null>(null);
@@ -73,6 +77,8 @@ export default function InventariosPage() {
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("");
   const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
+  const [soloPendienteAuditoria, setSoloPendienteAuditoria] = useState(false);
+  const [comentario, setComentario] = useState("");
 
   useEffect(() => {
     const flag = sessionStorage.getItem("dn_inv_filter");
@@ -88,8 +94,8 @@ export default function InventariosPage() {
   );
 
   const filterOpts = useMemo(
-    () => ({ search, estado: estadoFilter, soloDiscrepancias }),
-    [search, estadoFilter, soloDiscrepancias],
+    () => ({ search, estado: estadoFilter, soloDiscrepancias, soloPendienteAuditoria }),
+    [search, estadoFilter, soloDiscrepancias, soloPendienteAuditoria],
   );
   const filtersActive = hasActiveInventariosFilters(filterOpts);
   const listaFiltrada = useMemo(
@@ -101,6 +107,7 @@ export default function InventariosPage() {
     setSearch("");
     setEstadoFilter("");
     setSoloDiscrepancias(false);
+    setSoloPendienteAuditoria(false);
   };
 
   const depositoNombre = useMemo(() => {
@@ -136,12 +143,76 @@ export default function InventariosPage() {
     try {
       const inv = await apiFetch<Inventario>(`/inventarios/${id}`);
       setActivo(inv);
+      setComentario(inv.comentario_auditoria ?? "");
       if (inv.estado === "cerrado") {
         const rep = await apiFetch<InventarioReporte>(`/inventarios/${id}/reporte`);
         setReporte(rep);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al abrir inventario");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncListaItem = (inv: Inventario) => {
+    setLista((prev) =>
+      prev.map((item) =>
+        item.id === inv.id
+          ? {
+              ...item,
+              auditado: inv.auditado,
+              auditado_en: inv.auditado_en,
+              auditado_por_id: inv.auditado_por_id,
+              comentario_auditoria: inv.comentario_auditoria,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleMarcarAuditada = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!activo || activo.estado !== "cerrado") return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await apiFetch<Inventario>(`/inventarios/${activo.id}/auditar`, {
+        method: "POST",
+        body: JSON.stringify({
+          auditado: true,
+          comentario: comentario.trim() || null,
+        }),
+      });
+      setActivo(updated);
+      setComentario(updated.comentario_auditoria ?? "");
+      syncListaItem(updated);
+      toast.success("Inventario marcado como auditado");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al marcar auditoría");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleQuitarAuditoria = async () => {
+    if (!activo || activo.estado !== "cerrado") return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await apiFetch<Inventario>(`/inventarios/${activo.id}/auditar`, {
+        method: "POST",
+        body: JSON.stringify({
+          auditado: false,
+          comentario: comentario.trim() || null,
+        }),
+      });
+      setActivo(updated);
+      setComentario(updated.comentario_auditoria ?? "");
+      syncListaItem(updated);
+      toast.success("Auditoría revertida a pendiente");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al revertir auditoría");
     } finally {
       setBusy(false);
     }
@@ -166,8 +237,8 @@ export default function InventariosPage() {
       </PageHeader>
 
       <p className="info-banner" role="note">
-        El alta, las lecturas RFID y el cierre se hacen solo desde la APK en el dispositivo MC33.
-        Acá consultás el avance, el reporte de discrepancias y exportás para auditoría.
+        El alta, las lecturas RFID y el cierre se hacen solo desde la APK en el MC33. Acá revisás el
+        reporte, marcás la sesión como auditada/vista y corregida, y exportás.
       </p>
 
       {error && (
@@ -185,6 +256,11 @@ export default function InventariosPage() {
                 {estadoInventario(activo.estado)}
               </span>
               {activo.estado === "cerrado" && (
+                <span className={`badge ${activo.auditado ? "ok" : "warn"}`}>
+                  {activo.auditado ? "Auditada" : "Pendiente auditoría"}
+                </span>
+              )}
+              {activo.estado === "cerrado" && (
                 <ExportButtons
                   basePath={`/reportes/inventarios/${activo.id}`}
                   filenameBase={`inventario_${activo.id.slice(0, 8)}`}
@@ -201,6 +277,12 @@ export default function InventariosPage() {
               <>
                 {" · "}
                 Cierre {new Date(activo.cerrado_en).toLocaleString("es-AR")}
+              </>
+            )}
+            {activo.auditado && activo.auditado_en && (
+              <>
+                {" · "}
+                Auditada {new Date(activo.auditado_en).toLocaleString("es-AR")}
               </>
             )}
           </p>
@@ -262,6 +344,57 @@ export default function InventariosPage() {
             )
           )}
 
+          {activo.estado === "cerrado" && perms.canAuditInventory && (
+            <form className="inset-block" onSubmit={handleMarcarAuditada} aria-label="Marcar auditoría">
+              <div className="section-header">
+                <h3>{activo.auditado ? "Registro de auditoría" : "Marcar como auditada"}</h3>
+              </div>
+              <p className="muted">
+                Indicá que revisaste el reporte
+                {reporte?.tiene_discrepancias ? " y las discrepancias" : ""}. El comentario es
+                opcional.
+              </p>
+              <label className="field">
+                <span>Comentario</span>
+                <textarea
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
+                  placeholder="Ej.: faltantes localizados / sobrante descartado / visto OK"
+                  rows={3}
+                  maxLength={2000}
+                />
+              </label>
+              <div className="form-actions">
+                {!activo.auditado ? (
+                  <button type="submit" className="btn primary" disabled={busy}>
+                    {busy ? "Guardando…" : "Marcar como auditada"}
+                  </button>
+                ) : (
+                  <>
+                    <button type="submit" className="btn primary" disabled={busy}>
+                      {busy ? "Guardando…" : "Actualizar comentario"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={busy}
+                      onClick={handleQuitarAuditoria}
+                    >
+                      Volver a pendiente
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+          )}
+
+          {activo.estado === "cerrado" && activo.auditado && activo.comentario_auditoria && !perms.canAuditInventory && (
+            <div className="inset-block">
+              <h3>Comentario de auditoría</h3>
+              <p>{activo.comentario_auditoria}</p>
+            </div>
+          )}
+
           <div className="form-actions">
             <button
               type="button"
@@ -269,6 +402,7 @@ export default function InventariosPage() {
               onClick={() => {
                 setActivo(null);
                 setReporte(null);
+                setComentario("");
               }}
             >
               Cerrar detalle
@@ -302,7 +436,7 @@ export default function InventariosPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Depósito o estado"
+                placeholder="Depósito, estado o auditoría"
               />
             </label>
             <label className="field toolbar-field">
@@ -320,6 +454,14 @@ export default function InventariosPage() {
                 onChange={(e) => setSoloDiscrepancias(e.target.checked)}
               />
               <span>Solo discrepancias</span>
+            </label>
+            <label className="field toolbar-field checkbox-field toolbar-check">
+              <input
+                type="checkbox"
+                checked={soloPendienteAuditoria}
+                onChange={(e) => setSoloPendienteAuditoria(e.target.checked)}
+              />
+              <span>Pendiente auditoría</span>
             </label>
             {filtersActive && (
               <div className="toolbar-actions">
@@ -363,6 +505,7 @@ export default function InventariosPage() {
                   <th>Inicio</th>
                   <th>Depósito</th>
                   <th>Estado</th>
+                  <th>Auditoría</th>
                   <th className="num">Esp</th>
                   <th className="num">OK</th>
                   <th className="num">Falt</th>
@@ -378,7 +521,7 @@ export default function InventariosPage() {
                       key={item.id}
                       className={[
                         activo?.id === item.id ? "row-active" : "",
-                        hasDisc && item.estado === "cerrado" ? "row-disc" : "",
+                        hasDisc && item.estado === "cerrado" && !item.auditado ? "row-disc" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -389,6 +532,15 @@ export default function InventariosPage() {
                         <span className={`badge ${item.estado === "cerrado" ? "ok" : "warn"}`}>
                           {estadoInventario(item.estado)}
                         </span>
+                      </td>
+                      <td>
+                        {item.estado !== "cerrado" ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <span className={`badge ${item.auditado ? "ok" : "warn"}`}>
+                            {item.auditado ? "Auditada" : "Pendiente"}
+                          </span>
+                        )}
                       </td>
                       <td className="num">{item.total_esperado}</td>
                       <td className="num">{item.total_encontrado}</td>

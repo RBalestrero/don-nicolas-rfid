@@ -15,4 +15,5 @@ Usar helpers en `app/core/rbac.py`. No dejar writes solo con `get_current_user`.
 ## Producción
 - `APP_ENV=production` exige `SECRET_KEY` fuerte (≥32), `API_DEBUG=false`, `POSTGRES_PASSWORD` no débil.
 - Docs OpenAPI off por defecto en production (`expose_api_docs`).
-- Inventarios write: rol depósito/admin **y** header `X-Client: mc33`.
+- Inventarios write (iniciar/lecturas/cerrar): rol con `inventory.write` **y** header `X-Client: mc33`.
+- Inventarios auditar (web): permiso `inventory.audit` en `POST /inventarios/{id}/auditar` (sin MC33).

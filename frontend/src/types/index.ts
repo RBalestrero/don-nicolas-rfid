@@ -364,6 +364,10 @@ export interface InventarioListItem {
   total_sobrante: number;
   iniciado_en: string;
   cerrado_en: string | null;
+  auditado: boolean;
+  auditado_en: string | null;
+  auditado_por_id: string | null;
+  comentario_auditoria: string | null;
 }
 
 export interface Inventario {
@@ -379,6 +383,10 @@ export interface Inventario {
   total_sobrante: number;
   iniciado_en: string;
   cerrado_en: string | null;
+  auditado: boolean;
+  auditado_en: string | null;
+  auditado_por_id: string | null;
+  comentario_auditoria: string | null;
   resumen: InventarioResumen;
   detalles: DetalleInventario[];
 }
@@ -389,6 +397,10 @@ export interface InventarioReporte {
   estado: string;
   iniciado_en: string;
   cerrado_en: string | null;
+  auditado?: boolean;
+  auditado_en?: string | null;
+  auditado_por_id?: string | null;
+  comentario_auditoria?: string | null;
   resumen: InventarioResumen;
   coincidencia_pct: number;
   tiene_discrepancias: boolean;
@@ -396,4 +408,9 @@ export interface InventarioReporte {
   faltantes: DetalleInventario[];
   sobrantes: DetalleInventario[];
   sin_epc: DetalleInventario[];
+}
+
+export interface InventarioAuditarPayload {
+  comentario?: string | null;
+  auditado?: boolean;
 }

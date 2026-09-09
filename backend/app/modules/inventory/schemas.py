@@ -43,6 +43,21 @@ class InventarioCerrarRequest(BaseModel):
         return _normalize_epcs(value)
 
 
+class InventarioAuditarRequest(BaseModel):
+    """Marca un inventario cerrado como auditado (web)."""
+
+    comentario: str | None = Field(None, max_length=2000)
+    auditado: bool = True
+
+    @field_validator("comentario")
+    @classmethod
+    def normalize_comentario(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
 class DetalleInventarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +92,10 @@ class InventarioListItem(BaseModel):
     total_sobrante: int
     iniciado_en: datetime
     cerrado_en: datetime | None
+    auditado: bool = False
+    auditado_en: datetime | None = None
+    auditado_por_id: UUID | None = None
+    comentario_auditoria: str | None = None
 
 
 class InventarioResponse(BaseModel):
@@ -94,6 +113,10 @@ class InventarioResponse(BaseModel):
     total_sobrante: int
     iniciado_en: datetime
     cerrado_en: datetime | None
+    auditado: bool = False
+    auditado_en: datetime | None = None
+    auditado_por_id: UUID | None = None
+    comentario_auditoria: str | None = None
     resumen: InventarioResumen
     detalles: list[DetalleInventarioResponse] = []
 
@@ -104,6 +127,10 @@ class InventarioReporteResponse(BaseModel):
     estado: str
     iniciado_en: datetime
     cerrado_en: datetime | None
+    auditado: bool = False
+    auditado_en: datetime | None = None
+    auditado_por_id: UUID | None = None
+    comentario_auditoria: str | None = None
     resumen: InventarioResumen
     coincidencia_pct: float
     tiene_discrepancias: bool

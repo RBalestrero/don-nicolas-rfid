@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
+  canAuditInventory,
   canCancelTransfer,
   canManageRoles,
   canManageUsers,
@@ -30,6 +31,7 @@ export function usePermissions() {
       canCancelTransfer: canCancelTransfer(list, rol),
       canManageUsers: canManageUsers(list, rol),
       canManageRoles: canManageRoles(list, rol),
+      canAuditInventory: canAuditInventory(list, rol),
     };
   }, [rol, permisos]);
 }

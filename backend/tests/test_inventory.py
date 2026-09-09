@@ -201,3 +201,58 @@ def test_reporte_sin_discrepancias(client: TestClient, mobile_auth_headers):
     assert len(reporte["faltantes"]) == 0
     assert len(reporte["sobrantes"]) == 0
     assert len(reporte["encontrados"]) == 3
+
+
+def test_auditar_inventario_cerrado_desde_web(client: TestClient, mobile_auth_headers, auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
+    inv = client.post(
+        "/api/v1/inventarios",
+        json={"deposito_id": setup["deposito"]["id"]},
+        headers=mobile_auth_headers,
+    ).json()
+    client.post(
+        f"/api/v1/inventarios/{inv['id']}/cerrar",
+        json={"epcs": ["E200001"]},
+        headers=mobile_auth_headers,
+    )
+
+    audited = client.post(
+        f"/api/v1/inventarios/{inv['id']}/auditar",
+        json={"auditado": True, "comentario": "Faltantes revisados en planta"},
+        headers=auth_headers,
+    )
+    assert audited.status_code == 200
+    body = audited.json()
+    assert body["auditado"] is True
+    assert body["comentario_auditoria"] == "Faltantes revisados en planta"
+    assert body["auditado_en"] is not None
+    assert body["auditado_por_id"] is not None
+
+    lista = client.get("/api/v1/inventarios", headers=auth_headers).json()
+    item = next(i for i in lista if i["id"] == inv["id"])
+    assert item["auditado"] is True
+    assert item["comentario_auditoria"] == "Faltantes revisados en planta"
+
+    pending = client.post(
+        f"/api/v1/inventarios/{inv['id']}/auditar",
+        json={"auditado": False, "comentario": None},
+        headers=auth_headers,
+    )
+    assert pending.status_code == 200
+    assert pending.json()["auditado"] is False
+    assert pending.json()["auditado_en"] is None
+
+
+def test_auditar_requiere_inventario_cerrado(client: TestClient, mobile_auth_headers, auth_headers):
+    setup = _setup_inventario_base(client, mobile_auth_headers)
+    inv = client.post(
+        "/api/v1/inventarios",
+        json={"deposito_id": setup["deposito"]["id"]},
+        headers=mobile_auth_headers,
+    ).json()
+    res = client.post(
+        f"/api/v1/inventarios/{inv['id']}/auditar",
+        json={"auditado": True},
+        headers=auth_headers,
+    )
+    assert res.status_code == 409

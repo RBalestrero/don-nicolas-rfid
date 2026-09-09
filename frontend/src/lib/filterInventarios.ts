@@ -4,6 +4,7 @@ export interface InventariosFilterOpts {
   search: string;
   estado: string;
   soloDiscrepancias: boolean;
+  soloPendienteAuditoria: boolean;
 }
 
 export function filterInventarios(
@@ -18,11 +19,16 @@ export function filterInventarios(
       const disc = (item.total_faltante ?? 0) > 0 || (item.total_sobrante ?? 0) > 0;
       if (!disc) return false;
     }
+    if (opts.soloPendienteAuditoria) {
+      if (item.estado !== "cerrado" || item.auditado) return false;
+    }
     if (!q) return true;
     const haystack = [
       nombreDeposito(item.deposito_id),
       item.estado,
       estadoLabel(item.estado),
+      item.auditado ? "auditada auditado" : "pendiente auditoría",
+      item.comentario_auditoria ?? "",
     ]
       .join(" ")
       .toLowerCase();
@@ -37,5 +43,7 @@ function estadoLabel(estado: string): string {
 }
 
 export function hasActiveInventariosFilters(opts: InventariosFilterOpts): boolean {
-  return Boolean(opts.search.trim() || opts.estado || opts.soloDiscrepancias);
+  return Boolean(
+    opts.search.trim() || opts.estado || opts.soloDiscrepancias || opts.soloPendienteAuditoria,
+  );
 }

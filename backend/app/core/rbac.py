@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.core.permissions import (
     PERM_ASSETS_ASSIGNMENT,
     PERM_ASSETS_WRITE,
+    PERM_INVENTORY_AUDIT,
     PERM_INVENTORY_WRITE,
     PERM_ROLES_MANAGE,
     PERM_TRANSFER_CANCEL,
@@ -33,6 +34,7 @@ require_roles_manage = require_permission(PERM_ROLES_MANAGE)
 require_users_or_roles_manage = require_any_permission(PERM_USERS_MANAGE, PERM_ROLES_MANAGE)
 # Compat: "admin" ahora = permiso de gestionar usuarios
 require_admin = require_users_manage
+require_inventory_audit = require_permission(PERM_INVENTORY_AUDIT)
 
 
 def require_inventory_write(

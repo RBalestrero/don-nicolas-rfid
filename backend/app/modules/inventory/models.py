@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +31,12 @@ class Inventario(Base):
     total_sobrante: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     iniciado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     cerrado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auditado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    auditado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auditado_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    comentario_auditoria: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     detalles: Mapped[list["DetalleInventario"]] = relationship(
         back_populates="inventario",

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.modules.assets.models import Activo
 from app.modules.inventory.models import DetalleInventario, Inventario
 from app.modules.inventory.schemas import (
+    InventarioAuditarRequest,
     InventarioCerrarRequest,
     InventarioCreate,
     InventarioLecturasRequest,
@@ -110,6 +111,10 @@ class InventoryService:
             estado=inventario.estado,
             iniciado_en=inventario.iniciado_en,
             cerrado_en=inventario.cerrado_en,
+            auditado=inventario.auditado,
+            auditado_en=inventario.auditado_en,
+            auditado_por_id=inventario.auditado_por_id,
+            comentario_auditoria=inventario.comentario_auditoria,
             resumen=response.resumen,
             coincidencia_pct=coincidencia,
             tiene_discrepancias=(
@@ -159,6 +164,33 @@ class InventoryService:
         inventario.estado = ESTADO_CERRADO
         inventario.cerrado_en = now
         self._recalcular_contadores(inventario, cerrado=True)
+        self.db.commit()
+        return self.get(inventario_id)
+
+    def auditar(
+        self,
+        inventario_id: uuid.UUID,
+        data: InventarioAuditarRequest,
+        usuario_id: uuid.UUID,
+    ) -> InventarioResponse:
+        inventario = self._get_or_404(inventario_id)
+        if inventario.estado != ESTADO_CERRADO:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Solo se pueden auditar inventarios cerrados",
+            )
+
+        if data.auditado:
+            inventario.auditado = True
+            inventario.auditado_en = datetime.now(UTC)
+            inventario.auditado_por_id = usuario_id
+            inventario.comentario_auditoria = data.comentario
+        else:
+            inventario.auditado = False
+            inventario.auditado_en = None
+            inventario.auditado_por_id = None
+            inventario.comentario_auditoria = data.comentario
+
         self.db.commit()
         return self.get(inventario_id)
 
@@ -268,6 +300,10 @@ class InventoryService:
             total_sobrante=inventario.total_sobrante,
             iniciado_en=inventario.iniciado_en,
             cerrado_en=inventario.cerrado_en,
+            auditado=inventario.auditado,
+            auditado_en=inventario.auditado_en,
+            auditado_por_id=inventario.auditado_por_id,
+            comentario_auditoria=inventario.comentario_auditoria,
             resumen=InventarioResumen(
                 total_esperado=inventario.total_esperado,
                 total_encontrado=inventario.total_encontrado,
