@@ -230,13 +230,19 @@ export default function DepositosPage() {
           {tab === "estructura" && (
             <>
               <section className="card">
-                <h3>{detalle.nombre}</h3>
+                <div className="section-header">
+                  <div>
+                    <span className="section-kicker">Estructura</span>
+                    <h3>{detalle.nombre}</h3>
+                  </div>
+                  <span className="muted">
+                    {detalle.sectores.length} sector
+                    {detalle.sectores.length === 1 ? "" : "es"} ·{" "}
+                    {detalle.sectores.reduce((n, s) => n + s.ubicaciones.length, 0)} ubicaciones
+                  </span>
+                </div>
                 {detalle.direccion && <p className="muted">{detalle.direccion}</p>}
-                {detalle.descripcion && (
-                  <p className="muted" style={{ marginBottom: "1rem" }}>
-                    {detalle.descripcion}
-                  </p>
-                )}
+                {detalle.descripcion && <p className="muted">{detalle.descripcion}</p>}
 
                 {detalle.sectores.length === 0 ? (
                   <p className="muted">
@@ -247,9 +253,14 @@ export default function DepositosPage() {
                   <div className="tree">
                     {detalle.sectores.map((sector) => (
                       <div key={sector.id} className="tree-sector">
-                        <strong>{sector.nombre}</strong>
+                        <div className="tree-sector-head">
+                          <strong>{sector.nombre}</strong>
+                          <span className="muted">
+                            {sector.ubicaciones.length} ubic.
+                          </span>
+                        </div>
                         {sector.descripcion && (
-                          <span className="muted"> — {sector.descripcion}</span>
+                          <p className="muted tree-sector-desc">{sector.descripcion}</p>
                         )}
                         {sector.ubicaciones.length === 0 ? (
                           <p className="muted tree-empty">Sin ubicaciones</p>

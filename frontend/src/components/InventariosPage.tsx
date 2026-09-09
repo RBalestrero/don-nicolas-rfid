@@ -74,6 +74,14 @@ export default function InventariosPage() {
   const [estadoFilter, setEstadoFilter] = useState("");
   const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
 
+  useEffect(() => {
+    const flag = sessionStorage.getItem("dn_inv_filter");
+    if (flag === "discrepancias") {
+      setSoloDiscrepancias(true);
+      sessionStorage.removeItem("dn_inv_filter");
+    }
+  }, []);
+
   const nombreDeposito = useCallback(
     (id: string) => depositos.find((d) => d.id === id)?.nombre ?? id.slice(0, 8),
     [depositos],

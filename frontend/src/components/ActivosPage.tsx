@@ -58,6 +58,14 @@ export default function ActivosPage() {
   const [categoriaFilter, setCategoriaFilter] = useState("");
   const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("all");
 
+  useEffect(() => {
+    const flag = sessionStorage.getItem("dn_act_filter");
+    if (flag === "sin") {
+      setUbicacionFilter("sin");
+      sessionStorage.removeItem("dn_act_filter");
+    }
+  }, []);
+
   const filterOpts = useMemo(
     () => ({ search, categoriaId: categoriaFilter, ubicacion: ubicacionFilter }),
     [search, categoriaFilter, ubicacionFilter],

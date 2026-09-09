@@ -112,7 +112,15 @@ export default function ActivosList({
             const menuOpen = menuId === activo.id;
 
             return (
-              <tr key={activo.id} className={rowActive ? "row-active" : undefined}>
+              <tr
+                key={activo.id}
+                className={[
+                  rowActive ? "row-active" : "",
+                  !ubicacion ? "row-warn" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ") || undefined}
+              >
                 <td className="mono">{activo.numero_patrimonial}</td>
                 <td className="col-hide-sm">{activo.descripcion}</td>
                 <td>{activo.categoria.nombre}</td>
@@ -138,7 +146,7 @@ export default function ActivosList({
                     {canWriteAssignment && (
                       <button
                         type="button"
-                        className="btn secondary btn-sm"
+                        className={`btn btn-sm ${ubicacion ? "secondary" : "primary"}`}
                         aria-pressed={isAssigning}
                         onClick={() => onAssign(activo.id)}
                       >

@@ -259,7 +259,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${disc.inventarios_con_discrepancia > 0 ? "tone-danger" : ""}`}
-          onClick={() => onNavigate?.("inventarios")}
+          onClick={() => {
+            sessionStorage.setItem("dn_inv_filter", "discrepancias");
+            onNavigate?.("inventarios");
+          }}
         >
           <span className="kpi-label">Discrepancias</span>
           <strong className="kpi-value">{disc.inventarios_con_discrepancia}</strong>
@@ -271,7 +274,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${sinUbicar > 0 ? "tone-warn" : "tone-ok"}`}
-          onClick={() => onNavigate?.("activos")}
+          onClick={() => {
+            sessionStorage.setItem("dn_act_filter", "sin");
+            onNavigate?.("activos");
+          }}
         >
           <span className="kpi-label">Sin ubicación</span>
           <strong className="kpi-value">{sinUbicar}</strong>
