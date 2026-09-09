@@ -17,7 +17,8 @@ export type AppPage =
   | "activos"
   | "depositos"
   | "inventarios"
-  | "transferencias";
+  | "transferencias"
+  | "usuarios";
 
 const ACCION_LABELS: Record<string, string> = {
   creacion: "Alta",
@@ -324,6 +325,15 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                       onClick={() => onNavigate?.("transferencias")}
                     >
                       Nueva transferencia
+                    </button>
+                  )}
+                  {perms.canManageUsers && (
+                    <button
+                      type="button"
+                      className="btn secondary btn-sm"
+                      onClick={() => onNavigate?.("usuarios")}
+                    >
+                      Gestionar usuarios
                     </button>
                   )}
                 </div>

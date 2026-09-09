@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canCancelTransfer,
+  canManageUsers,
   canWriteAssets,
   canWriteTransfer,
   canWriteWarehouse,
@@ -18,6 +19,11 @@ describe("permissions", () => {
     expect(canCancelTransfer("supervisor")).toBe(true);
     expect(canWriteAssets("supervisor")).toBe(false);
     expect(canWriteTransfer("supervisor")).toBe(false);
+  });
+
+  it("solo admin gestiona usuarios", () => {
+    expect(canManageUsers("admin")).toBe(true);
+    expect(canManageUsers("supervisor")).toBe(false);
   });
 
   it("etiqueta roles legibles", () => {

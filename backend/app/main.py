@@ -12,6 +12,7 @@ from app.core.security_middleware import (
 from app.database import check_database_connection
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.users_router import router as users_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.reports.router import router as reports_router
 from app.modules.transfers.router import router as transfers_router
@@ -46,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
 app.include_router(warehouses_router, prefix="/api/v1")
 app.include_router(inventory_router, prefix="/api/v1")

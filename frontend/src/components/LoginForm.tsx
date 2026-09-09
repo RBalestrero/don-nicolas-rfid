@@ -1,6 +1,11 @@
 import { FormEvent, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
+const API_HINT = (import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1").replace(
+  /\/api\/v1\/?$/,
+  "",
+);
+
 export default function LoginForm() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -23,8 +28,9 @@ export default function LoginForm() {
 
   return (
     <section className="card auth-card">
+      <p className="section-kicker">Acceso WMS</p>
       <h2>Iniciar sesión</h2>
-      <p className="muted">Acceso operativo al WMS de activos RFID.</p>
+      <p className="muted">Gestión de activos RFID · depósitos · inventarios MC33</p>
       <form className="form" onSubmit={handleSubmit} autoComplete="on">
         <label className="field">
           <span>Email</span>
@@ -36,6 +42,7 @@ export default function LoginForm() {
             maxLength={254}
             autoComplete="username"
             inputMode="email"
+            placeholder="usuario@donnicolas.com"
           />
         </label>
         <label className="field">
@@ -54,10 +61,11 @@ export default function LoginForm() {
             {error}
           </p>
         )}
-        <button type="submit" className="btn primary" disabled={submitting}>
+        <button type="submit" className="btn primary btn-block" disabled={submitting}>
           {submitting ? "Ingresando…" : "Ingresar"}
         </button>
       </form>
+      <p className="login-meta muted">API · {API_HINT}</p>
     </section>
   );
 }

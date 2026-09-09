@@ -32,6 +32,10 @@ export function canCancelTransfer(rol: string | null | undefined): boolean {
   return TRANSFER_CANCEL.has(normalizeRole(rol));
 }
 
+export function canManageUsers(rol: string | null | undefined): boolean {
+  return normalizeRole(rol) === "admin";
+}
+
 export function roleLabel(rol: string | null | undefined): string {
   switch (normalizeRole(rol)) {
     case "admin":

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   canCancelTransfer,
+  canManageUsers,
   canWriteAssets,
   canWriteAssignment,
   canWriteTransfer,
@@ -22,6 +23,7 @@ export function usePermissions() {
       canWriteWarehouse: canWriteWarehouse(rol),
       canWriteTransfer: canWriteTransfer(rol),
       canCancelTransfer: canCancelTransfer(rol),
+      canManageUsers: canManageUsers(rol),
     }),
     [rol],
   );

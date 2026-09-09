@@ -27,6 +27,39 @@ export interface User {
   rol: string;
 }
 
+export interface RolCatalogo {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
+export interface UsuarioAdmin {
+  id: string;
+  email: string;
+  nombre: string;
+  rol: string;
+  rol_id: string;
+  activo: boolean;
+  creado_en: string;
+  actualizado_en: string;
+}
+
+export interface UsuarioCreatePayload {
+  email: string;
+  nombre: string;
+  password: string;
+  rol: string;
+  activo?: boolean;
+}
+
+export interface UsuarioUpdatePayload {
+  email?: string;
+  nombre?: string;
+  password?: string;
+  rol?: string;
+  activo?: boolean;
+}
+
 export interface ActivoCreatePayload {
   numero_patrimonial: string;
   descripcion: string;

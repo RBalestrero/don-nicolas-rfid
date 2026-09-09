@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
 import DashboardPage, { type AppPage } from "./components/DashboardPage";
 import DepositosPage from "./components/DepositosPage";
 import InventariosPage from "./components/InventariosPage";
 import TransferenciasPage from "./components/TransferenciasPage";
+import UsuariosPage from "./components/UsuariosPage";
 import LoginForm from "./components/LoginForm";
-import { roleLabel } from "./lib/permissions";
+import { canManageUsers, roleLabel } from "./lib/permissions";
 import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
@@ -83,6 +84,16 @@ function NavButton({
 export default function App() {
   const { user, loading, logout } = useAuth();
   const [page, setPage] = useState<AppPage>("dashboard");
+  const showUsuarios = canManageUsers(user?.rol);
+
+  const navAdmin = useMemo(
+    () => (showUsuarios ? ([{ id: "usuarios" as AppPage, label: "Usuarios" }] as const) : []),
+    [showUsuarios],
+  );
+
+  useEffect(() => {
+    if (!showUsuarios && page === "usuarios") setPage("dashboard");
+  }, [showUsuarios, page]);
 
   if (loading) {
     return (
@@ -160,6 +171,20 @@ export default function App() {
                 />
               ))}
             </div>
+            {navAdmin.length > 0 && (
+              <div className="nav-group">
+                <span className="nav-group-label">Admin</span>
+                {navAdmin.map((item) => (
+                  <NavButton
+                    key={item.id}
+                    id={item.id}
+                    label={item.label}
+                    active={page === item.id}
+                    onSelect={setPage}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </nav>
 
@@ -169,6 +194,7 @@ export default function App() {
           {page === "depositos" && <DepositosPage />}
           {page === "inventarios" && <InventariosPage />}
           {page === "transferencias" && <TransferenciasPage />}
+          {page === "usuarios" && showUsuarios && <UsuariosPage />}
         </main>
       </div>
     </div>

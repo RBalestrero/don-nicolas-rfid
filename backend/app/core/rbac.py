@@ -32,6 +32,7 @@ require_assignment_write = require_roles(*ROLES_ASSIGNMENT_WRITE)
 require_warehouse_write = require_roles(*ROLES_WAREHOUSE_WRITE)
 require_transfer_write = require_roles(*ROLES_TRANSFER_WRITE)
 require_transfer_cancel = require_roles(*ROLES_TRANSFER_CANCEL)
+require_admin = require_roles(ROLE_ADMIN)
 
 
 def require_inventory_write(

@@ -978,12 +978,33 @@
 
 /* —— Auth —— */
 .auth-card {
-  max-width: 400px;
+  max-width: 420px;
   margin: 0 auto;
+  padding: 1.35rem 1.4rem 1.2rem;
+}
+
+.auth-card h2 {
+  margin-bottom: 0.35rem;
 }
 
 .auth-card .muted {
-  margin-bottom: 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.auth-card .form-actions,
+.auth-card .btn-block {
+  width: 100%;
+}
+
+.btn-block {
+  width: 100%;
+  justify-content: center;
+}
+
+.login-meta {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  text-align: center;
 }
 
 .info-banner {
