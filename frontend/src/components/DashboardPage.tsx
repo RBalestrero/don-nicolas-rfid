@@ -393,7 +393,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       </section>
 
       <div className="dash-split">
-        <section className="card panel">
+        <section className="card">
           <div className="section-header">
             <h3>En curso ahora</h3>
             <span className="muted">
@@ -520,7 +520,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         </section>
 
         <aside className="dash-aside">
-          <section className="card panel">
+          <section className="card">
             <div className="section-header">
               <h3>Stock por depósito</h3>
               <button
@@ -579,7 +579,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         </aside>
       </div>
 
-      <section className="card panel">
+      <section className="card">
         <div className="section-header">
           <h3>Auditoría reciente</h3>
           <div className="section-header-right">

@@ -163,73 +163,84 @@ export default function DepositosPage() {
         </section>
       )}
 
-      <section className="card">
-        <div className="section-header">
-          <h3>Seleccionar depósito</h3>
-        </div>
-        {loading && <p className="muted">Cargando depósitos...</p>}
-        {!loading && depositos.length === 0 && (
-          <EmptyState
-            title="Sin depósitos"
-            description="La estructura depósito → sector → ubicación es la base del stock."
-            steps={[
-              "Creá el depósito (p. ej. Central)",
-              "Agregá sectores",
-              "Definí códigos de ubicación (A-01, …)",
-            ]}
-            action={
-              perms.canWriteWarehouse ? (
-                <button type="button" className="btn primary btn-sm" onClick={() => setShowForm(true)}>
-                  + Nuevo depósito
+      <section className="card depot-workspace">
+        <div className="depot-workspace-head">
+          <div className="section-header">
+            <div>
+              <span className="section-kicker">Depósitos</span>
+              <h3>Seleccionar y operar</h3>
+            </div>
+            {!loading && depositos.length > 0 && (
+              <span className="muted">{depositos.length} activos</span>
+            )}
+          </div>
+
+          {loading && <p className="muted">Cargando depósitos…</p>}
+          {!loading && depositos.length === 0 && (
+            <EmptyState
+              title="Sin depósitos"
+              description="La estructura depósito → sector → ubicación es la base del stock."
+              steps={[
+                "Creá el depósito (p. ej. Central)",
+                "Agregá sectores",
+                "Definí códigos de ubicación (A-01, …)",
+              ]}
+              action={
+                perms.canWriteWarehouse ? (
+                  <button
+                    type="button"
+                    className="btn primary btn-sm"
+                    onClick={() => setShowForm(true)}
+                  >
+                    + Nuevo depósito
+                  </button>
+                ) : undefined
+              }
+            />
+          )}
+          {!loading && depositos.length > 0 && (
+            <div className="deposito-selector" role="listbox" aria-label="Lista de depósitos">
+              {depositos.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedId === d.id}
+                  className={`deposito-chip ${selectedId === d.id ? "active" : ""}`}
+                  onClick={() => setSelectedId(d.id)}
+                >
+                  {d.nombre}
                 </button>
-              ) : undefined
-            }
-          />
-        )}
-        {!loading && depositos.length > 0 && (
-          <div className="deposito-selector" role="listbox" aria-label="Lista de depósitos">
-            {depositos.map((d) => (
+              ))}
+            </div>
+          )}
+        </div>
+
+        {detalle && (
+          <>
+            <div className="tabs" role="tablist" aria-label="Vista del depósito">
               <button
-                key={d.id}
                 type="button"
-                role="option"
-                aria-selected={selectedId === d.id}
-                className={`deposito-chip ${selectedId === d.id ? "active" : ""}`}
-                onClick={() => setSelectedId(d.id)}
+                role="tab"
+                aria-selected={tab === "estructura"}
+                className={`tab ${tab === "estructura" ? "active" : ""}`}
+                onClick={() => setTab("estructura")}
               >
-                {d.nombre}
+                Estructura
               </button>
-            ))}
-          </div>
-        )}
-      </section>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "stock"}
+                className={`tab ${tab === "stock" ? "active" : ""}`}
+                onClick={() => setTab("stock")}
+              >
+                Stock ({stock?.total ?? 0})
+              </button>
+            </div>
 
-      {detalle && (
-        <>
-          <div className="tabs" role="tablist" aria-label="Vista del depósito">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "estructura"}
-              className={`tab ${tab === "estructura" ? "active" : ""}`}
-              onClick={() => setTab("estructura")}
-            >
-              Estructura
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "stock"}
-              className={`tab ${tab === "stock" ? "active" : ""}`}
-              onClick={() => setTab("stock")}
-            >
-              Stock ({stock?.total ?? 0})
-            </button>
-          </div>
-
-          {tab === "estructura" && (
-            <>
-              <section className="card">
+            {tab === "estructura" && (
+              <>
                 <div className="section-header">
                   <div>
                     <span className="section-kicker">Estructura</span>
@@ -280,115 +291,115 @@ export default function DepositosPage() {
                     ))}
                   </div>
                 )}
-              </section>
 
-              {perms.canWriteWarehouse && (
-                <div className="two-col">
-                  <section className="card">
-                    <h3>Nuevo sector</h3>
-                    <SectorForm onSubmit={handleCreateSector} />
-                  </section>
-                  <section className="card">
-                    <h3>Nueva ubicación</h3>
-                    <UbicacionForm
-                      sectores={detalle.sectores}
-                      onSubmit={handleCreateUbicacion}
-                    />
-                  </section>
-                </div>
-              )}
-            </>
-          )}
-
-          {tab === "stock" && (
-            <section className="card">
-              <div className="section-header">
-                <h3>Stock en {detalle.nombre}</h3>
-                <div className="section-header-right">
-                  {stock && stock.total > 0 && (
-                    <span className="muted">
-                      {stockFiltrado.length}
-                      {stockSearch.trim() ? ` / ${stock.total}` : ""} activos
-                    </span>
-                  )}
-                  <ExportButtons
-                    basePath={`/reportes/stock/${detalle.id}`}
-                    filenameBase={`stock_${detalle.nombre}`}
-                    disabled={!stock || stock.total === 0}
-                  />
-                </div>
-              </div>
-              {!stock || stock.total === 0 ? (
-                <p className="muted">No hay activos asignados en este depósito.</p>
-              ) : (
-                <>
-                  <div className="toolbar" role="search" aria-label="Filtrar stock">
-                    <label className="field toolbar-field grow">
-                      <span>Buscar en stock</span>
-                      <input
-                        value={stockSearch}
-                        onChange={(e) => setStockSearch(e.target.value)}
-                        placeholder="Patrimonial, categoría, sector o ubicación"
+                {perms.canWriteWarehouse && (
+                  <div className="two-col">
+                    <div className="inset-block">
+                      <h3>Nuevo sector</h3>
+                      <SectorForm onSubmit={handleCreateSector} />
+                    </div>
+                    <div className="inset-block">
+                      <h3>Nueva ubicación</h3>
+                      <UbicacionForm
+                        sectores={detalle.sectores}
+                        onSubmit={handleCreateUbicacion}
                       />
-                    </label>
-                    {stockSearch.trim() && (
-                      <div className="toolbar-actions">
-                        <button
-                          type="button"
-                          className="btn secondary"
-                          onClick={() => setStockSearch("")}
-                        >
-                          Limpiar
-                        </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {tab === "stock" && (
+              <>
+                <div className="section-header">
+                  <h3>Stock en {detalle.nombre}</h3>
+                  <div className="section-header-right">
+                    {stock && stock.total > 0 && (
+                      <span className="muted">
+                        {stockFiltrado.length}
+                        {stockSearch.trim() ? ` / ${stock.total}` : ""} activos
+                      </span>
+                    )}
+                    <ExportButtons
+                      basePath={`/reportes/stock/${detalle.id}`}
+                      filenameBase={`stock_${detalle.nombre}`}
+                      disabled={!stock || stock.total === 0}
+                    />
+                  </div>
+                </div>
+                {!stock || stock.total === 0 ? (
+                  <p className="muted">No hay activos asignados en este depósito.</p>
+                ) : (
+                  <>
+                    <div className="toolbar" role="search" aria-label="Filtrar stock">
+                      <label className="field toolbar-field grow">
+                        <span>Buscar en stock</span>
+                        <input
+                          value={stockSearch}
+                          onChange={(e) => setStockSearch(e.target.value)}
+                          placeholder="Patrimonial, categoría, sector o ubicación"
+                        />
+                      </label>
+                      {stockSearch.trim() && (
+                        <div className="toolbar-actions">
+                          <button
+                            type="button"
+                            className="btn secondary"
+                            onClick={() => setStockSearch("")}
+                          >
+                            Limpiar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {stockFiltrado.length === 0 ? (
+                      <EmptyState
+                        title="Sin coincidencias"
+                        description="Ningún activo del stock coincide con la búsqueda."
+                        action={
+                          <button
+                            type="button"
+                            className="btn secondary btn-sm"
+                            onClick={() => setStockSearch("")}
+                          >
+                            Limpiar búsqueda
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <div className="table-wrap table-panel">
+                        <table className="data-table dense sticky-head">
+                          <thead>
+                            <tr>
+                              <th>Patrimonio</th>
+                              <th className="col-hide-sm">Descripción</th>
+                              <th>Categoría</th>
+                              <th>Sector</th>
+                              <th>Ubicación</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stockFiltrado.map((a) => (
+                              <tr key={a.activo_id}>
+                                <td className="mono">{a.numero_patrimonial}</td>
+                                <td className="col-hide-sm">{a.descripcion}</td>
+                                <td>{a.categoria_nombre}</td>
+                                <td>{a.sector_nombre}</td>
+                                <td className="mono">{a.ubicacion_codigo}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
-                  </div>
-                  {stockFiltrado.length === 0 ? (
-                    <EmptyState
-                      title="Sin coincidencias"
-                      description="Ningún activo del stock coincide con la búsqueda."
-                      action={
-                        <button
-                          type="button"
-                          className="btn secondary btn-sm"
-                          onClick={() => setStockSearch("")}
-                        >
-                          Limpiar búsqueda
-                        </button>
-                      }
-                    />
-                  ) : (
-                    <div className="table-wrap table-panel">
-                      <table className="data-table dense sticky-head">
-                        <thead>
-                          <tr>
-                            <th>Patrimonio</th>
-                            <th className="col-hide-sm">Descripción</th>
-                            <th>Categoría</th>
-                            <th>Sector</th>
-                            <th>Ubicación</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stockFiltrado.map((a) => (
-                            <tr key={a.activo_id}>
-                              <td className="mono">{a.numero_patrimonial}</td>
-                              <td className="col-hide-sm">{a.descripcion}</td>
-                              <td>{a.categoria_nombre}</td>
-                              <td>{a.sector_nombre}</td>
-                              <td className="mono">{a.ubicacion_codigo}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          )}
-        </>
-      )}
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }
