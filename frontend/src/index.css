@@ -38,6 +38,7 @@
   --card-pad-y: 0.75rem;
   --scroll-panel: min(64vh, 34rem);
   --scroll-compact: 14rem;
+  --scroll-dash: min(38vh, 18rem);
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%235b6b7e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   font-family: var(--font);

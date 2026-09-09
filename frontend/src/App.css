@@ -1539,10 +1539,12 @@
   list-style: none;
   display: grid;
   gap: 0.35rem;
-  max-height: var(--scroll-panel);
+  max-height: var(--scroll-dash);
   overflow: auto;
+  overscroll-behavior: contain;
   margin: 0;
   padding: 0;
+  scrollbar-gutter: stable;
 }
 
 .ops-item {
@@ -1736,7 +1738,21 @@
 .stock-bars {
   list-style: none;
   display: grid;
-  gap: 0.7rem;
+  gap: 0.55rem;
+  max-height: var(--scroll-dash);
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0;
+  scrollbar-gutter: stable;
+}
+
+.dash-scroll,
+.card > .table-wrap.table-panel.dash-scroll {
+  max-height: var(--scroll-dash);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .stock-bar-head {

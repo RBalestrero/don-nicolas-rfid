@@ -653,7 +653,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             }
           />
         ) : (
-          <div className="table-wrap table-panel">
+          <div className="table-wrap table-panel dash-scroll">
             <table className="data-table dense sticky-head">
               <thead>
                 <tr>
