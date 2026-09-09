@@ -37,6 +37,15 @@ class DashboardKpis(BaseModel):
     inventarios_abiertos: int
     transferencias_abiertas: int
     stock_total_ubicado: int
+    activos_sin_ubicacion: int
+    cobertura_ubicacion_pct: int
+    inventarios_pendientes_auditoria: int
+    inventarios_con_discrepancia_pendiente: int
+    inventarios_activos_pendientes: int
+    inventarios_avance_pct: int
+    transferencias_en_transito: int
+    transferencias_activos_pendientes: int
+    transferencias_avance_pct: int
     discrepancias_inventarios_cerrados: DiscrepanciasKpi
 
 

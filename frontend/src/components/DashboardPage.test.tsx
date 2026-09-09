@@ -33,6 +33,15 @@ const resumen: DashboardResumen = {
     inventarios_abiertos: 1,
     transferencias_abiertas: 2,
     stock_total_ubicado: 10,
+    activos_sin_ubicacion: 2,
+    cobertura_ubicacion_pct: 83,
+    inventarios_pendientes_auditoria: 3,
+    inventarios_con_discrepancia_pendiente: 2,
+    inventarios_activos_pendientes: 7,
+    inventarios_avance_pct: 30,
+    transferencias_en_transito: 1,
+    transferencias_activos_pendientes: 2,
+    transferencias_avance_pct: 0,
     discrepancias_inventarios_cerrados: {
       faltantes: 4,
       sobrantes: 1,
@@ -122,19 +131,21 @@ describe("DashboardPage", () => {
     const onNavigate = vi.fn();
     render(<DashboardPage onNavigate={onNavigate} />);
 
-    expect(await screen.findByText("Transferencias abiertas")).toBeInTheDocument();
-    expect(screen.getByText("Inventarios abiertos")).toBeInTheDocument();
-    expect(screen.getByText("Discrepancias")).toBeInTheDocument();
-    expect(screen.getByText("Sin ubicación")).toBeInTheDocument();
+    expect(await screen.findByText("Ejecución de transferencias")).toBeInTheDocument();
+    expect(screen.getByText("Avance de inventarios")).toBeInTheDocument();
+    expect(screen.getByText("Auditoría pendiente")).toBeInTheDocument();
+    expect(screen.getByText("Cobertura de ubicación")).toBeInTheDocument();
     expect(screen.getByText(/hay discrepancias para revisar/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /transferencias abiertas/i })).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: /^sin ubicación/i })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: /ejecución de transferencias/i })).toHaveTextContent("0%");
+    expect(screen.getByRole("button", { name: /^cobertura de ubicación/i })).toHaveTextContent("2");
+    expect(screen.getByText(/2 activos por recibir/i)).toBeInTheDocument();
+    expect(screen.getByText(/7 activos por relevar/i)).toBeInTheDocument();
     expect(screen.getByText(/Central → Sur/)).toBeInTheDocument();
     expect(screen.getByText(/Confirmados en destino 0\/2/)).toBeInTheDocument();
     expect(screen.getByText(/Leídos 3\/10 esperados/)).toBeInTheDocument();
     expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /transferencias abiertas/i }));
+    await user.click(screen.getByRole("button", { name: /ejecución de transferencias/i }));
     expect(onNavigate).toHaveBeenCalledWith("transferencias");
 
     await user.selectOptions(screen.getByLabelText(/^acción$/i), "transferencia");
@@ -161,6 +172,15 @@ describe("DashboardPage", () => {
             inventarios_abiertos: 0,
             transferencias_abiertas: 0,
             stock_total_ubicado: 0,
+            activos_sin_ubicacion: 0,
+            cobertura_ubicacion_pct: 0,
+            inventarios_pendientes_auditoria: 0,
+            inventarios_con_discrepancia_pendiente: 0,
+            inventarios_activos_pendientes: 0,
+            inventarios_avance_pct: 0,
+            transferencias_en_transito: 0,
+            transferencias_activos_pendientes: 0,
+            transferencias_avance_pct: 0,
             discrepancias_inventarios_cerrados: {
               faltantes: 0,
               sobrantes: 0,

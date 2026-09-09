@@ -98,6 +98,64 @@ class ReportsService:
             inventarios_con_discrepancia=int(disc_rows[2] or 0),
         )
 
+        activos_sin_ubicacion = max(0, activos_activos - stock_total_ubicado)
+        cobertura_ubicacion_pct = (
+            round((stock_total_ubicado / activos_activos) * 100) if activos_activos > 0 else 0
+        )
+
+        inventario_rows = list(
+            self.db.scalars(
+                select(Inventario).where(Inventario.estado.in_(["en_curso", "cerrado"]))
+            ).all()
+        )
+        inventarios_pendientes_auditoria = sum(
+            1 for inv in inventario_rows if inv.estado == "cerrado" and not inv.auditado
+        )
+        inventarios_con_discrepancia_pendiente = sum(
+            1
+            for inv in inventario_rows
+            if inv.estado == "cerrado"
+            and not inv.auditado
+            and (inv.total_faltante > 0 or inv.total_sobrante > 0)
+        )
+        inventarios_activos_pendientes = sum(
+            max(0, (inv.total_esperado or 0) - (inv.total_encontrado or 0))
+            for inv in inventario_rows
+            if inv.estado == "en_curso"
+        )
+        inventarios_esperados_abiertos = sum(
+            max(0, inv.total_esperado or 0) for inv in inventario_rows if inv.estado == "en_curso"
+        )
+        inventarios_encontrados_abiertos = sum(
+            max(0, inv.total_encontrado or 0) for inv in inventario_rows if inv.estado == "en_curso"
+        )
+        inventarios_avance_pct = (
+            round((inventarios_encontrados_abiertos / inventarios_esperados_abiertos) * 100)
+            if inventarios_esperados_abiertos > 0
+            else 0
+        )
+
+        transferencias_rows = list(
+            self.db.scalars(
+                select(Transferencia)
+                .options(selectinload(Transferencia.detalles))
+                .where(Transferencia.estado.in_(["pendiente", "en_transito"]))
+            ).all()
+        )
+        transferencias_en_transito = sum(1 for t in transferencias_rows if t.estado == "en_transito")
+        transferencias_detalles_abiertas = sum(len(t.detalles) for t in transferencias_rows)
+        transferencias_confirmadas_destino = sum(
+            sum(1 for d in t.detalles if d.confirmado_destino) for t in transferencias_rows
+        )
+        transferencias_activos_pendientes = max(
+            0, transferencias_detalles_abiertas - transferencias_confirmadas_destino
+        )
+        transferencias_avance_pct = (
+            round((transferencias_confirmadas_destino / transferencias_detalles_abiertas) * 100)
+            if transferencias_detalles_abiertas > 0
+            else 0
+        )
+
         stock_por_deposito = self._stock_por_deposito()
         movimientos, _ = self.historial.list_global(limit=movimientos_limit, offset=0)
         transferencias = self._transferencias_recientes(ops_limit)
@@ -110,6 +168,15 @@ class ReportsService:
                 inventarios_abiertos=inventarios_abiertos,
                 transferencias_abiertas=transferencias_abiertas,
                 stock_total_ubicado=stock_total_ubicado,
+                activos_sin_ubicacion=activos_sin_ubicacion,
+                cobertura_ubicacion_pct=cobertura_ubicacion_pct,
+                inventarios_pendientes_auditoria=inventarios_pendientes_auditoria,
+                inventarios_con_discrepancia_pendiente=inventarios_con_discrepancia_pendiente,
+                inventarios_activos_pendientes=inventarios_activos_pendientes,
+                inventarios_avance_pct=inventarios_avance_pct,
+                transferencias_en_transito=transferencias_en_transito,
+                transferencias_activos_pendientes=transferencias_activos_pendientes,
+                transferencias_avance_pct=transferencias_avance_pct,
                 discrepancias_inventarios_cerrados=discrepancias,
             ),
             stock_por_deposito=stock_por_deposito,

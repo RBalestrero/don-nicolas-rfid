@@ -186,6 +186,15 @@ export interface DashboardKpis {
   inventarios_abiertos: number;
   transferencias_abiertas: number;
   stock_total_ubicado: number;
+  activos_sin_ubicacion: number;
+  cobertura_ubicacion_pct: number;
+  inventarios_pendientes_auditoria: number;
+  inventarios_con_discrepancia_pendiente: number;
+  inventarios_activos_pendientes: number;
+  inventarios_avance_pct: number;
+  transferencias_en_transito: number;
+  transferencias_activos_pendientes: number;
+  transferencias_avance_pct: number;
   discrepancias_inventarios_cerrados: {
     faltantes: number;
     sobrantes: number;

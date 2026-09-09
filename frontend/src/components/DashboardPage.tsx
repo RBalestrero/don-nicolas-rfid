@@ -181,11 +181,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const { kpis } = resumen;
   const disc = kpis.discrepancias_inventarios_cerrados;
-  const sinUbicar = Math.max(0, kpis.activos_activos - kpis.stock_total_ubicado);
-  const cobertura =
-    kpis.activos_activos > 0
-      ? Math.round((kpis.stock_total_ubicado / kpis.activos_activos) * 100)
-      : 0;
+  const sinUbicar = kpis.activos_sin_ubicacion;
+  const cobertura = kpis.cobertura_ubicacion_pct;
   const pendientesCola = colaTransferencias.length + colaInventarios.length;
   const primerUso =
     kpis.activos_activos === 0 &&
@@ -331,45 +328,51 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       <section className="kpi-grid" aria-label="Indicadores operativos">
         <button
           type="button"
-          className={`kpi-card interactive ${kpis.transferencias_abiertas > 0 ? "tone-warn" : "tone-ok"}`}
+          className={`kpi-card interactive ${kpis.transferencias_activos_pendientes > 0 ? "tone-warn" : "tone-ok"}`}
           onClick={() => onNavigate?.("transferencias")}
         >
-          <span className="kpi-label">Transferencias abiertas</span>
-          <strong className="kpi-value">{kpis.transferencias_abiertas}</strong>
+          <span className="kpi-label">Ejecución de transferencias</span>
+          <strong className="kpi-value">{kpis.transferencias_avance_pct}%</strong>
           <span className="kpi-status">
-            {kpis.transferencias_abiertas > 0 ? "Requieren avance" : "Al día"}
+            {kpis.transferencias_abiertas > 0 ? "Movimiento en curso" : "Sin órdenes abiertas"}
           </span>
-          <span className="kpi-hint">Pendientes o en tránsito · ir a cola</span>
+          <span className="kpi-hint">
+            {kpis.transferencias_activos_pendientes} activo{kpis.transferencias_activos_pendientes === 1 ? "" : "s"} por recibir ·{" "}
+            {kpis.transferencias_en_transito} en tránsito
+          </span>
         </button>
 
         <button
           type="button"
-          className={`kpi-card interactive ${kpis.inventarios_abiertos > 0 ? "tone-warn" : "tone-ok"}`}
+          className={`kpi-card interactive ${kpis.inventarios_activos_pendientes > 0 ? "tone-warn" : "tone-ok"}`}
           onClick={() => onNavigate?.("inventarios")}
         >
-          <span className="kpi-label">Inventarios abiertos</span>
-          <strong className="kpi-value">{kpis.inventarios_abiertos}</strong>
+          <span className="kpi-label">Avance de inventarios</span>
+          <strong className="kpi-value">{kpis.inventarios_avance_pct}%</strong>
           <span className="kpi-status">
-            {kpis.inventarios_abiertos > 0 ? "En curso en MC33" : "Sin sesiones abiertas"}
+            {kpis.inventarios_abiertos > 0 ? "Conteo en MC33" : "Sin sesiones abiertas"}
           </span>
-          <span className="kpi-hint">Solo auditoría en web</span>
+          <span className="kpi-hint">
+            {kpis.inventarios_activos_pendientes} activo{kpis.inventarios_activos_pendientes === 1 ? "" : "s"} por relevar ·{" "}
+            {kpis.inventarios_abiertos} sesión{kpis.inventarios_abiertos === 1 ? "" : "es"}
+          </span>
         </button>
 
         <button
           type="button"
-          className={`kpi-card interactive ${disc.inventarios_con_discrepancia > 0 ? "tone-danger" : "tone-ok"}`}
+          className={`kpi-card interactive ${kpis.inventarios_pendientes_auditoria > 0 ? "tone-danger" : "tone-ok"}`}
           onClick={() => {
             sessionStorage.setItem("dn_inv_filter", "discrepancias");
             onNavigate?.("inventarios");
           }}
         >
-          <span className="kpi-label">Discrepancias</span>
-          <strong className="kpi-value">{disc.inventarios_con_discrepancia}</strong>
+          <span className="kpi-label">Auditoría pendiente</span>
+          <strong className="kpi-value">{kpis.inventarios_pendientes_auditoria}</strong>
           <span className="kpi-status">
-            {disc.inventarios_con_discrepancia > 0 ? "Revisar cierre" : "Sin diferencias"}
+            {kpis.inventarios_pendientes_auditoria > 0 ? "Revisión requerida" : "Todo auditado"}
           </span>
           <span className="kpi-hint">
-            {disc.faltantes} falt. · {disc.sobrantes} sobr.
+            {kpis.inventarios_con_discrepancia_pendiente} con diferencia · {disc.faltantes} falt. · {disc.sobrantes} sobr.
           </span>
         </button>
 
@@ -381,13 +384,13 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             onNavigate?.("activos");
           }}
         >
-          <span className="kpi-label">Sin ubicación</span>
+          <span className="kpi-label">Cobertura de ubicación</span>
           <strong className="kpi-value">{sinUbicar}</strong>
           <span className="kpi-status">
-            {sinUbicar > 0 ? "Asignar ubicación" : "Cobertura completa"}
+            {sinUbicar > 0 ? `${cobertura}% ubicado` : "Cobertura completa"}
           </span>
           <span className="kpi-hint">
-            {kpis.stock_total_ubicado}/{kpis.activos_activos} ubicados · {cobertura}%
+            {kpis.stock_total_ubicado}/{kpis.activos_activos} ubicados · {sinUbicar} pendiente{sinUbicar === 1 ? "" : "s"}
           </span>
         </button>
       </section>
