@@ -1545,21 +1545,27 @@
   margin: 0;
   padding: 0;
   scrollbar-gutter: stable;
+  align-content: start;
 }
 
 .ops-item {
   width: 100%;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.45rem 0.65rem;
+  gap: 0.35rem 0.5rem;
   align-items: start;
   text-align: left;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.55rem 0.65rem;
+  padding: 0.38rem 0.5rem;
   color: inherit;
   cursor: pointer;
+}
+
+.ops-item .badge {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.45rem;
 }
 
 .ops-item .ops-time {
@@ -1587,32 +1593,32 @@
 .ops-body {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.06rem;
   min-width: 0;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .ops-time {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   white-space: nowrap;
 }
 
 .ops-progress {
   grid-column: 1 / -1;
   display: grid;
-  gap: 0.2rem;
+  gap: 0.15rem;
 }
 
 .ops-progress-meta {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
-  font-size: 0.72rem;
+  gap: 0.4rem;
+  font-size: 0.66rem;
   color: var(--text-muted);
 }
 
 .ops-progress-track {
-  height: 5px;
+  height: 4px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 99px;
@@ -1725,29 +1731,30 @@
 
 .dash-split > .card,
 .dash-aside > .card {
-  min-height: calc(var(--scroll-dash) + 4.75rem);
+  height: var(--dash-card-h);
   display: flex;
   flex-direction: column;
   align-content: stretch;
+  min-height: 0;
 }
 
 .dash-split > .card > .ops-queue,
 .dash-aside > .card > .stock-bars,
 .dash-split > .card > .empty-state-block,
 .dash-aside > .card > .empty-state-block {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
 }
 
 .dash-split > .card > .ops-queue,
 .dash-aside > .card > .stock-bars {
-  max-height: none;
+  max-height: var(--scroll-dash);
 }
 
 @media (min-width: 1100px) {
-  .dash-aside,
+  .dash-split > .card,
   .dash-aside > .card {
-    height: 100%;
+    height: var(--dash-card-h);
   }
 }
 
