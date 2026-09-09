@@ -15,6 +15,10 @@ import Stepper from "./Stepper";
 import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "../context/ToastContext";
 import { usePermissions } from "../lib/usePermissions";
+import {
+  filterTransferencias,
+  hasActiveTransferenciasFilters,
+} from "../lib/filterTransferencias";
 
 function parseEpcs(raw: string): string[] {
   return raw
@@ -63,11 +67,28 @@ export default function TransferenciasPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(true);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [search, setSearch] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState("");
 
   const nombreDeposito = useCallback(
     (id: string) => depositos.find((d) => d.id === id)?.nombre ?? id.slice(0, 8),
     [depositos],
   );
+
+  const filterOpts = useMemo(
+    () => ({ search, estado: estadoFilter }),
+    [search, estadoFilter],
+  );
+  const filtersActive = hasActiveTransferenciasFilters(filterOpts);
+  const listaFiltrada = useMemo(
+    () => filterTransferencias(lista, filterOpts, nombreDeposito),
+    [lista, filterOpts, nombreDeposito],
+  );
+
+  const clearFilters = () => {
+    setSearch("");
+    setEstadoFilter("");
+  };
 
   const ubicacionesDestino = useMemo(() => {
     if (!destinoDetalle) return [];
@@ -556,12 +577,51 @@ export default function TransferenciasPage() {
       <section className="card">
         <div className="section-header">
           <h3>Órdenes</h3>
-          <ExportButtons
-            basePath="/reportes/transferencias"
-            filenameBase="transferencias"
-            disabled={lista.length === 0}
-          />
+          <div className="section-header-right">
+            {!loading && lista.length > 0 && (
+              <span className="muted">
+                {listaFiltrada.length}
+                {filtersActive ? ` / ${lista.length}` : ""} órdenes
+              </span>
+            )}
+            <ExportButtons
+              basePath="/reportes/transferencias"
+              filenameBase="transferencias"
+              disabled={lista.length === 0}
+            />
+          </div>
         </div>
+
+        {lista.length > 0 && (
+          <div className="toolbar" role="search" aria-label="Filtrar transferencias">
+            <label className="field toolbar-field grow">
+              <span>Buscar</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Origen, destino o estado"
+              />
+            </label>
+            <label className="field toolbar-field">
+              <span>Estado</span>
+              <select value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="en_transito">En tránsito</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </label>
+            {filtersActive && (
+              <div className="toolbar-actions">
+                <button type="button" className="btn secondary" onClick={clearFilters}>
+                  Limpiar
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? null : lista.length === 0 ? (
           <EmptyState
             title="Sin transferencias"
@@ -586,6 +646,16 @@ export default function TransferenciasPage() {
               ) : undefined
             }
           />
+        ) : listaFiltrada.length === 0 ? (
+          <EmptyState
+            title="Sin coincidencias"
+            description="Ninguna orden coincide con los filtros actuales."
+            action={
+              <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
+                Limpiar filtros
+              </button>
+            }
+          />
         ) : (
           <div className="table-wrap table-panel">
             <table className="data-table dense sticky-head">
@@ -600,7 +670,7 @@ export default function TransferenciasPage() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((t) => (
+                {listaFiltrada.map((t) => (
                   <tr key={t.id} className={activa?.id === t.id ? "row-active" : undefined}>
                     <td>
                       <span className={`badge ${estadoBadgeClass(t.estado)}`}>

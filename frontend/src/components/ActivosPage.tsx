@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiFetch } from "../lib/api";
 import { useToast } from "../context/ToastContext";
 import type {
@@ -17,7 +17,13 @@ import ActivosList from "./ActivosList";
 import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
 import CategoriaForm from "./CategoriaForm";
 import ConfirmDialog from "./ConfirmDialog";
+import EmptyState from "./EmptyState";
 import PageHeader from "./PageHeader";
+import {
+  filterActivos,
+  hasActiveActivosFilters,
+  type UbicacionFilter,
+} from "../lib/filterActivos";
 import { usePermissions } from "../lib/usePermissions";
 
 async function fetchUbicacionOrNull(activoId: string): Promise<UbicacionAsignada | null> {
@@ -48,6 +54,25 @@ export default function ActivosPage() {
   const [tab, setTab] = useState<"activos" | "categorias">("activos");
   const [confirmBajaId, setConfirmBajaId] = useState<string | null>(null);
   const [bajaBusy, setBajaBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [categoriaFilter, setCategoriaFilter] = useState("");
+  const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("all");
+
+  const filterOpts = useMemo(
+    () => ({ search, categoriaId: categoriaFilter, ubicacion: ubicacionFilter }),
+    [search, categoriaFilter, ubicacionFilter],
+  );
+  const filtersActive = hasActiveActivosFilters(filterOpts);
+  const activosFiltrados = useMemo(
+    () => filterActivos(activos, ubicaciones, filterOpts),
+    [activos, ubicaciones, filterOpts],
+  );
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategoriaFilter("");
+    setUbicacionFilter("all");
+  };
 
   const loadUbicaciones = useCallback(async (lista: Activo[]) => {
     const entries = await Promise.all(
@@ -373,44 +398,110 @@ export default function ActivosPage() {
           <section className="card">
             <div className="section-header">
               <h3>Listado</h3>
-              {perms.canWriteAssets && (
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => {
-                    closePanels();
-                    setShowForm((v) => !v);
-                  }}
-                >
-                  {showForm ? "Cancelar" : "+ Nuevo activo"}
-                </button>
-              )}
-            </div>
-            <ActivosList
-              activos={activos}
-              ubicaciones={ubicaciones}
-              loading={loading}
-              assigningId={assigningId}
-              editingId={editingId}
-              historialId={historialId}
-              fotosId={fotosId}
-              onAssign={handleToggleAssign}
-              onUnassign={handleUnassign}
-              onEdit={handleToggleEdit}
-              onHistorial={handleToggleHistorial}
-              onFotos={handleToggleFotos}
-              onDeactivate={handleDeactivate}
-              canWriteAssets={perms.canWriteAssets}
-              canWriteAssignment={perms.canWriteAssignment}
-              onCreateRequest={
-                perms.canWriteAssets
-                  ? () => {
+              <div className="section-header-right">
+                {!loading && activos.length > 0 && (
+                  <span className="muted">
+                    {activosFiltrados.length}
+                    {filtersActive ? ` / ${activos.length}` : ""} activos
+                  </span>
+                )}
+                {perms.canWriteAssets && (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => {
                       closePanels();
-                      setShowForm(true);
-                    }
-                  : undefined
-              }
-            />
+                      setShowForm((v) => !v);
+                    }}
+                  >
+                    {showForm ? "Cancelar" : "+ Nuevo activo"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {activos.length > 0 && (
+              <div className="toolbar" role="search" aria-label="Filtrar activos">
+                <label className="field toolbar-field grow">
+                  <span>Buscar</span>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Patrimonial, EPC, descripción o ubicación"
+                  />
+                </label>
+                <label className="field toolbar-field">
+                  <span>Categoría</span>
+                  <select
+                    value={categoriaFilter}
+                    onChange={(e) => setCategoriaFilter(e.target.value)}
+                  >
+                    <option value="">Todas</option>
+                    {categorias.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field toolbar-field">
+                  <span>Ubicación</span>
+                  <select
+                    value={ubicacionFilter}
+                    onChange={(e) => setUbicacionFilter(e.target.value as UbicacionFilter)}
+                  >
+                    <option value="all">Todas</option>
+                    <option value="con">Con ubicación</option>
+                    <option value="sin">Sin ubicación</option>
+                  </select>
+                </label>
+                {filtersActive && (
+                  <div className="toolbar-actions">
+                    <button type="button" className="btn secondary" onClick={clearFilters}>
+                      Limpiar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!loading && activos.length > 0 && activosFiltrados.length === 0 ? (
+              <EmptyState
+                title="Sin coincidencias"
+                description="Ningún activo coincide con los filtros actuales."
+                action={
+                  <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
+                    Limpiar filtros
+                  </button>
+                }
+              />
+            ) : (
+              <ActivosList
+                activos={activosFiltrados}
+                ubicaciones={ubicaciones}
+                loading={loading}
+                assigningId={assigningId}
+                editingId={editingId}
+                historialId={historialId}
+                fotosId={fotosId}
+                onAssign={handleToggleAssign}
+                onUnassign={handleUnassign}
+                onEdit={handleToggleEdit}
+                onHistorial={handleToggleHistorial}
+                onFotos={handleToggleFotos}
+                onDeactivate={handleDeactivate}
+                canWriteAssets={perms.canWriteAssets}
+                canWriteAssignment={perms.canWriteAssignment}
+                onCreateRequest={
+                  perms.canWriteAssets
+                    ? () => {
+                        closePanels();
+                        setShowForm(true);
+                      }
+                    : undefined
+                }
+              />
+            )}
           </section>
         </>
       )}

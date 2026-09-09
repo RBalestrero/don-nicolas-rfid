@@ -1310,8 +1310,9 @@
 .section-header-right {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .export-actions {
