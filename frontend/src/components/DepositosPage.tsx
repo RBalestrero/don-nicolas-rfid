@@ -13,6 +13,7 @@ import DepositoForm from "./DepositoForm";
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
+import Modal from "./Modal";
 import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 import { usePermissions } from "../lib/usePermissions";
@@ -27,6 +28,8 @@ export default function DepositosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showSectorForm, setShowSectorForm] = useState(false);
+  const [showUbicacionForm, setShowUbicacionForm] = useState(false);
   const [tab, setTab] = useState<"estructura" | "stock">("estructura");
   const [stockSearch, setStockSearch] = useState("");
 
@@ -113,6 +116,7 @@ export default function DepositosPage() {
       method: "POST",
       body: JSON.stringify(data),
     });
+    setShowSectorForm(false);
     toast.success("Sector creado");
     await loadDetalle(selectedId);
   };
@@ -126,6 +130,7 @@ export default function DepositosPage() {
       method: "POST",
       body: JSON.stringify(data),
     });
+    setShowUbicacionForm(false);
     toast.success("Ubicación creada");
     await loadDetalle(selectedId);
   };
@@ -140,9 +145,9 @@ export default function DepositosPage() {
           <button
             type="button"
             className="btn primary"
-            onClick={() => setShowForm((v) => !v)}
+            onClick={() => setShowForm(true)}
           >
-            {showForm ? "Cancelar" : "+ Nuevo depósito"}
+            + Nuevo depósito
           </button>
         )}
       </PageHeader>
@@ -153,15 +158,17 @@ export default function DepositosPage() {
         </p>
       )}
 
-      {showForm && perms.canWriteWarehouse && (
-        <section className="card panel-focus">
-          <h3>Alta de depósito</h3>
-          <DepositoForm
-            onSubmit={handleCreateDeposito}
-            onCancel={() => setShowForm(false)}
-          />
-        </section>
-      )}
+      <Modal
+        open={showForm && perms.canWriteWarehouse}
+        title="Alta de depósito"
+        size="md"
+        onClose={() => setShowForm(false)}
+      >
+        <DepositoForm
+          onSubmit={handleCreateDeposito}
+          onCancel={() => setShowForm(false)}
+        />
+      </Modal>
 
       <section className="card depot-workspace">
         <div className="depot-workspace-head">
@@ -258,7 +265,7 @@ export default function DepositosPage() {
                 {detalle.sectores.length === 0 ? (
                   <p className="muted">
                     Sin sectores.
-                    {perms.canWriteWarehouse ? " Creá uno abajo." : ""}
+                    {perms.canWriteWarehouse ? " Creá uno con + Sector." : ""}
                   </p>
                 ) : (
                   <div className="tree">
@@ -293,18 +300,22 @@ export default function DepositosPage() {
                 )}
 
                 {perms.canWriteWarehouse && (
-                  <div className="two-col">
-                    <div className="inset-block">
-                      <h3>Nuevo sector</h3>
-                      <SectorForm onSubmit={handleCreateSector} />
-                    </div>
-                    <div className="inset-block">
-                      <h3>Nueva ubicación</h3>
-                      <UbicacionForm
-                        sectores={detalle.sectores}
-                        onSubmit={handleCreateUbicacion}
-                      />
-                    </div>
+                  <div className="form-actions">
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      onClick={() => setShowSectorForm(true)}
+                    >
+                      + Sector
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      onClick={() => setShowUbicacionForm(true)}
+                      disabled={detalle.sectores.length === 0}
+                    >
+                      + Ubicación
+                    </button>
                   </div>
                 )}
               </>
@@ -400,6 +411,29 @@ export default function DepositosPage() {
           </>
         )}
       </section>
+
+      <Modal
+        open={showSectorForm && perms.canWriteWarehouse}
+        title="Nuevo sector"
+        size="md"
+        onClose={() => setShowSectorForm(false)}
+      >
+        <SectorForm onSubmit={handleCreateSector} />
+      </Modal>
+
+      <Modal
+        open={showUbicacionForm && perms.canWriteWarehouse && Boolean(detalle)}
+        title="Nueva ubicación"
+        size="md"
+        onClose={() => setShowUbicacionForm(false)}
+      >
+        {detalle && (
+          <UbicacionForm
+            sectores={detalle.sectores}
+            onSubmit={handleCreateUbicacion}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

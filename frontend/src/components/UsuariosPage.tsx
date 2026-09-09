@@ -14,6 +14,7 @@ import type {
 } from "../types";
 import ConfirmDialog from "./ConfirmDialog";
 import EmptyState from "./EmptyState";
+import Modal from "./Modal";
 import PageHeader from "./PageHeader";
 
 type Tab = "usuarios" | "roles";
@@ -290,21 +291,13 @@ export default function UsuariosPage() {
           Actualizar
         </button>
         {tab === "usuarios" && perms.canManageUsers && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => (showUserForm ? resetUserForm() : openCreateUser())}
-          >
-            {showUserForm ? "Cancelar" : "+ Nuevo usuario"}
+          <button type="button" className="btn primary" onClick={openCreateUser}>
+            + Nuevo usuario
           </button>
         )}
         {tab === "roles" && perms.canManageRoles && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => (showRoleForm ? resetRoleForm() : openCreateRole())}
-          >
-            {showRoleForm ? "Cancelar" : "+ Nuevo rol"}
+          <button type="button" className="btn primary" onClick={openCreateRole}>
+            + Nuevo rol
           </button>
         )}
       </PageHeader>
@@ -342,66 +335,68 @@ export default function UsuariosPage() {
 
       {tab === "usuarios" && perms.canManageUsers && (
         <>
-          {showUserForm && (
-            <section className="card panel-focus">
-              <h3>{editingUser ? `Editar · ${editingUser.nombre}` : "Alta de usuario"}</h3>
-              <form className="form" onSubmit={handleUserSubmit}>
-                <div className="two-col">
-                  <label className="field">
-                    <span>Nombre</span>
-                    <input
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      required
-                      maxLength={100}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Email</span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      maxLength={254}
-                    />
-                  </label>
-                </div>
-                <div className="two-col">
-                  <label className="field">
-                    <span>{editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}</span>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required={!editingUser}
-                      minLength={editingUser ? undefined : 6}
-                      maxLength={128}
-                      autoComplete="new-password"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Rol</span>
-                    <select value={rol} onChange={(e) => setRol(e.target.value)} required>
-                      {roleNames.map((name) => (
-                        <option key={name} value={name}>
-                          {roleLabel(name)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="form-actions">
-                  <button type="button" className="btn secondary" onClick={resetUserForm} disabled={busy}>
-                    Cancelar
-                  </button>
-                  <button type="submit" className="btn primary" disabled={busy}>
-                    {busy ? "Guardando…" : editingUser ? "Guardar cambios" : "Crear usuario"}
-                  </button>
-                </div>
-              </form>
-            </section>
-          )}
+          <Modal
+            open={showUserForm}
+            title={editingUser ? `Editar · ${editingUser.nombre}` : "Alta de usuario"}
+            size="md"
+            onClose={resetUserForm}
+          >
+            <form className="form" onSubmit={handleUserSubmit}>
+              <div className="two-col">
+                <label className="field">
+                  <span>Nombre</span>
+                  <input
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    required
+                    maxLength={100}
+                  />
+                </label>
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    maxLength={254}
+                  />
+                </label>
+              </div>
+              <div className="two-col">
+                <label className="field">
+                  <span>{editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}</span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required={!editingUser}
+                    minLength={editingUser ? undefined : 6}
+                    maxLength={128}
+                    autoComplete="new-password"
+                  />
+                </label>
+                <label className="field">
+                  <span>Rol</span>
+                  <select value={rol} onChange={(e) => setRol(e.target.value)} required>
+                    {roleNames.map((name) => (
+                      <option key={name} value={name}>
+                        {roleLabel(name)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn secondary" onClick={resetUserForm} disabled={busy}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  {busy ? "Guardando…" : editingUser ? "Guardar cambios" : "Crear usuario"}
+                </button>
+              </div>
+            </form>
+          </Modal>
 
           <section className="card">
             <div className="section-header">
@@ -519,76 +514,78 @@ export default function UsuariosPage() {
 
       {tab === "roles" && perms.canManageRoles && (
         <>
-          {showRoleForm && (
-            <section className="card panel-focus">
-              <h3>{editingRole ? `Editar rol · ${editingRole.nombre}` : "Nuevo rol"}</h3>
-              <form className="form" onSubmit={handleRoleSubmit}>
-                <div className="two-col">
-                  <label className="field">
-                    <span>Nombre técnico</span>
-                    <input
-                      value={roleNombre}
-                      onChange={(e) => setRoleNombre(e.target.value)}
-                      required
-                      maxLength={50}
-                      disabled={Boolean(editingRole?.es_sistema)}
-                      placeholder="ej. auditor_planta"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Descripción</span>
-                    <input
-                      value={roleDesc}
-                      onChange={(e) => setRoleDesc(e.target.value)}
-                      maxLength={500}
-                      placeholder="Para qué se usa este rol"
-                    />
-                  </label>
-                </div>
+          <Modal
+            open={showRoleForm}
+            title={editingRole ? `Editar rol · ${editingRole.nombre}` : "Nuevo rol"}
+            size="lg"
+            onClose={resetRoleForm}
+          >
+            <form className="form" onSubmit={handleRoleSubmit}>
+              <div className="two-col">
+                <label className="field">
+                  <span>Nombre técnico</span>
+                  <input
+                    value={roleNombre}
+                    onChange={(e) => setRoleNombre(e.target.value)}
+                    required
+                    maxLength={50}
+                    disabled={Boolean(editingRole?.es_sistema)}
+                    placeholder="ej. auditor_planta"
+                  />
+                </label>
+                <label className="field">
+                  <span>Descripción</span>
+                  <input
+                    value={roleDesc}
+                    onChange={(e) => setRoleDesc(e.target.value)}
+                    maxLength={500}
+                    placeholder="Para qué se usa este rol"
+                  />
+                </label>
+              </div>
 
-                <div className="perm-matrix" role="group" aria-label="Permisos del rol">
-                  <div className="section-header">
-                    <h3>Permisos de acciones</h3>
-                    <span className="muted">{rolePerms.length} seleccionados</span>
+              <div className="perm-matrix" role="group" aria-label="Permisos del rol">
+                <div className="section-header">
+                  <h3>Permisos de acciones</h3>
+                  <span className="muted">{rolePerms.length} seleccionados</span>
+                </div>
+                {permisosPorModulo.map(([modulo, items]) => (
+                  <div key={modulo} className="perm-module">
+                    <strong className="section-kicker">{modulo}</strong>
+                    <ul className="perm-list">
+                      {items.map((p) => (
+                        <li key={p.id}>
+                          <label className="field checkbox-field">
+                            <input
+                              type="checkbox"
+                              checked={rolePerms.includes(p.codigo)}
+                              onChange={() => toggleRolePerm(p.codigo)}
+                            />
+                            <span>
+                              <strong>{p.nombre}</strong>
+                              <span className="muted"> · {p.codigo}</span>
+                              {p.descripcion && (
+                                <span className="perm-desc muted"> — {p.descripcion}</span>
+                              )}
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  {permisosPorModulo.map(([modulo, items]) => (
-                    <div key={modulo} className="perm-module">
-                      <strong className="section-kicker">{modulo}</strong>
-                      <ul className="perm-list">
-                        {items.map((p) => (
-                          <li key={p.id}>
-                            <label className="field checkbox-field">
-                              <input
-                                type="checkbox"
-                                checked={rolePerms.includes(p.codigo)}
-                                onChange={() => toggleRolePerm(p.codigo)}
-                              />
-                              <span>
-                                <strong>{p.nombre}</strong>
-                                <span className="muted"> · {p.codigo}</span>
-                                {p.descripcion && (
-                                  <span className="perm-desc muted"> — {p.descripcion}</span>
-                                )}
-                              </span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
+                ))}
+              </div>
 
-                <div className="form-actions">
-                  <button type="button" className="btn secondary" onClick={resetRoleForm} disabled={busy}>
-                    Cancelar
-                  </button>
-                  <button type="submit" className="btn primary" disabled={busy}>
-                    {busy ? "Guardando…" : editingRole ? "Guardar rol" : "Crear rol"}
-                  </button>
-                </div>
-              </form>
-            </section>
-          )}
+              <div className="form-actions">
+                <button type="button" className="btn secondary" onClick={resetRoleForm} disabled={busy}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  {busy ? "Guardando…" : editingRole ? "Guardar rol" : "Crear rol"}
+                </button>
+              </div>
+            </form>
+          </Modal>
 
           <section className="card">
             <div className="section-header">

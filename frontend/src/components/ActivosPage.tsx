@@ -18,6 +18,7 @@ import AsignacionUbicacionForm from "./AsignacionUbicacionForm";
 import CategoriaForm from "./CategoriaForm";
 import ConfirmDialog from "./ConfirmDialog";
 import EmptyState from "./EmptyState";
+import Modal from "./Modal";
 import PageHeader from "./PageHeader";
 import {
   filterActivos,
@@ -45,6 +46,7 @@ export default function ActivosPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showCategoriaForm, setShowCategoriaForm] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historialId, setHistorialId] = useState<string | null>(null);
@@ -324,20 +326,26 @@ export default function ActivosPage() {
 
       {tab === "activos" && (
         <>
-          {showForm && perms.canWriteAssets && (
-            <section className="card panel-focus">
-              <h3>Alta de activo</h3>
-              <ActivoForm
-                categorias={categorias}
-                onSubmit={handleCreateActivo}
-                onCancel={() => setShowForm(false)}
-              />
-            </section>
-          )}
+          <Modal
+            open={showForm && perms.canWriteAssets}
+            title="Alta de activo"
+            size="md"
+            onClose={() => setShowForm(false)}
+          >
+            <ActivoForm
+              categorias={categorias}
+              onSubmit={handleCreateActivo}
+              onCancel={() => setShowForm(false)}
+            />
+          </Modal>
 
-          {editingActivo && perms.canWriteAssets && (
-            <section className="card panel-focus">
-              <h3>Editar — {editingActivo.numero_patrimonial}</h3>
+          <Modal
+            open={Boolean(editingActivo && perms.canWriteAssets)}
+            title={editingActivo ? `Editar — ${editingActivo.numero_patrimonial}` : "Editar activo"}
+            size="md"
+            onClose={() => setEditingId(null)}
+          >
+            {editingActivo && (
               <ActivoForm
                 key={editingActivo.id}
                 categorias={categorias}
@@ -346,62 +354,69 @@ export default function ActivosPage() {
                 onCancel={() => setEditingId(null)}
                 submitLabel="Guardar cambios"
               />
-            </section>
-          )}
+            )}
+          </Modal>
 
-          {assigningActivo && perms.canWriteAssignment && (
-            <section className="card panel-focus">
-              <h3>Ubicación — {assigningActivo.numero_patrimonial}</h3>
-              <p className="muted">
-                {assigningActivo.descripcion}
-                {ubicaciones[assigningActivo.id]
-                  ? ` · Actual: ${ubicaciones[assigningActivo.id]!.deposito_nombre} / ${ubicaciones[assigningActivo.id]!.sector_nombre} / ${ubicaciones[assigningActivo.id]!.ubicacion_codigo}`
-                  : " · Sin ubicación"}
-              </p>
-              <AsignacionUbicacionForm
-                onSubmit={handleAssign}
-                onCancel={() => setAssigningId(null)}
-                submitLabel={ubicaciones[assigningActivo.id] ? "Cambiar ubicación" : "Asignar ubicación"}
-              />
-            </section>
-          )}
+          <Modal
+            open={Boolean(assigningActivo && perms.canWriteAssignment)}
+            title={
+              assigningActivo
+                ? `Ubicación — ${assigningActivo.numero_patrimonial}`
+                : "Asignar ubicación"
+            }
+            subtitle={
+              assigningActivo
+                ? `${assigningActivo.descripcion}${
+                    ubicaciones[assigningActivo.id]
+                      ? ` · Actual: ${ubicaciones[assigningActivo.id]!.deposito_nombre} / ${ubicaciones[assigningActivo.id]!.sector_nombre} / ${ubicaciones[assigningActivo.id]!.ubicacion_codigo}`
+                      : " · Sin ubicación"
+                  }`
+                : undefined
+            }
+            size="md"
+            onClose={() => setAssigningId(null)}
+          >
+            <AsignacionUbicacionForm
+              onSubmit={handleAssign}
+              onCancel={() => setAssigningId(null)}
+              submitLabel={
+                assigningActivo && ubicaciones[assigningActivo.id]
+                  ? "Cambiar ubicación"
+                  : "Asignar ubicación"
+              }
+            />
+          </Modal>
 
-          {fotosActivo && (
-            <section className="card panel-focus">
-              <h3>Fotos — {fotosActivo.numero_patrimonial}</h3>
-              <p className="muted">{fotosActivo.descripcion}</p>
+          <Modal
+            open={Boolean(fotosActivo)}
+            title={fotosActivo ? `Fotos — ${fotosActivo.numero_patrimonial}` : "Fotos"}
+            subtitle={fotosActivo?.descripcion}
+            size="lg"
+            onClose={() => setFotosId(null)}
+          >
+            {fotosActivo && (
               <ActivoFotos
                 key={fotosActivo.id}
                 activoId={fotosActivo.id}
                 canWrite={perms.canWriteAssets}
               />
-              <div className="form-actions">
-                <button type="button" className="btn secondary" onClick={() => setFotosId(null)}>
-                  Cerrar
-                </button>
-              </div>
-            </section>
-          )}
+            )}
+          </Modal>
 
-          {historialActivo && (
-            <section className="card panel-focus">
-              <h3>Historial — {historialActivo.numero_patrimonial}</h3>
-              <p className="muted">{historialActivo.descripcion}</p>
-              <ActivoHistorial entries={historial} loading={historialLoading} />
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="btn secondary"
-                  onClick={() => {
-                    setHistorialId(null);
-                    setHistorial([]);
-                  }}
-                >
-                  Cerrar
-                </button>
-              </div>
-            </section>
-          )}
+          <Modal
+            open={Boolean(historialActivo)}
+            title={
+              historialActivo ? `Historial — ${historialActivo.numero_patrimonial}` : "Historial"
+            }
+            subtitle={historialActivo?.descripcion}
+            size="lg"
+            onClose={() => {
+              setHistorialId(null);
+              setHistorial([]);
+            }}
+          >
+            <ActivoHistorial entries={historial} loading={historialLoading} />
+          </Modal>
 
           <section className="card">
             <div className="section-header">
@@ -419,10 +434,10 @@ export default function ActivosPage() {
                     className="btn primary"
                     onClick={() => {
                       closePanels();
-                      setShowForm((v) => !v);
+                      setShowForm(true);
                     }}
                   >
-                    {showForm ? "Cancelar" : "+ Nuevo activo"}
+                    + Nuevo activo
                   </button>
                 )}
               </div>
@@ -518,10 +533,17 @@ export default function ActivosPage() {
         <section className="card">
           <div className="section-header">
             <h3>Categorías</h3>
+            {perms.canWriteAssets && (
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => setShowCategoriaForm(true)}
+              >
+                + Nueva categoría
+              </button>
+            )}
           </div>
-          {perms.canWriteAssets ? (
-            <CategoriaForm onSubmit={handleCreateCategoria} />
-          ) : (
+          {!perms.canWriteAssets && (
             <p className="muted">Solo lectura — tu rol no puede crear categorías.</p>
           )}
           {!loading && categorias.length > 0 && (
@@ -534,8 +556,25 @@ export default function ActivosPage() {
               ))}
             </ul>
           )}
+          {!loading && categorias.length === 0 && (
+            <p className="muted">Todavía no hay categorías.</p>
+          )}
         </section>
       )}
+
+      <Modal
+        open={showCategoriaForm && perms.canWriteAssets}
+        title="Nueva categoría"
+        size="sm"
+        onClose={() => setShowCategoriaForm(false)}
+      >
+        <CategoriaForm
+          onSubmit={async (data) => {
+            await handleCreateCategoria(data);
+            setShowCategoriaForm(false);
+          }}
+        />
+      </Modal>
 
       <ConfirmDialog
         open={confirmBajaId !== null}

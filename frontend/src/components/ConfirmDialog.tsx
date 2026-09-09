@@ -1,3 +1,5 @@
+import Modal from "./Modal";
+
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -21,24 +23,15 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  if (!open) return null;
-
   return (
-    <div className="confirm-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className="confirm-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-title"
-        aria-describedby={description ? "confirm-desc" : undefined}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="confirm-title">{title}</h3>
-        {description && (
-          <p id="confirm-desc" className="muted">
-            {description}
-          </p>
-        )}
+    <Modal
+      open={open}
+      title={title}
+      subtitle={description}
+      size="sm"
+      onClose={onCancel}
+      closeOnBackdrop={!busy}
+      footer={
         <div className="confirm-actions">
           <button type="button" className="btn secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}
@@ -52,7 +45,9 @@ export default function ConfirmDialog({
             {busy ? "Procesando…" : confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      {description ? null : <p className="muted">¿Confirmás esta acción?</p>}
+    </Modal>
   );
 }

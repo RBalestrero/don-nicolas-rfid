@@ -13,6 +13,7 @@ import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
 import Stepper from "./Stepper";
 import ConfirmDialog from "./ConfirmDialog";
+import Modal from "./Modal";
 import { useToast } from "../context/ToastContext";
 import { usePermissions } from "../lib/usePermissions";
 import {
@@ -65,7 +66,7 @@ export default function TransferenciasPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("");
@@ -354,11 +355,11 @@ export default function TransferenciasPage() {
             type="button"
             className="btn primary"
             onClick={() => {
-              setShowCreate((v) => !v);
-              if (!showCreate) setActiva(null);
+              setActiva(null);
+              setShowCreate(true);
             }}
           >
-            {showCreate ? "Cancelar" : "+ Nueva orden"}
+            + Nueva orden
           </button>
         )}
       </PageHeader>
@@ -383,196 +384,198 @@ export default function TransferenciasPage() {
         </p>
       )}
 
-      {showCreate && perms.canWriteTransfer && (
-        <section className="card panel-focus">
-          <h3>Nueva orden</h3>
-          <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
-            <div className="two-col">
-              <label className="field">
-                <span>Depósito origen</span>
-                <select value={origenId} onChange={(e) => setOrigenId(e.target.value)} required>
-                  {depositos.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Depósito destino</span>
-                <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} required>
-                  {depositos.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
+      <Modal
+        open={showCreate && perms.canWriteTransfer}
+        title="Nueva orden"
+        size="lg"
+        onClose={() => setShowCreate(false)}
+      >
+        <form className="form" onSubmit={handleCrear} aria-label="Crear transferencia">
+          <div className="two-col">
             <label className="field">
-              <span>Ubicación destino</span>
-              <select
-                value={ubicacionDestinoId}
-                onChange={(e) => setUbicacionDestinoId(e.target.value)}
-                required
-                disabled={ubicacionesDestino.length === 0}
-              >
-                {ubicacionesDestino.length === 0 ? (
-                  <option value="">Sin ubicaciones en destino</option>
-                ) : (
-                  ubicacionesDestino.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.label}
-                    </option>
-                  ))
-                )}
+              <span>Depósito origen</span>
+              <select value={origenId} onChange={(e) => setOrigenId(e.target.value)} required>
+                {depositos.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
               </select>
             </label>
-
             <label className="field">
-              <span>Notas (opcional)</span>
-              <input
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                maxLength={2000}
-                placeholder="Motivo o referencia"
-              />
+              <span>Depósito destino</span>
+              <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} required>
+                {depositos.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
             </label>
-
-            <fieldset className="stock-picker">
-              <legend>Activos en origen ({stock?.total ?? 0})</legend>
-              {!stock || stock.activos.length === 0 ? (
-                <p className="muted">No hay activos con ubicación en el depósito origen.</p>
-              ) : (
-                <ul className="simple-list checkbox-list">
-                  {stock.activos.map((a) => (
-                    <li key={a.activo_id}>
-                      <label className="checkbox-field">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(a.activo_id)}
-                          onChange={() => toggleActivo(a.activo_id)}
-                        />
-                        <span>
-                          <strong>{a.numero_patrimonial}</strong> — {a.descripcion}
-                          {a.epc && <span className="muted mono"> · {a.epc}</span>}
-                          <span className="muted">
-                            {" "}
-                            · {a.sector_nombre}/{a.ubicacion_codigo}
-                          </span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </fieldset>
-
-            <div className="form-actions">
-              <button type="submit" className="btn primary" disabled={busy}>
-                {busy ? "Creando…" : "Crear transferencia"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {activa && (
-        <section className="card panel-focus">
-          <div className="section-header">
-            <h3>Transferencia — {estadoLabel(activa.estado)}</h3>
-            <div className="section-header-right">
-              <span className={`badge ${estadoBadgeClass(activa.estado)}`}>
-                {estadoLabel(activa.estado)}
-              </span>
-              <ExportButtons
-                basePath={`/reportes/transferencias/${activa.id}`}
-                filenameBase={`transferencia_${activa.id.slice(0, 8)}`}
-              />
-            </div>
           </div>
-          <p className="muted">
-            {nombreDeposito(activa.deposito_origen_id)} →{" "}
-            {nombreDeposito(activa.deposito_destino_id)}
-            {activa.notas ? ` · ${activa.notas}` : ""}
-          </p>
 
-          <ul className="simple-list compact-list">
-            {activa.detalles.map((d) => (
-              <li key={d.id}>
-                <strong>{d.numero_patrimonial}</strong>
-                {d.descripcion && <span className="muted"> — {d.descripcion}</span>}
-                {d.epc && <span className="mono muted"> · {d.epc}</span>}
-                <span className="muted">
-                  {" "}
-                  · origen {d.confirmado_origen ? "✓" : "○"} · destino{" "}
-                  {d.confirmado_destino ? "✓" : "○"}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <label className="field">
+            <span>Ubicación destino</span>
+            <select
+              value={ubicacionDestinoId}
+              onChange={(e) => setUbicacionDestinoId(e.target.value)}
+              required
+              disabled={ubicacionesDestino.length === 0}
+            >
+              {ubicacionesDestino.length === 0 ? (
+                <option value="">Sin ubicaciones en destino</option>
+              ) : (
+                ubicacionesDestino.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.label}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
 
-          {(activa.estado === "pendiente" || activa.estado === "en_transito") && (
-            <>
-              <label className="field">
-                <span>
-                  EPCs leídos (
-                  {activa.estado === "pendiente" ? "confirmar origen" : "confirmar destino"})
-                </span>
-                <textarea
-                  value={epcsText}
-                  onChange={(e) => setEpcsText(e.target.value)}
-                  rows={4}
-                  placeholder="Uno por línea, coma o espacio"
-                  aria-label="EPCs leídos"
-                />
-              </label>
-              <div className="form-actions">
-                <button type="button" className="btn secondary" onClick={prefillEpcs}>
-                  Completar con EPCs de la orden
-                </button>
-                {activa.estado === "pendiente" && perms.canWriteTransfer && (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={confirmarOrigen}
-                  >
-                    Confirmar origen
-                  </button>
-                )}
-                {activa.estado === "en_transito" && perms.canWriteTransfer && (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={confirmarDestino}
-                  >
-                    Confirmar destino
-                  </button>
-                )}
-                {perms.canCancelTransfer && (
-                  <button
-                    type="button"
-                    className="btn secondary danger"
-                    disabled={busy}
-                    onClick={() => setConfirmCancel(true)}
-                  >
-                    Cancelar orden
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          <label className="field">
+            <span>Notas (opcional)</span>
+            <input
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              maxLength={2000}
+              placeholder="Motivo o referencia"
+            />
+          </label>
+
+          <fieldset className="stock-picker">
+            <legend>Activos en origen ({stock?.total ?? 0})</legend>
+            {!stock || stock.activos.length === 0 ? (
+              <p className="muted">No hay activos con ubicación en el depósito origen.</p>
+            ) : (
+              <ul className="simple-list checkbox-list">
+                {stock.activos.map((a) => (
+                  <li key={a.activo_id}>
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(a.activo_id)}
+                        onChange={() => toggleActivo(a.activo_id)}
+                      />
+                      <span>
+                        <strong>{a.numero_patrimonial}</strong> — {a.descripcion}
+                        {a.epc && <span className="muted mono"> · {a.epc}</span>}
+                        <span className="muted">
+                          {" "}
+                          · {a.sector_nombre}/{a.ubicacion_codigo}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </fieldset>
 
           <div className="form-actions">
-            <button type="button" className="btn secondary" onClick={() => setActiva(null)}>
-              Cerrar detalle
+            <button type="submit" className="btn primary" disabled={busy}>
+              {busy ? "Creando…" : "Crear transferencia"}
             </button>
           </div>
-        </section>
-      )}
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(activa)}
+        title={activa ? `Transferencia — ${estadoLabel(activa.estado)}` : "Transferencia"}
+        size="lg"
+        onClose={() => setActiva(null)}
+      >
+        {activa && (
+          <>
+            <div className="section-header">
+              <div className="section-header-right">
+                <span className={`badge ${estadoBadgeClass(activa.estado)}`}>
+                  {estadoLabel(activa.estado)}
+                </span>
+                <ExportButtons
+                  basePath={`/reportes/transferencias/${activa.id}`}
+                  filenameBase={`transferencia_${activa.id.slice(0, 8)}`}
+                />
+              </div>
+            </div>
+            <p className="muted">
+              {nombreDeposito(activa.deposito_origen_id)} →{" "}
+              {nombreDeposito(activa.deposito_destino_id)}
+              {activa.notas ? ` · ${activa.notas}` : ""}
+            </p>
+
+            <ul className="simple-list compact-list">
+              {activa.detalles.map((d) => (
+                <li key={d.id}>
+                  <strong>{d.numero_patrimonial}</strong>
+                  {d.descripcion && <span className="muted"> — {d.descripcion}</span>}
+                  {d.epc && <span className="mono muted"> · {d.epc}</span>}
+                  <span className="muted">
+                    {" "}
+                    · origen {d.confirmado_origen ? "✓" : "○"} · destino{" "}
+                    {d.confirmado_destino ? "✓" : "○"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {(activa.estado === "pendiente" || activa.estado === "en_transito") && (
+              <>
+                <label className="field">
+                  <span>
+                    EPCs leídos (
+                    {activa.estado === "pendiente" ? "confirmar origen" : "confirmar destino"})
+                  </span>
+                  <textarea
+                    value={epcsText}
+                    onChange={(e) => setEpcsText(e.target.value)}
+                    rows={4}
+                    placeholder="Uno por línea, coma o espacio"
+                    aria-label="EPCs leídos"
+                  />
+                </label>
+                <div className="form-actions">
+                  <button type="button" className="btn secondary" onClick={prefillEpcs}>
+                    Completar con EPCs de la orden
+                  </button>
+                  {activa.estado === "pendiente" && perms.canWriteTransfer && (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={confirmarOrigen}
+                    >
+                      Confirmar origen
+                    </button>
+                  )}
+                  {activa.estado === "en_transito" && perms.canWriteTransfer && (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={confirmarDestino}
+                    >
+                      Confirmar destino
+                    </button>
+                  )}
+                  {perms.canCancelTransfer && (
+                    <button
+                      type="button"
+                      className="btn secondary danger"
+                      disabled={busy}
+                      onClick={() => setConfirmCancel(true)}
+                    >
+                      Cancelar orden
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </Modal>
 
       <section className="card">
         <div className="section-header">

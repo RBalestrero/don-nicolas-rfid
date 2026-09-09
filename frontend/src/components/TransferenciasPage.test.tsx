@@ -167,6 +167,9 @@ describe("TransferenciasPage", () => {
     const user = userEvent.setup();
     render(<TransferenciasPage />);
 
+    expect(await screen.findByRole("heading", { name: /^transferencias$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /\+ nueva orden/i }));
+
     expect(await screen.findByText(/PAT-1/)).toBeInTheDocument();
 
     const destinoSelect = screen.getByLabelText(/depósito destino/i);

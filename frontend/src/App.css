@@ -1944,7 +1944,105 @@
   margin-bottom: 0;
 }
 
-/* —— Confirm dialog —— */
+/* —— Modal (acciones / formularios) —— */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  overflow: auto;
+}
+
+.modal-dialog {
+  width: min(100%, 32rem);
+  max-height: min(90vh, 52rem);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+}
+
+.modal-dialog.modal-sm {
+  width: min(100%, 26rem);
+}
+
+.modal-dialog.modal-md {
+  width: min(100%, 36rem);
+}
+
+.modal-dialog.modal-lg {
+  width: min(100%, 48rem);
+}
+
+.modal-dialog.modal-xl {
+  width: min(100%, 64rem);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-heading {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.modal-heading h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.modal-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.modal-close {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.modal-body {
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.modal-footer {
+  padding: 0.75rem 1rem 0.9rem;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-footer .confirm-actions,
+.modal-footer .form-actions {
+  margin: 0;
+}
+
+/* —— Confirm dialog (legacy surface; ConfirmDialog usa Modal) —— */
 .confirm-backdrop {
   position: fixed;
   inset: 0;

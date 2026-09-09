@@ -11,6 +11,7 @@ import type {
 import PageHeader from "./PageHeader";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
+import Modal from "./Modal";
 import {
   filterInventarios,
   hasActiveInventariosFilters,
@@ -247,166 +248,17 @@ export default function InventariosPage() {
         </p>
       )}
 
-      {activo && (
-        <section className="card panel-focus">
-          <div className="section-header">
-            <h3>Inventario · {depositoNombre}</h3>
-            <div className="section-header-right">
-              <span className={`badge ${activo.estado === "cerrado" ? "ok" : "warn"}`}>
-                {estadoInventario(activo.estado)}
-              </span>
-              {activo.estado === "cerrado" && (
-                <span className={`badge ${activo.auditado ? "ok" : "warn"}`}>
-                  {activo.auditado ? "Auditada" : "Pendiente auditoría"}
-                </span>
-              )}
-              {activo.estado === "cerrado" && (
-                <ExportButtons
-                  basePath={`/reportes/inventarios/${activo.id}`}
-                  filenameBase={`inventario_${activo.id.slice(0, 8)}`}
-                  formats={["xlsx", "csv", "pdf"]}
-                />
-              )}
-            </div>
-          </div>
-          <p className="muted">
-            <span className="mono">ID {activo.id}</span>
-            {" · "}
-            Inicio {new Date(activo.iniciado_en).toLocaleString("es-AR")}
-            {activo.cerrado_en && (
-              <>
-                {" · "}
-                Cierre {new Date(activo.cerrado_en).toLocaleString("es-AR")}
-              </>
-            )}
-            {activo.auditado && activo.auditado_en && (
-              <>
-                {" · "}
-                Auditada {new Date(activo.auditado_en).toLocaleString("es-AR")}
-              </>
-            )}
-          </p>
-
-          <div className="status-grid inventario-metrics">
-            <div className="status-item">
-              <span className="status-label">Esperado</span>
-              <strong>{activo.resumen.total_esperado}</strong>
-            </div>
-            <div className="status-item tone-ok">
-              <span className="status-label">Encontrado</span>
-              <strong>{activo.resumen.total_encontrado}</strong>
-            </div>
-            <div
-              className={`status-item ${activo.resumen.total_faltante > 0 ? "tone-danger" : ""}`}
-            >
-              <span className="status-label">Faltante</span>
-              <strong>{activo.resumen.total_faltante}</strong>
-            </div>
-            <div
-              className={`status-item ${activo.resumen.total_sobrante > 0 ? "tone-warn" : ""}`}
-            >
-              <span className="status-label">Sobrante</span>
-              <strong>{activo.resumen.total_sobrante}</strong>
-            </div>
-          </div>
-
-          {activo.estado === "en_curso" && (
-            <p className="muted">
-              Conteo en curso en el MC33
-              {avance !== null ? ` · avance aprox. ${avance}%` : ""}.
-              Actualizá para ver lecturas nuevas sincronizadas.
-            </p>
-          )}
-
-          {reporte ? (
-            <div className="reporte-panel">
-              <h3>Reporte de auditoría</h3>
-              <p>
-                Coincidencia <strong>{reporte.coincidencia_pct.toFixed(1)}%</strong>
-                {reporte.tiene_discrepancias ? " · hay discrepancias" : " · sin discrepancias"}
-              </p>
-              <DetalleList title="Faltantes" items={reporte.faltantes} tone="danger" />
-              <DetalleList title="Sobrantes" items={reporte.sobrantes} tone="warn" />
-              <DetalleList title="Encontrados" items={reporte.encontrados} tone="ok" />
-            </div>
-          ) : (
-            detalleGrupos && (
-              <div className="reporte-panel">
-                <h3>Detalle parcial</h3>
-                <DetalleList title="Encontrados" items={detalleGrupos.encontrados} tone="ok" />
-                <DetalleList
-                  title="Pendientes / faltantes"
-                  items={detalleGrupos.faltantes}
-                  tone="danger"
-                />
-                <DetalleList title="Sobrantes" items={detalleGrupos.sobrantes} tone="warn" />
-              </div>
-            )
-          )}
-
-          {activo.estado === "cerrado" && perms.canAuditInventory && (
-            <form className="inset-block" onSubmit={handleMarcarAuditada} aria-label="Marcar auditoría">
-              <div className="section-header">
-                <h3>{activo.auditado ? "Registro de auditoría" : "Marcar como auditada"}</h3>
-              </div>
-              <p className="muted">
-                Indicá que revisaste el reporte
-                {reporte?.tiene_discrepancias ? " y las discrepancias" : ""}. El comentario es
-                opcional.
-              </p>
-              <label className="field">
-                <span>Comentario</span>
-                <textarea
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Ej.: faltantes localizados / sobrante descartado / visto OK"
-                  rows={3}
-                  maxLength={2000}
-                />
-              </label>
-              <div className="form-actions">
-                {!activo.auditado ? (
-                  <button type="submit" className="btn primary" disabled={busy}>
-                    {busy ? "Guardando…" : "Marcar como auditada"}
-                  </button>
-                ) : (
-                  <>
-                    <button type="submit" className="btn primary" disabled={busy}>
-                      {busy ? "Guardando…" : "Actualizar comentario"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={busy}
-                      onClick={handleQuitarAuditoria}
-                    >
-                      Volver a pendiente
-                    </button>
-                  </>
-                )}
-              </div>
-            </form>
-          )}
-
-          {activo.estado === "cerrado" && activo.auditado && activo.comentario_auditoria && !perms.canAuditInventory && (
-            <div className="inset-block">
-              <h3>Comentario de auditoría</h3>
-              <p>{activo.comentario_auditoria}</p>
-            </div>
-          )}
-
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => {
-                setActivo(null);
-                setReporte(null);
-                setComentario("");
-              }}
-            >
-              Cerrar detalle
-            </button>
+      <Modal
+        open={Boolean(activo)}
+        title={`Inventario · ${depositoNombre}`}
+        size="xl"
+        onClose={() => {
+          setActivo(null);
+          setReporte(null);
+          setComentario("");
+        }}
+        footer={
+          activo ? (
             <button
               type="button"
               className="btn secondary"
@@ -415,9 +267,165 @@ export default function InventariosPage() {
             >
               {busy ? "Actualizando…" : "Refrescar"}
             </button>
-          </div>
-        </section>
-      )}
+          ) : null
+        }
+      >
+        {activo && (
+          <>
+            <div className="section-header">
+              <div className="section-header-right">
+                <span className={`badge ${activo.estado === "cerrado" ? "ok" : "warn"}`}>
+                  {estadoInventario(activo.estado)}
+                </span>
+                {activo.estado === "cerrado" && (
+                  <span className={`badge ${activo.auditado ? "ok" : "warn"}`}>
+                    {activo.auditado ? "Auditada" : "Pendiente auditoría"}
+                  </span>
+                )}
+                {activo.estado === "cerrado" && (
+                  <ExportButtons
+                    basePath={`/reportes/inventarios/${activo.id}`}
+                    filenameBase={`inventario_${activo.id.slice(0, 8)}`}
+                    formats={["xlsx", "csv", "pdf"]}
+                  />
+                )}
+              </div>
+            </div>
+            <p className="muted">
+              <span className="mono">ID {activo.id}</span>
+              {" · "}
+              Inicio {new Date(activo.iniciado_en).toLocaleString("es-AR")}
+              {activo.cerrado_en && (
+                <>
+                  {" · "}
+                  Cierre {new Date(activo.cerrado_en).toLocaleString("es-AR")}
+                </>
+              )}
+              {activo.auditado && activo.auditado_en && (
+                <>
+                  {" · "}
+                  Auditada {new Date(activo.auditado_en).toLocaleString("es-AR")}
+                </>
+              )}
+            </p>
+
+            <div className="status-grid inventario-metrics">
+              <div className="status-item">
+                <span className="status-label">Esperado</span>
+                <strong>{activo.resumen.total_esperado}</strong>
+              </div>
+              <div className="status-item tone-ok">
+                <span className="status-label">Encontrado</span>
+                <strong>{activo.resumen.total_encontrado}</strong>
+              </div>
+              <div
+                className={`status-item ${activo.resumen.total_faltante > 0 ? "tone-danger" : ""}`}
+              >
+                <span className="status-label">Faltante</span>
+                <strong>{activo.resumen.total_faltante}</strong>
+              </div>
+              <div
+                className={`status-item ${activo.resumen.total_sobrante > 0 ? "tone-warn" : ""}`}
+              >
+                <span className="status-label">Sobrante</span>
+                <strong>{activo.resumen.total_sobrante}</strong>
+              </div>
+            </div>
+
+            {activo.estado === "en_curso" && (
+              <p className="muted">
+                Conteo en curso en el MC33
+                {avance !== null ? ` · avance aprox. ${avance}%` : ""}.
+                Actualizá para ver lecturas nuevas sincronizadas.
+              </p>
+            )}
+
+            {reporte ? (
+              <div className="reporte-panel">
+                <h3>Reporte de auditoría</h3>
+                <p>
+                  Coincidencia <strong>{reporte.coincidencia_pct.toFixed(1)}%</strong>
+                  {reporte.tiene_discrepancias ? " · hay discrepancias" : " · sin discrepancias"}
+                </p>
+                <DetalleList title="Faltantes" items={reporte.faltantes} tone="danger" />
+                <DetalleList title="Sobrantes" items={reporte.sobrantes} tone="warn" />
+                <DetalleList title="Encontrados" items={reporte.encontrados} tone="ok" />
+              </div>
+            ) : (
+              detalleGrupos && (
+                <div className="reporte-panel">
+                  <h3>Detalle parcial</h3>
+                  <DetalleList title="Encontrados" items={detalleGrupos.encontrados} tone="ok" />
+                  <DetalleList
+                    title="Pendientes / faltantes"
+                    items={detalleGrupos.faltantes}
+                    tone="danger"
+                  />
+                  <DetalleList title="Sobrantes" items={detalleGrupos.sobrantes} tone="warn" />
+                </div>
+              )
+            )}
+
+            {activo.estado === "cerrado" && perms.canAuditInventory && (
+              <form
+                className="inset-block"
+                onSubmit={handleMarcarAuditada}
+                aria-label="Marcar auditoría"
+              >
+                <div className="section-header">
+                  <h3>{activo.auditado ? "Registro de auditoría" : "Marcar como auditada"}</h3>
+                </div>
+                <p className="muted">
+                  Indicá que revisaste el reporte
+                  {reporte?.tiene_discrepancias ? " y las discrepancias" : ""}. El comentario es
+                  opcional.
+                </p>
+                <label className="field">
+                  <span>Comentario</span>
+                  <textarea
+                    value={comentario}
+                    onChange={(e) => setComentario(e.target.value)}
+                    placeholder="Ej.: faltantes localizados / sobrante descartado / visto OK"
+                    rows={3}
+                    maxLength={2000}
+                  />
+                </label>
+                <div className="form-actions">
+                  {!activo.auditado ? (
+                    <button type="submit" className="btn primary" disabled={busy}>
+                      {busy ? "Guardando…" : "Marcar como auditada"}
+                    </button>
+                  ) : (
+                    <>
+                      <button type="submit" className="btn primary" disabled={busy}>
+                        {busy ? "Guardando…" : "Actualizar comentario"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={busy}
+                        onClick={handleQuitarAuditoria}
+                      >
+                        Volver a pendiente
+                      </button>
+                    </>
+                  )}
+                </div>
+              </form>
+            )}
+
+            {activo.estado === "cerrado" &&
+              activo.auditado &&
+              activo.comentario_auditoria &&
+              !perms.canAuditInventory && (
+                <div className="inset-block">
+                  <h3>Comentario de auditoría</h3>
+                  <p>{activo.comentario_auditoria}</p>
+                </div>
+              )}
+          </>
+        )}
+      </Modal>
 
       <section className="card">
         <div className="section-header">
