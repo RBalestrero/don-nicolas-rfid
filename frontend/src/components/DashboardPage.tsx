@@ -64,6 +64,11 @@ function estadoXfer(estado: string): string {
   }
 }
 
+function pct(part: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((part / total) * 100));
+}
+
 interface DashboardPageProps {
   onNavigate?: (page: AppPage) => void;
 }
@@ -114,6 +119,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     : (resumen?.movimientos_recientes ?? []);
 
   const maxStock = Math.max(1, ...(resumen?.stock_por_deposito.map((s) => s.total) ?? [1]));
+  const stockTotal = resumen?.stock_por_deposito.reduce((acc, s) => acc + s.total, 0) ?? 0;
 
   const aplicarFiltro = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -141,7 +147,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   if (loading) {
     return (
       <div className="page">
-        <PageHeader title="Operaciones" subtitle="Atención pendiente, stock y actividad reciente" />
+        <PageHeader
+          title="Operaciones"
+          subtitle="Qué requiere atención ahora, progreso en curso y rastro de auditoría"
+        />
         <p className="muted" aria-busy="true">
           Cargando operaciones…
         </p>
@@ -177,17 +186,41 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     kpis.activos_activos > 0
       ? Math.round((kpis.stock_total_ubicado / kpis.activos_activos) * 100)
       : 0;
+  const pendientesCola = colaTransferencias.length + colaInventarios.length;
   const primerUso =
     kpis.activos_activos === 0 &&
     kpis.depositos_activos === 0 &&
     colaTransferencias.length === 0 &&
     colaInventarios.length === 0;
 
+  const alertas: string[] = [];
+  if (disc.inventarios_con_discrepancia > 0) {
+    alertas.push(
+      `${disc.inventarios_con_discrepancia} inventario${disc.inventarios_con_discrepancia === 1 ? "" : "s"} cerrado${disc.inventarios_con_discrepancia === 1 ? "" : "s"} con diferencia (${disc.faltantes} faltantes, ${disc.sobrantes} sobrantes)`,
+    );
+  }
+  if (kpis.transferencias_abiertas > 0) {
+    alertas.push(
+      `${kpis.transferencias_abiertas} transferencia${kpis.transferencias_abiertas === 1 ? "" : "s"} abierta${kpis.transferencias_abiertas === 1 ? "" : "s"}`,
+    );
+  }
+  if (kpis.inventarios_abiertos > 0) {
+    alertas.push(
+      `${kpis.inventarios_abiertos} inventario${kpis.inventarios_abiertos === 1 ? "" : "s"} en curso (solo auditables en web)`,
+    );
+  }
+  if (sinUbicar > 0) {
+    alertas.push(`${sinUbicar} activo${sinUbicar === 1 ? "" : "s"} sin ubicación`);
+  }
+
+  const tienePeligro = disc.inventarios_con_discrepancia > 0;
+  const tieneAtencion = alertas.length > 0;
+
   return (
     <div className="page">
       <PageHeader
         title="Operaciones"
-        subtitle="Atención pendiente, stock y actividad reciente"
+        subtitle="Qué requiere atención ahora, progreso en curso y rastro de auditoría"
       >
         <button type="button" className="btn secondary" onClick={loadResumen}>
           Actualizar
@@ -236,30 +269,95 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         </section>
       )}
 
+      {!primerUso && (
+        <section
+          className={`attention-banner ${tienePeligro ? "has-danger" : tieneAtencion ? "" : "has-ok"}`}
+          aria-label="Resumen de atención"
+        >
+          <div className="attention-copy">
+            <strong>
+              {tienePeligro
+                ? "Hay discrepancias para revisar"
+                : tieneAtencion
+                  ? "Hay trabajo operativo pendiente"
+                  : "Operaciones al día"}
+            </strong>
+            <p>
+              {tieneAtencion
+                ? alertas.join(" · ")
+                : "Sin transferencias abiertas, inventarios en curso ni activos sin ubicación."}
+            </p>
+          </div>
+          {tieneAtencion && (
+            <div className="attention-actions">
+              {disc.inventarios_con_discrepancia > 0 && (
+                <button
+                  type="button"
+                  className="btn primary btn-sm"
+                  onClick={() => {
+                    sessionStorage.setItem("dn_inv_filter", "discrepancias");
+                    onNavigate?.("inventarios");
+                  }}
+                >
+                  Ver discrepancias
+                </button>
+              )}
+              {kpis.transferencias_abiertas > 0 && (
+                <button
+                  type="button"
+                  className="btn secondary btn-sm"
+                  onClick={() => onNavigate?.("transferencias")}
+                >
+                  Transferencias
+                </button>
+              )}
+              {sinUbicar > 0 && (
+                <button
+                  type="button"
+                  className="btn secondary btn-sm"
+                  onClick={() => {
+                    sessionStorage.setItem("dn_act_filter", "sin");
+                    onNavigate?.("activos");
+                  }}
+                >
+                  Activos sin ubicación
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="kpi-grid" aria-label="Indicadores operativos">
         <button
           type="button"
-          className={`kpi-card interactive ${kpis.transferencias_abiertas > 0 ? "tone-warn" : ""}`}
+          className={`kpi-card interactive ${kpis.transferencias_abiertas > 0 ? "tone-warn" : "tone-ok"}`}
           onClick={() => onNavigate?.("transferencias")}
         >
           <span className="kpi-label">Transferencias abiertas</span>
           <strong className="kpi-value">{kpis.transferencias_abiertas}</strong>
-          <span className="kpi-hint">Ir a cola</span>
+          <span className="kpi-status">
+            {kpis.transferencias_abiertas > 0 ? "Requieren avance" : "Al día"}
+          </span>
+          <span className="kpi-hint">Pendientes o en tránsito · ir a cola</span>
         </button>
 
         <button
           type="button"
-          className={`kpi-card interactive ${kpis.inventarios_abiertos > 0 ? "tone-warn" : ""}`}
+          className={`kpi-card interactive ${kpis.inventarios_abiertos > 0 ? "tone-warn" : "tone-ok"}`}
           onClick={() => onNavigate?.("inventarios")}
         >
           <span className="kpi-label">Inventarios abiertos</span>
           <strong className="kpi-value">{kpis.inventarios_abiertos}</strong>
-          <span className="kpi-hint">Ir a auditoría</span>
+          <span className="kpi-status">
+            {kpis.inventarios_abiertos > 0 ? "En curso en MC33" : "Sin sesiones abiertas"}
+          </span>
+          <span className="kpi-hint">Solo auditoría en web</span>
         </button>
 
         <button
           type="button"
-          className={`kpi-card interactive ${disc.inventarios_con_discrepancia > 0 ? "tone-danger" : ""}`}
+          className={`kpi-card interactive ${disc.inventarios_con_discrepancia > 0 ? "tone-danger" : "tone-ok"}`}
           onClick={() => {
             sessionStorage.setItem("dn_inv_filter", "discrepancias");
             onNavigate?.("inventarios");
@@ -267,6 +365,9 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         >
           <span className="kpi-label">Discrepancias</span>
           <strong className="kpi-value">{disc.inventarios_con_discrepancia}</strong>
+          <span className="kpi-status">
+            {disc.inventarios_con_discrepancia > 0 ? "Revisar cierre" : "Sin diferencias"}
+          </span>
           <span className="kpi-hint">
             {disc.faltantes} falt. · {disc.sobrantes} sobr.
           </span>
@@ -282,18 +383,23 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         >
           <span className="kpi-label">Sin ubicación</span>
           <strong className="kpi-value">{sinUbicar}</strong>
+          <span className="kpi-status">
+            {sinUbicar > 0 ? "Asignar ubicación" : "Cobertura completa"}
+          </span>
           <span className="kpi-hint">
             {kpis.stock_total_ubicado}/{kpis.activos_activos} ubicados · {cobertura}%
           </span>
         </button>
       </section>
 
-      <div className="dash-layout">
+      <div className="dash-split">
         <section className="card panel">
           <div className="section-header">
-            <h3>Cola operativa</h3>
+            <h3>En curso ahora</h3>
             <span className="muted">
-              {colaTransferencias.length + colaInventarios.length} pendientes
+              {pendientesCola === 0
+                ? "Nada pendiente"
+                : `${pendientesCola} ítem${pendientesCola === 1 ? "" : "s"}`}
             </span>
           </div>
 
@@ -341,99 +447,141 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             />
           ) : (
             <ul className="ops-queue">
-              {colaTransferencias.map((t: TransferenciaResumenDash) => (
-                <li key={`x-${t.id}`}>
-                  <button
-                    type="button"
-                    className="ops-item"
-                    onClick={() => onNavigate?.("transferencias")}
-                  >
-                    <span className="badge warn">{estadoXfer(t.estado)}</span>
-                    <span className="ops-body">
-                      <strong>Transferencia</strong>
-                      <span className="muted">
-                        {t.deposito_origen_nombre ?? "?"} → {t.deposito_destino_nombre ?? "?"} ·{" "}
-                        {t.confirmados_destino}/{t.total_activos} activos
+              {colaTransferencias.map((t: TransferenciaResumenDash) => {
+                const avance = pct(t.confirmados_destino, t.total_activos);
+                return (
+                  <li key={`x-${t.id}`}>
+                    <button
+                      type="button"
+                      className="ops-item"
+                      onClick={() => onNavigate?.("transferencias")}
+                    >
+                      <span className="badge warn">{estadoXfer(t.estado)}</span>
+                      <span className="ops-body">
+                        <strong>Transferencia</strong>
+                        <span className="muted">
+                          {t.deposito_origen_nombre ?? "?"} → {t.deposito_destino_nombre ?? "?"}
+                        </span>
                       </span>
-                    </span>
-                    <span className="ops-time muted">{formatFecha(t.creado_en)}</span>
-                  </button>
-                </li>
-              ))}
-              {colaInventarios.map((inv: InventarioResumenDash) => (
-                <li key={`i-${inv.id}`}>
-                  <button
-                    type="button"
-                    className="ops-item"
-                    onClick={() => onNavigate?.("inventarios")}
-                  >
-                    <span className="badge warn">En curso</span>
-                    <span className="ops-body">
-                      <strong>Inventario</strong>
-                      <span className="muted">
-                        {inv.deposito_nombre ?? "?"} · esperado {inv.total_esperado} · leídos{" "}
-                        {inv.total_encontrado}
+                      <span className="ops-time muted">{formatFecha(t.creado_en)}</span>
+                      <span className="ops-progress" aria-hidden>
+                        <span className="ops-progress-meta">
+                          <span>
+                            Confirmados en destino {t.confirmados_destino}/{t.total_activos}
+                          </span>
+                          <span>{avance}%</span>
+                        </span>
+                        <span className="ops-progress-track">
+                          <span
+                            className={`ops-progress-fill ${avance < 100 ? "is-warn" : ""}`}
+                            style={{ width: `${avance}%` }}
+                          />
+                        </span>
                       </span>
-                    </span>
-                    <span className="ops-time muted">{formatFecha(inv.iniciado_en)}</span>
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                );
+              })}
+              {colaInventarios.map((inv: InventarioResumenDash) => {
+                const avance = pct(inv.total_encontrado, inv.total_esperado);
+                return (
+                  <li key={`i-${inv.id}`}>
+                    <button
+                      type="button"
+                      className="ops-item"
+                      onClick={() => onNavigate?.("inventarios")}
+                    >
+                      <span className="badge warn">En curso</span>
+                      <span className="ops-body">
+                        <strong>Inventario</strong>
+                        <span className="muted">{inv.deposito_nombre ?? "?"}</span>
+                      </span>
+                      <span className="ops-time muted">{formatFecha(inv.iniciado_en)}</span>
+                      <span className="ops-progress" aria-hidden>
+                        <span className="ops-progress-meta">
+                          <span>
+                            Leídos {inv.total_encontrado}/{inv.total_esperado} esperados
+                          </span>
+                          <span>{avance}%</span>
+                        </span>
+                        <span className="ops-progress-track">
+                          <span
+                            className={`ops-progress-fill ${avance < 100 ? "is-warn" : ""}`}
+                            style={{ width: `${Math.max(avance, avance > 0 ? 4 : 0)}%` }}
+                          />
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
 
-        <section className="card panel">
-          <div className="section-header">
-            <h3>Stock por depósito</h3>
-            <button
-              type="button"
-              className="btn secondary btn-sm"
-              onClick={() => onNavigate?.("depositos")}
-            >
-              Ver depósitos
-            </button>
-          </div>
-          {resumen.stock_por_deposito.length === 0 ? (
-            <EmptyState
-              title="Sin depósitos activos"
-              description="Sin estructura de depósitos no hay stock ubicado para operar."
-              action={
-                perms.canWriteWarehouse ? (
-                  <button
-                    type="button"
-                    className="btn primary btn-sm"
-                    onClick={() => onNavigate?.("depositos")}
-                  >
-                    Configurar depósitos
-                  </button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <ul className="stock-bars" aria-label="Stock por depósito">
-              {resumen.stock_por_deposito.map((s) => (
-                <li key={s.deposito_id}>
-                  <div className="stock-bar-head">
-                    <span>{s.deposito_nombre}</span>
-                    <strong>{s.total}</strong>
-                  </div>
-                  <div className="stock-bar-track" aria-hidden>
-                    <div
-                      className="stock-bar-fill"
-                      style={{ width: `${Math.round((s.total / maxStock) * 100)}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <aside className="dash-aside">
+          <section className="card panel">
+            <div className="section-header">
+              <h3>Stock por depósito</h3>
+              <button
+                type="button"
+                className="btn secondary btn-sm"
+                onClick={() => onNavigate?.("depositos")}
+              >
+                Ver depósitos
+              </button>
+            </div>
+            {resumen.stock_por_deposito.length === 0 ? (
+              <EmptyState
+                title="Sin depósitos activos"
+                description="Sin estructura de depósitos no hay stock ubicado para operar."
+                action={
+                  perms.canWriteWarehouse ? (
+                    <button
+                      type="button"
+                      className="btn primary btn-sm"
+                      onClick={() => onNavigate?.("depositos")}
+                    >
+                      Configurar depósitos
+                    </button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <>
+                <p className="muted activity-legend">
+                  {stockTotal} activo{stockTotal === 1 ? "" : "s"} ubicado
+                  {stockTotal === 1 ? "" : "s"} · cobertura {cobertura}% del maestro activo
+                </p>
+                <ul className="stock-bars" aria-label="Stock por depósito">
+                  {resumen.stock_por_deposito.map((s) => {
+                    const share = pct(s.total, maxStock);
+                    const ofTotal = stockTotal > 0 ? pct(s.total, stockTotal) : 0;
+                    return (
+                      <li key={s.deposito_id}>
+                        <div className="stock-bar-head">
+                          <span>{s.deposito_nombre}</span>
+                          <strong>
+                            {s.total}{" "}
+                            <span className="stock-bar-pct">({ofTotal}%)</span>
+                          </strong>
+                        </div>
+                        <div className="stock-bar-track" aria-hidden>
+                          <div className="stock-bar-fill" style={{ width: `${share}%` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
+        </aside>
       </div>
 
       <section className="card panel">
         <div className="section-header">
-          <h3>Actividad</h3>
+          <h3>Auditoría reciente</h3>
           <div className="section-header-right">
             {filtrados && (
               <span className="muted">
@@ -450,6 +598,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
             />
           </div>
         </div>
+
+        <p className="activity-legend">
+          Movimientos del sistema (altas, ubicaciones, transferencias). No es la cola operativa: sirve
+          para rastrear quién hizo qué.
+        </p>
 
         <form className="toolbar" onSubmit={aplicarFiltro} aria-label="Filtrar movimientos">
           <label className="field toolbar-field">

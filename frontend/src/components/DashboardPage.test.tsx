@@ -17,6 +17,8 @@ vi.mock("../lib/usePermissions", () => ({
     canWriteWarehouse: true,
     canWriteTransfer: true,
     canCancelTransfer: true,
+    canManageUsers: true,
+    canManageRoles: true,
   }),
 }));
 
@@ -124,9 +126,12 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Inventarios abiertos")).toBeInTheDocument();
     expect(screen.getByText("Discrepancias")).toBeInTheDocument();
     expect(screen.getByText("Sin ubicación")).toBeInTheDocument();
+    expect(screen.getByText(/hay discrepancias para revisar/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /transferencias abiertas/i })).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: /sin ubicación/i })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: /^sin ubicación/i })).toHaveTextContent("2");
     expect(screen.getByText(/Central → Sur/)).toBeInTheDocument();
+    expect(screen.getByText(/Confirmados en destino 0\/2/)).toBeInTheDocument();
+    expect(screen.getByText(/Leídos 3\/10 esperados/)).toBeInTheDocument();
     expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /transferencias abiertas/i }));
