@@ -54,6 +54,12 @@ interface SyncQueueDao {
     @Query("SELECT COUNT(*) FROM sync_queue WHERE status IN ('pending', 'failed')")
     suspend fun countPending(): Int
 
+    @Query("SELECT COUNT(*) FROM sync_queue WHERE status = 'abandoned'")
+    suspend fun countAbandoned(): Int
+
+    @Query("SELECT * FROM sync_queue WHERE id = :id LIMIT 1")
+    suspend fun get(id: Long): SyncQueueEntity?
+
     @Insert
     suspend fun insert(item: SyncQueueEntity): Long
 

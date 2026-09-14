@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.donnicolas.rfid.data.repository.InventoryRepository
+import com.donnicolas.rfid.data.sync.SyncManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,13 +39,21 @@ class HomeViewModel(
             _state.update { it.copy(syncing = true, syncMessage = null) }
             val result = runCatching { inventoryRepository.flushSync() }
             result.onSuccess { flush ->
+                val abandonados = if (flush.abandoned > 0) {
+                    " ${flush.abandoned} conteo(s) abandonado(s) tras ${SyncManager.MAX_ATTEMPTS} " +
+                        "intentos: avisá a sistemas."
+                } else {
+                    ""
+                }
                 val msg = when {
-                    flush.processed == 0 && flush.remaining == 0 -> "No hay pendientes de sync."
+                    flush.processed == 0 && flush.remaining == 0 && flush.abandoned == 0 ->
+                        "No hay pendientes de sync."
                     flush.succeeded > 0 && flush.failed == 0 ->
-                        "Sync OK: ${flush.succeeded} inventario(s)."
+                        "Sync OK: ${flush.succeeded} inventario(s).$abandonados"
                     flush.failed > 0 ->
-                        "Sync parcial: ${flush.succeeded} OK, ${flush.failed} error(es). Restan ${flush.remaining}."
-                    else -> "Sin cambios. Restan ${flush.remaining}."
+                        "Sync parcial: ${flush.succeeded} OK, ${flush.failed} error(es). " +
+                            "Restan ${flush.remaining}.$abandonados"
+                    else -> "Sin cambios. Restan ${flush.remaining}.$abandonados"
                 }
                 _state.update {
                     it.copy(

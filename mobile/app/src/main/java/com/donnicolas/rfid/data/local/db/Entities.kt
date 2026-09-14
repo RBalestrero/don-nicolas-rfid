@@ -48,5 +48,8 @@ data class SyncQueueEntity(
         const val STATUS_SYNCING = "syncing"
         const val STATUS_DONE = "done"
         const val STATUS_FAILED = "failed"
+
+        /** Superó el tope de reintentos: no se vuelve a intentar solo. */
+        const val STATUS_ABANDONED = "abandoned"
     }
 }

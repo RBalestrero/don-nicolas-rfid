@@ -12,6 +12,12 @@ data class InventorySyncPayload(
     val expectedEpcs: List<String>,
     val readEpcs: List<String>,
     val localSessionId: String,
+    /**
+     * Inventario ya creado en el servidor para este conteo offline.
+     * Se persiste apenas responde el POST /inventarios para que un reintento
+     * cierre ese mismo inventario en vez de crear otro.
+     */
+    val remoteInventarioId: String? = null,
 )
 
 object SyncJson {
