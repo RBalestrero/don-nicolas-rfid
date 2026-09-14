@@ -21,6 +21,13 @@ interface InventoryApi {
     @POST("inventarios")
     suspend fun create(@Body body: InventarioCreateDto): InventarioDto
 
+    @GET("inventarios")
+    suspend fun list(
+        @Query("deposito_id") depositoId: String? = null,
+        @Query("estado") estado: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): List<InventarioListItemDto>
+
     @GET("inventarios/{id}")
     suspend fun get(@Path("id") id: String): InventarioDto
 
@@ -38,6 +45,9 @@ interface InventoryApi {
         @Path("id") id: String,
         @Body body: InventarioLecturasDto,
     ): InventarioDto
+
+    @POST("inventarios/{id}/cancelar")
+    suspend fun cancelar(@Path("id") id: String): InventarioDto
 }
 
 data class DepositoDto(
@@ -72,6 +82,30 @@ data class InventarioLecturasDto(
     val epcs: List<String> = emptyList(),
 )
 
+data class InventarioListItemDto(
+    val id: String,
+    @Json(name = "deposito_id") val depositoId: String,
+    @Json(name = "sector_id") val sectorId: String? = null,
+    @Json(name = "ubicacion_id") val ubicacionId: String? = null,
+    val estado: String,
+    @Json(name = "total_esperado") val totalEsperado: Int = 0,
+    @Json(name = "total_encontrado") val totalEncontrado: Int = 0,
+    @Json(name = "total_faltante") val totalFaltante: Int = 0,
+    @Json(name = "total_sobrante") val totalSobrante: Int = 0,
+    /** Sobrantes de artículos que sí pertenecen al depósito (unidades de más). */
+    @Json(name = "total_exceso") val totalExceso: Int = 0,
+    @Json(name = "iniciado_en") val iniciadoEn: String? = null,
+    @Json(name = "cerrado_en") val cerradoEn: String? = null,
+    val auditado: Boolean = false,
+    @Json(name = "auditado_en") val auditadoEn: String? = null,
+) {
+    /** Mismo criterio que backend y web: los ajenos no cuentan como discrepancia. */
+    val tieneDiscrepancias: Boolean get() = totalFaltante > 0 || totalExceso > 0
+
+    /** Sobrantes que no pertenecen al depósito (etiquetas de afuera). */
+    val totalAjeno: Int get() = (totalSobrante - totalExceso).coerceAtLeast(0)
+}
+
 data class InventarioDto(
     val id: String,
     @Json(name = "deposito_id") val depositoId: String,
@@ -82,6 +116,8 @@ data class InventarioDto(
     @Json(name = "total_encontrado") val totalEncontrado: Int = 0,
     @Json(name = "total_faltante") val totalFaltante: Int = 0,
     @Json(name = "total_sobrante") val totalSobrante: Int = 0,
+    @Json(name = "total_exceso") val totalExceso: Int = 0,
+    val auditado: Boolean = false,
     val resumen: InventarioResumenDto? = null,
     val detalles: List<DetalleInventarioDto> = emptyList(),
 )
@@ -91,6 +127,7 @@ data class InventarioResumenDto(
     @Json(name = "total_encontrado") val totalEncontrado: Int = 0,
     @Json(name = "total_faltante") val totalFaltante: Int = 0,
     @Json(name = "total_sobrante") val totalSobrante: Int = 0,
+    @Json(name = "total_exceso") val totalExceso: Int = 0,
     @Json(name = "sin_epc") val sinEpc: Int = 0,
 )
 
@@ -110,7 +147,13 @@ data class InventarioReporteDto(
     val resumen: InventarioResumenDto,
     @Json(name = "coincidencia_pct") val coincidenciaPct: Double = 0.0,
     @Json(name = "tiene_discrepancias") val tieneDiscrepancias: Boolean = false,
+    val auditado: Boolean = false,
     val encontrados: List<DetalleInventarioDto> = emptyList(),
     val faltantes: List<DetalleInventarioDto> = emptyList(),
+    /** Sobrantes de artículos del depósito: unidades de más, sí son discrepancia. */
+    val excesos: List<DetalleInventarioDto> = emptyList(),
+    /** Sobrantes de artículos ajenos al depósito: se reportan, no son discrepancia. */
+    val ajenos: List<DetalleInventarioDto> = emptyList(),
     val sobrantes: List<DetalleInventarioDto> = emptyList(),
+    @Json(name = "sin_epc") val sinEpc: List<DetalleInventarioDto> = emptyList(),
 )
