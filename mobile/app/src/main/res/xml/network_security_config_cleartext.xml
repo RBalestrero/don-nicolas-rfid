@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Perfil para backend on-premise servido por HTTP en la LAN industrial.
+  Se selecciona automáticamente cuando api.scheme=http (ver app/build.gradle.kts).
+  Con api.scheme=https el build usa network_security_config.xml, que prohíbe cleartext.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

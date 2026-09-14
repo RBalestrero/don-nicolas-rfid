@@ -69,27 +69,43 @@ class SimulatedRfidReaderTest {
 }
 
 class RfidInventorySessionTest {
+    private val epc1 = "D1${"0".repeat(9)}1${"0".repeat(9)}1A1"
+    private val epc2 = "D1${"0".repeat(9)}2${"0".repeat(9)}2A1"
+
     @Test
     fun `deduplica EPC e incrementa seenCount`() {
         val session = RfidInventorySession()
         session.start()
-        session.ingest(RfidTag(epc = "EPC1", rssi = -50))
-        session.ingest(RfidTag(epc = "EPC1", rssi = -40))
-        session.ingest(RfidTag(epc = "EPC2", rssi = -55))
+        session.ingest(RfidTag(epc = epc1, rssi = -50))
+        session.ingest(RfidTag(epc = epc1, rssi = -40))
+        session.ingest(RfidTag(epc = epc2, rssi = -55))
 
         val snap = session.snapshot()
         assertEquals(2, snap.uniqueTags)
         assertEquals(3, snap.totalReads)
-        val epc1 = snap.tags.first { it.epc == "EPC1" }
-        assertEquals(2, epc1.seenCount)
-        assertEquals(-40, epc1.rssi)
+        val tag1 = snap.tags.first { it.epc == epc1 }
+        assertEquals(2, tag1.seenCount)
+        assertEquals(-40, tag1.rssi)
+    }
+
+    @Test
+    fun `descarta EPCs ajenos al esquema D1`() {
+        val session = RfidInventorySession()
+        session.start()
+        session.ingest(RfidTag(epc = epc1, rssi = -50))
+        session.ingest(RfidTag(epc = "E28011602000020491234567", rssi = -50))
+        session.ingest(RfidTag(epc = "EPC1", rssi = -50))
+
+        val snap = session.snapshot()
+        assertEquals(1, snap.uniqueTags)
+        assertEquals(epc1, snap.tags.single().epc)
     }
 
     @Test
     fun `requireMinimumUnique reporta error tipado`() {
         val session = RfidInventorySession()
         session.start()
-        session.ingest(RfidTag(epc = "A", rssi = -50))
+        session.ingest(RfidTag(epc = epc1, rssi = -50))
         val error = session.snapshot().requireMinimumUnique(10)
         assertNotNull(error)
         assertEquals("RFID_INVENTORY_BELOW_TARGET", error!!.code)
