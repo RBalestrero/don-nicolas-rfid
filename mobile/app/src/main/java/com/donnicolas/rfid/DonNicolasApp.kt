@@ -3,6 +3,7 @@ package com.donnicolas.rfid
 import android.app.Application
 import com.donnicolas.rfid.data.api.ApiClient
 import com.donnicolas.rfid.data.local.ConnectivityMonitor
+import com.donnicolas.rfid.data.local.SessionEvents
 import com.donnicolas.rfid.data.local.TokenStore
 import com.donnicolas.rfid.data.local.db.AppDatabase
 import com.donnicolas.rfid.data.repository.AssetsRepository
@@ -33,13 +34,17 @@ class DonNicolasApp : Application() {
         private set
     lateinit var rfidReader: RfidReader
         private set
+    lateinit var sessionEvents: SessionEvents
+        private set
 
     override fun onCreate() {
         super.onCreate()
         tokenStore = TokenStore(this)
+        sessionEvents = SessionEvents()
         val apiClient = ApiClient(
             baseUrl = BuildConfig.API_BASE_URL,
             tokenProvider = { tokenStore.getToken() },
+            onUnauthorized = { sessionEvents.notifyExpired() },
         )
         val db = AppDatabase.create(this)
         connectivityMonitor = ConnectivityMonitor(this)

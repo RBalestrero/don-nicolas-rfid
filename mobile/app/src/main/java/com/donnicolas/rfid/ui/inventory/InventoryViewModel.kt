@@ -448,7 +448,26 @@ class InventoryViewModel(
             runCatching { reader.stopInventory() }
             val inv = _state.value.inventario
             val offline = _state.value.offlineMode
-            if (inv != null && !offline && !inv.id.startsWith("offline-")) {
+            // Un conteo offline solo vive en memoria: no está en el servidor y no
+            // se puede retomar. Salir borraría las lecturas en silencio.
+            if (inv != null && (offline || inv.id.startsWith("offline-"))) {
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        scanning = false,
+                        statusMessage = null,
+                        error = AppError(
+                            code = "INVENTORY_OFFLINE_NOT_RESUMABLE",
+                            title = "El conteo offline no se puede minimizar",
+                            detail = "Este inventario todavía no existe en el servidor, así que no " +
+                                "queda nada para retomar. Finalizalo para guardarlo (se sincroniza " +
+                                "al recuperar red) o cancelalo si querés descartarlo.",
+                        ),
+                    )
+                }
+                return@launch
+            }
+            if (inv != null && !offline) {
                 val epcs = session.snapshot().tags.map { it.epc }
                 if (epcs.isNotEmpty()) {
                     _state.update { it.copy(loading = true, scanning = false) }

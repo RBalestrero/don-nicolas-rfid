@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.data.model.AuthResult
+import com.donnicolas.rfid.data.local.SessionEvents
 import com.donnicolas.rfid.data.model.User
 import com.donnicolas.rfid.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ data class LoginUiState(
 
 class LoginViewModel(
     private val authRepository: AuthRepository,
+    private val sessionEvents: SessionEvents,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
@@ -30,6 +32,29 @@ class LoginViewModel(
     init {
         if (authRepository.isLoggedIn()) {
             restoreSession()
+        }
+        observeSessionExpiry()
+    }
+
+    private fun observeSessionExpiry() {
+        viewModelScope.launch {
+            sessionEvents.expired.collect {
+                if (_state.value.user == null) return@collect
+                authRepository.logout()
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        user = null,
+                        password = "",
+                        error = AppError(
+                            code = "AUTH_SESSION_EXPIRED",
+                            title = "Sesión expirada",
+                            detail = "El token venció o fue revocado. Volvé a iniciar sesión " +
+                                "para continuar.",
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -100,10 +125,11 @@ class LoginViewModel(
 
     class Factory(
         private val authRepository: AuthRepository,
+        private val sessionEvents: SessionEvents,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return LoginViewModel(authRepository) as T
+            return LoginViewModel(authRepository, sessionEvents) as T
         }
     }
 }

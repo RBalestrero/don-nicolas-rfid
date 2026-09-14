@@ -138,6 +138,24 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `401 fuera del login se reporta como sesion expirada y no como credenciales`() = runTest {
+        whenever(tokenStore.isLoggedIn()).thenReturn(true)
+        whenever(authApi.me()).thenThrow(
+            HttpException(Response.error<Any>(401, "".toResponseBody("application/json".toMediaType()))),
+        )
+
+        val result = repository.currentUser()
+
+        assertTrue(result is AuthResult.Error)
+        val error = (result as AuthResult.Error).error
+        assertEquals("AUTH_SESSION_EXPIRED", error.code)
+        assertEquals("Sesión expirada", error.title)
+        // No debe sugerir credenciales de desarrollo en un dispositivo de planta.
+        assertFalse(error.detail.contains("admin123"))
+        verify(tokenStore).clear()
+    }
+
+    @Test
     fun `currentUser sin sesion retorna AUTH_NO_SESSION`() = runTest {
         whenever(tokenStore.isLoggedIn()).thenReturn(false)
 

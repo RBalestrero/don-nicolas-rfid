@@ -105,28 +105,39 @@ object ApiErrorMapper {
         val (serverCode, serverDetail) = extractServerDetail(rawBody)
         val url = fullUrl(baseUrl, endpoint)
 
+        val isLogin = endpoint.contains("auth/login")
+
         val mapped = when (status) {
             400 -> AppError(
-                code = "AUTH_BAD_REQUEST",
-                title = "Solicitud de login inválida",
-                detail = "La API rechazó el cuerpo del login (HTTP 400). " +
-                    serverDetailOrFallback(serverDetail, "Revisá formato de email/password."),
+                code = "API_BAD_REQUEST",
+                title = if (isLogin) "Solicitud de login inválida" else "Solicitud inválida",
+                detail = "La API rechazó el cuerpo de la solicitud (HTTP 400) en $operation. " +
+                    serverDetailOrFallback(serverDetail, "Revisá los datos enviados."),
                 httpStatus = status,
                 endpoint = url,
                 cause = rawBody.ifBlank { null },
             )
-            401 -> AppError(
-                code = "AUTH_INVALID_CREDENTIALS",
-                title = "Credenciales inválidas",
-                detail = "Email o contraseña incorrectos (HTTP 401) en $operation. " +
-                    serverDetailOrFallback(
-                        serverDetail,
-                        "Usuario seed de desarrollo: admin@donnicolas.com / admin123",
-                    ),
-                httpStatus = status,
-                endpoint = url,
-                cause = rawBody.ifBlank { null },
-            )
+            401 -> if (isLogin) {
+                AppError(
+                    code = "AUTH_INVALID_CREDENTIALS",
+                    title = "Credenciales inválidas",
+                    detail = "Email o contraseña incorrectos (HTTP 401). " +
+                        serverDetailOrFallback(serverDetail, "Verificá el usuario y la contraseña."),
+                    httpStatus = status,
+                    endpoint = url,
+                    cause = rawBody.ifBlank { null },
+                )
+            } else {
+                AppError(
+                    code = "AUTH_SESSION_EXPIRED",
+                    title = "Sesión expirada",
+                    detail = "El token venció o fue revocado durante $operation (HTTP 401). " +
+                        "Volvé a iniciar sesión para continuar.",
+                    httpStatus = status,
+                    endpoint = url,
+                    cause = rawBody.ifBlank { null },
+                )
+            }
             403 -> AppError(
                 code = "AUTH_FORBIDDEN",
                 title = "Acceso denegado",
@@ -146,13 +157,26 @@ object ApiErrorMapper {
                 endpoint = url,
                 cause = rawBody.ifBlank { null },
             )
+            409 -> AppError(
+                code = "API_CONFLICT",
+                title = "El estado cambió en el servidor",
+                detail = "La API rechazó $operation por conflicto de estado (HTTP 409). " +
+                    serverDetailOrFallback(
+                        serverDetail,
+                        "El inventario pudo haberse cerrado o cancelado desde otro dispositivo. " +
+                            "Volvé atrás y actualizá la lista.",
+                    ),
+                httpStatus = status,
+                endpoint = url,
+                cause = rawBody.ifBlank { null },
+            )
             422 -> AppError(
-                code = "AUTH_VALIDATION",
-                title = "Validación de login fallida",
+                code = "API_VALIDATION",
+                title = "Validación fallida",
                 detail = "La API reportó errores de validación (HTTP 422) en $operation. " +
                     serverDetailOrFallback(
                         serverDetail,
-                        "El email debe ser válido y la contraseña no puede estar vacía.",
+                        "Revisá los datos enviados.",
                     ),
                 httpStatus = status,
                 endpoint = url,
