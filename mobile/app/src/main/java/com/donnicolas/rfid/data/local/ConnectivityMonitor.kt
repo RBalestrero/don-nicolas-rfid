@@ -5,12 +5,19 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import com.donnicolas.rfid.BuildConfig
 import java.util.concurrent.CopyOnWriteArrayList
 
-class ConnectivityMonitor(context: Context) {
+class ConnectivityMonitor(
+    context: Context,
+    apiHost: String = BuildConfig.API_HOST,
+) {
     private val cm =
         context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+
+    /** La API vive en el propio dispositivo (USB + `adb reverse`): no necesita red. */
+    private val apiOnLoopback = apiHost in LOOPBACK_HOSTS
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -33,15 +40,28 @@ class ConnectivityMonitor(context: Context) {
         runCatching { cm.registerNetworkCallback(request, callback) }
     }
 
+    /**
+     * ¿Vale la pena intentar hablar con la API?
+     *
+     * El backend es on-premise: puede estar en una LAN sin salida a internet, o
+     * en loopback cuando el MC33 está por USB con `adb reverse`. Exigir
+     * NET_CAPABILITY_INTERNET o VALIDATED dejaría el prefetch de stock y la cola
+     * de sync apagados aunque las llamadas HTTP funcionen perfecto.
+     */
     fun isOnline(): Boolean {
-        val network = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(network) ?: return false
-        val hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        // VALIDATED puede faltar en Wi‑Fi corporativo; INTERNET alcanza para intentar sync.
-        return hasInternet && (validated || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
+        val network = cm.activeNetwork
+        val caps = network?.let { cm.getNetworkCapabilities(it) }
+        if (caps != null) {
+            val usableTransport = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            if (usableTransport || caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                return true
+            }
+        }
+        // Sin red activa las llamadas a loopback siguen siendo válidas (USB + adb reverse).
+        return apiOnLoopback
     }
 
     fun addListener(listener: (Boolean) -> Unit) {
@@ -56,5 +76,9 @@ class ConnectivityMonitor(context: Context) {
     private fun notifyListeners() {
         val online = isOnline()
         listeners.forEach { it(online) }
+    }
+
+    private companion object {
+        val LOOPBACK_HOSTS = setOf("127.0.0.1", "localhost", "::1")
     }
 }

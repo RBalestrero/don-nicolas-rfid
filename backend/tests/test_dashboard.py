@@ -2,6 +2,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
+from tests.epc_helpers import epc_de_prueba
+
 
 def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
@@ -19,7 +21,7 @@ def _seed_activo(client: TestClient, auth_headers: dict, *, with_ubicacion: bool
             "numero_patrimonial": _unique("PAT-D"),
             "descripcion": "Activo dashboard",
             "categoria_id": cat["id"],
-            "epc": f"E280DASH{_unique('')[:6]}".upper(),
+            "epc": epc_de_prueba(),
         },
         headers=auth_headers,
     ).json()
@@ -84,17 +86,26 @@ def test_movimientos_filtra_por_accion_y_pagina(client: TestClient, auth_headers
 
 def test_dashboard_resumen_kpis(client: TestClient, auth_headers):
     seed = _seed_activo(client, auth_headers)
+    sin_ubi = _seed_activo(client, auth_headers, with_ubicacion=False)
 
     resumen = client.get("/api/v1/dashboard/resumen", headers=auth_headers)
     assert resumen.status_code == 200, resumen.text
     body = resumen.json()
+    kpis = body["kpis"]
 
-    assert body["kpis"]["activos_activos"] >= 1
-    assert body["kpis"]["depositos_activos"] >= 1
-    assert body["kpis"]["stock_total_ubicado"] >= 1
+    assert kpis["activos_activos"] >= 2
+    assert kpis["depositos_activos"] >= 1
+    assert kpis["stock_total_ubicado"] >= 1
+    assert kpis["activos_sin_ubicacion"] >= 1
+    assert kpis["activos_sin_ubicacion"] == kpis["activos_activos"] - kpis["stock_total_ubicado"]
+    assert 0 <= kpis["cobertura_ubicacion_pct"] <= 100
+    assert kpis["cobertura_ubicacion_pct"] == round(
+        (kpis["stock_total_ubicado"] / kpis["activos_activos"]) * 100
+    )
     assert isinstance(body["stock_por_deposito"], list)
     assert any(s["deposito_id"] == seed["deposito"]["id"] for s in body["stock_por_deposito"])
     assert isinstance(body["movimientos_recientes"], list)
     assert any(m["activo_id"] == seed["activo"]["id"] for m in body["movimientos_recientes"])
+    assert any(m["activo_id"] == sin_ubi["activo"]["id"] for m in body["movimientos_recientes"])
     assert "transferencias_recientes" in body
     assert "inventarios_recientes" in body

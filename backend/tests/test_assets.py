@@ -2,6 +2,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
+from tests.epc_helpers import epc_de_prueba
+
 
 def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
@@ -51,20 +53,44 @@ def test_update_categoria(client: TestClient, auth_headers):
     assert update_response.json()["descripcion"] == "Herramientas de taller"
 
 
-def test_delete_categoria_soft(client: TestClient, auth_headers):
+def test_delete_categoria_hard_y_bloquea_si_en_uso(client: TestClient, auth_headers):
     create_response = client.post(
         "/api/v1/categorias",
         json={"nombre": _unique("Temporal")},
         headers=auth_headers,
     )
     categoria_id = create_response.json()["id"]
+    nombre = create_response.json()["nombre"]
+
+    client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT"),
+            "descripcion": "Item",
+            "categoria_id": categoria_id,
+        },
+        headers=auth_headers,
+    )
+    blocked = client.delete(f"/api/v1/categorias/{categoria_id}", headers=auth_headers)
+    assert blocked.status_code == 409
+
+    # Sin activos: se puede eliminar y recrear el nombre
+    activo_id = client.get("/api/v1/activos", headers=auth_headers).json()
+    for a in activo_id:
+        if a["categoria_id"] == categoria_id:
+            client.delete(f"/api/v1/activos/{a['id']}", headers=auth_headers)
 
     delete_response = client.delete(f"/api/v1/categorias/{categoria_id}", headers=auth_headers)
     assert delete_response.status_code == 204
 
-    list_response = client.get("/api/v1/categorias", headers=auth_headers)
-    nombres = [c["nombre"] for c in list_response.json()]
-    assert create_response.json()["nombre"] not in nombres
+    assert client.get(f"/api/v1/categorias/{categoria_id}", headers=auth_headers).status_code == 404
+
+    recreate = client.post(
+        "/api/v1/categorias",
+        json={"nombre": nombre},
+        headers=auth_headers,
+    )
+    assert recreate.status_code == 201
 
 
 def test_create_and_get_activo(client: TestClient, auth_headers):
@@ -94,6 +120,46 @@ def test_create_and_get_activo(client: TestClient, auth_headers):
     assert get_response.status_code == 200
 
 
+def test_create_activo_con_ubicacion(client: TestClient, auth_headers):
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("CatUbi")},
+        headers=auth_headers,
+    ).json()
+    dep = client.post(
+        "/api/v1/depositos",
+        json={"nombre": _unique("DepUbi")},
+        headers=auth_headers,
+    ).json()
+    sec = client.post(
+        f"/api/v1/depositos/{dep['id']}/sectores",
+        json={"nombre": "S1"},
+        headers=auth_headers,
+    ).json()
+    ubi = client.post(
+        f"/api/v1/depositos/{dep['id']}/sectores/{sec['id']}/ubicaciones",
+        json={"codigo": "U-01"},
+        headers=auth_headers,
+    ).json()
+
+    created = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT"),
+            "descripcion": "Con ubicación",
+            "categoria_id": cat["id"],
+            "ubicacion_id": ubi["id"],
+        },
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+    activo_id = created.json()["id"]
+
+    ubic = client.get(f"/api/v1/activos/{activo_id}/ubicacion", headers=auth_headers)
+    assert ubic.status_code == 200
+    assert ubic.json()["ubicacion_id"] == ubi["id"]
+
+
 def test_update_activo(client: TestClient, auth_headers):
     categoria_response = client.post(
         "/api/v1/categorias",
@@ -117,7 +183,7 @@ def test_update_activo(client: TestClient, auth_headers):
         f"/api/v1/activos/{activo_id}",
         json={
             "descripcion": "Camioneta Ford Ranger",
-            "epc": f"E2801160600002038F4259{_unique('')[:4]}",
+            "epc": epc_de_prueba(),
         },
         headers=auth_headers,
     )
@@ -127,7 +193,7 @@ def test_update_activo(client: TestClient, auth_headers):
     assert data["epc"] is not None
 
 
-def test_delete_activo_soft(client: TestClient, auth_headers):
+def test_delete_activo_hard_permite_recrear(client: TestClient, auth_headers):
     categoria_response = client.post(
         "/api/v1/categorias",
         json={"nombre": _unique("Consumibles")},
@@ -150,9 +216,24 @@ def test_delete_activo_soft(client: TestClient, auth_headers):
     delete_response = client.delete(f"/api/v1/activos/{activo_id}", headers=auth_headers)
     assert delete_response.status_code == 204
 
+    get_response = client.get(f"/api/v1/activos/{activo_id}", headers=auth_headers)
+    assert get_response.status_code == 404
+
     list_response = client.get("/api/v1/activos", headers=auth_headers)
     patrimoniales = [a["numero_patrimonial"] for a in list_response.json()]
     assert patrimonial not in patrimoniales
+
+    recreate = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": patrimonial,
+            "descripcion": "Toner recreado",
+            "categoria_id": categoria_id,
+        },
+        headers=auth_headers,
+    )
+    assert recreate.status_code == 201
+    assert recreate.json()["descripcion"] == "Toner recreado"
 
 
 def test_list_activos_with_search(client: TestClient, auth_headers):
@@ -180,13 +261,48 @@ def test_list_activos_with_search(client: TestClient, auth_headers):
     assert any("Monitor" in a["descripcion"] for a in response.json())
 
 
+def test_activo_rechaza_epc_ajeno_al_esquema(client: TestClient, auth_headers):
+    """El MC33 solo lee EPCs D1: aceptar otros haría que el inventario los dé
+    por faltantes y el cierre les quite la ubicación al activo."""
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("CatEpcAjeno")},
+        headers=auth_headers,
+    ).json()
+
+    for epc_invalido in ("E2801160600002038F425901", "NO-HEX", "D1ABC"):
+        response = client.post(
+            "/api/v1/activos",
+            json={
+                "numero_patrimonial": _unique("PAT-AJENO"),
+                "descripcion": "Activo con EPC ajeno",
+                "categoria_id": cat["id"],
+                "epc": epc_invalido,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, epc_invalido
+
+    ok = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT-OK"),
+            "descripcion": "Activo con EPC del sistema",
+            "categoria_id": cat["id"],
+            "epc": epc_de_prueba(),
+        },
+        headers=auth_headers,
+    )
+    assert ok.status_code == 201
+
+
 def test_lookup_activo_by_epc(client: TestClient, auth_headers):
     cat = client.post(
         "/api/v1/categorias",
         json={"nombre": _unique("LookupCat")},
         headers=auth_headers,
     ).json()
-    epc = f"EPC{uuid.uuid4().hex[:12].upper()}"
+    epc = epc_de_prueba()
     activo = client.post(
         "/api/v1/activos",
         json={

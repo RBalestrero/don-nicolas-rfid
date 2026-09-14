@@ -2,6 +2,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
+from tests.epc_helpers import epc_de_prueba
+
 
 def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
@@ -49,7 +51,7 @@ def _setup_transfer_base(client: TestClient, auth_headers: dict) -> dict:
     activos = []
     epcs = []
     for i in range(2):
-        epc = f"E280XFER{i}{_unique('')[:4]}".upper()
+        epc = epc_de_prueba()
         activo = client.post(
             "/api/v1/activos",
             json={

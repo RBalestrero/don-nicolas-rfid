@@ -2,6 +2,8 @@ import io
 import uuid
 
 from fastapi.testclient import TestClient
+
+from tests.epc_helpers import epc_de_prueba
 from openpyxl import load_workbook
 
 
@@ -30,7 +32,7 @@ def _seed(client: TestClient, mobile_auth_headers: dict) -> dict:
         json={"nombre": _unique("CatExp")},
         headers=mobile_auth_headers,
     ).json()
-    epc = f"E280EXP{_unique('')[:6]}".upper()
+    epc = epc_de_prueba()
     activo = client.post(
         "/api/v1/activos",
         json={
