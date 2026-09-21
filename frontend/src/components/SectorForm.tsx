@@ -1,15 +1,23 @@
-import { FormEvent, useState } from "react";
-import type { SectorCreatePayload } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { Sector, SectorCreatePayload } from "../types";
 
 interface SectorFormProps {
+  initial?: Sector | null;
   onSubmit: (data: SectorCreatePayload) => Promise<void>;
+  onCancel?: () => void;
 }
 
-export default function SectorForm({ onSubmit }: SectorFormProps) {
-  const [nombre, setNombre] = useState("");
-  const [descripcion, setDescripcion] = useState("");
+export default function SectorForm({ initial = null, onSubmit, onCancel }: SectorFormProps) {
+  const [nombre, setNombre] = useState(initial?.nombre ?? "");
+  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const editing = Boolean(initial);
+
+  useEffect(() => {
+    setNombre(initial?.nombre ?? "");
+    setDescripcion(initial?.descripcion ?? "");
+  }, [initial]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,10 +28,12 @@ export default function SectorForm({ onSubmit }: SectorFormProps) {
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
       });
-      setNombre("");
-      setDescripcion("");
+      if (!editing) {
+        setNombre("");
+        setDescripcion("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear sector");
+      setError(err instanceof Error ? err.message : "Error al guardar sector");
     } finally {
       setSubmitting(false);
     }
@@ -50,9 +60,16 @@ export default function SectorForm({ onSubmit }: SectorFormProps) {
         />
       </label>
       {error && <p className="error">{error}</p>}
-      <button type="submit" className="btn primary" disabled={submitting}>
-        {submitting ? "Guardando..." : "Crear sector"}
-      </button>
+      <div className="form-actions">
+        {onCancel && (
+          <button type="button" className="btn secondary" onClick={onCancel}>
+            Cancelar
+          </button>
+        )}
+        <button type="submit" className="btn primary" disabled={submitting}>
+          {submitting ? "Guardando..." : editing ? "Guardar cambios" : "Crear sector"}
+        </button>
+      </div>
     </form>
   );
 }

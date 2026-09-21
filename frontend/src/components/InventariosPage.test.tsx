@@ -37,6 +37,7 @@ const inventarioListItem = {
   total_encontrado: 1,
   total_faltante: 1,
   total_sobrante: 0,
+  total_exceso: 0,
   iniciado_en: "2024-01-01T12:00:00Z",
   cerrado_en: "2024-01-01T13:00:00Z",
   auditado: false,
@@ -47,6 +48,7 @@ const inventarioListItem = {
 
 const inventario = {
   ...inventarioListItem,
+  ajuste_aplicado: false,
   resumen: {
     total_esperado: 2,
     total_encontrado: 1,
@@ -91,6 +93,8 @@ const reporte = {
   resumen: inventario.resumen,
   encontrados: [inventario.detalles[0]],
   faltantes: [inventario.detalles[1]],
+  excesos: [],
+  ajenos: [],
   sobrantes: [],
   sin_epc: [],
 };
@@ -101,6 +105,7 @@ const inventarioAuditado = {
   auditado_en: "2024-01-01T14:00:00Z",
   auditado_por_id: "u-1",
   comentario_auditoria: "Faltante localizado en rack B",
+  ajuste_aplicado: true,
 };
 
 describe("InventariosPage", () => {
@@ -153,7 +158,9 @@ describe("InventariosPage", () => {
     const user = userEvent.setup();
     render(<InventariosPage />);
 
-    expect(await screen.findByText(/auditoría de conteos/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/revisá y auditá los conteos hechos con el lector/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /nuevo conteo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /iniciar inventario/i })).not.toBeInTheDocument();
 
@@ -161,15 +168,22 @@ describe("InventariosPage", () => {
     expect(screen.getByRole("option", { name: "Cerrado" })).toBeInTheDocument();
     expect(screen.getAllByText("Cerrado").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
+    expect(screen.getByText("Antes")).toBeInTheDocument();
+    expect(screen.getByText("Leídos")).toBeInTheDocument();
+    expect(screen.getByText("Dif.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^auditar$/i }));
 
     expect(await screen.findByText(/reporte de auditoría/i)).toBeInTheDocument();
+    expect(screen.getByText("Stock antes")).toBeInTheDocument();
+    expect(screen.getAllByText("Leídos").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Diferencia")).toBeInTheDocument();
     expect(screen.getByText(/coincidencia/i)).toBeInTheDocument();
     expect(screen.getByText("PAT-1")).toBeInTheDocument();
     expect(screen.getByText("PAT-2")).toBeInTheDocument();
     expect(screen.queryByLabelText(/epcs leídos/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cerrar inventario/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /marcar como auditada/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar auditoría/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /descartar inventario/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
@@ -184,12 +198,14 @@ describe("InventariosPage", () => {
     render(<InventariosPage />);
 
     await user.click(await screen.findByRole("button", { name: /^auditar$/i }));
-    const marcar = await screen.findByRole("button", { name: /marcar como auditada/i });
+    const marcar = await screen.findByRole("button", { name: /confirmar auditoría/i });
 
-    const comentario = screen.getByPlaceholderText(/faltantes localizados/i);
+    const comentario = screen.getByPlaceholderText(/faltantes localizados|conteo inválido/i);
     await user.clear(comentario);
     await user.type(comentario, "Faltante localizado en rack B");
     await user.click(marcar);
+    // Con faltantes: segundo confirmación antes de ajustar stock
+    await user.click(await screen.findByRole("button", { name: /confirmar y ajustar stock/i }));
 
     await waitFor(() => {
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
@@ -202,6 +218,68 @@ describe("InventariosPage", () => {
       await screen.findByRole("button", { name: /actualizar comentario/i }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Auditada").length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByRole("button", { name: /marcar como auditada/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirmar auditoría/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /descartar inventario/i })).not.toBeInTheDocument();
+  });
+
+  it("descarta un inventario cerrado inválido con comentario", async () => {
+    const user = userEvent.setup();
+    const inventarioDescartado = {
+      ...inventario,
+      estado: "descartado",
+      auditado: true,
+      auditado_en: "2024-01-01T14:00:00Z",
+      auditado_por_id: "u-1",
+      comentario_auditoria: "Conteo inválido",
+      ajuste_aplicado: false,
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+
+        if (url.endsWith("/depositos") && method === "GET") {
+          return { ok: true, status: 200, json: async () => [deposito] };
+        }
+        if (url.includes("/inventarios?") && method === "GET") {
+          return { ok: true, status: 200, json: async () => [inventarioListItem] };
+        }
+        if (url.endsWith("/inventarios/inv-1") && method === "GET") {
+          return { ok: true, status: 200, json: async () => inventario };
+        }
+        if (url.endsWith("/inventarios/inv-1/reporte") && method === "GET") {
+          return { ok: true, status: 200, json: async () => reporte };
+        }
+        if (url.includes("/inventarios/inv-1/descartar") && method === "POST") {
+          return { ok: true, status: 200, json: async () => inventarioDescartado };
+        }
+        return {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          json: async () => ({ detail: "not found" }),
+        };
+      }),
+    );
+
+    render(<InventariosPage />);
+    await user.click(await screen.findByRole("button", { name: /^auditar$/i }));
+    const comentario = await screen.findByPlaceholderText(/faltantes localizados|conteo inválido/i);
+    await user.clear(comentario);
+    await user.type(comentario, "Conteo inválido");
+    await user.click(screen.getByRole("button", { name: /descartar inventario/i }));
+    await user.click(await screen.findByRole("button", { name: /^descartar$/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/inventarios/inv-1/descartar"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    expect(await screen.findByText(/inventario descartado/i)).toBeInTheDocument();
+    expect(screen.getByText(/el stock no se modificó/i)).toBeInTheDocument();
   });
 });

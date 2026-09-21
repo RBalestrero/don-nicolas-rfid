@@ -7,9 +7,12 @@ import type { TransferenciaListItem } from "../types";
 
 const item = (partial: Partial<TransferenciaListItem> & { id: string }): TransferenciaListItem => ({
   id: partial.id,
+  tipo: partial.tipo ?? "deposito",
   deposito_origen_id: partial.deposito_origen_id ?? "dep-1",
   deposito_destino_id: partial.deposito_destino_id ?? "dep-2",
   ubicacion_destino_id: null,
+  persona_destino_id: partial.persona_destino_id ?? null,
+  persona_destino_nombre: partial.persona_destino_nombre ?? null,
   estado: partial.estado ?? "pendiente",
   total_activos: partial.total_activos ?? 1,
   confirmados_origen: 0,
@@ -17,6 +20,8 @@ const item = (partial: Partial<TransferenciaListItem> & { id: string }): Transfe
   creado_en: "2024-01-01T00:00:00Z",
   enviado_en: null,
   completado_en: null,
+  usuario_id: null,
+  usuario_nombre: null,
 });
 
 describe("filterTransferencias", () => {
@@ -34,6 +39,17 @@ describe("filterTransferencias", () => {
     expect(
       filterTransferencias(lista, { search: "", estado: "pendiente" }, nombre),
     ).toHaveLength(1);
+    expect(
+      filterTransferencias(
+        [
+          ...lista,
+          item({ id: "t3", estado: "en_transito" }),
+          item({ id: "t4", estado: "cancelada" }),
+        ],
+        { search: "", estado: "abiertas" },
+        nombre,
+      ),
+    ).toHaveLength(2);
   });
 
   it("detecta filtros activos", () => {

@@ -30,7 +30,7 @@ export default function LoginForm() {
     <section className="card auth-card">
       <p className="section-kicker">Acceso WMS</p>
       <h2>Iniciar sesión</h2>
-      <p className="muted">Gestión de activos RFID · depósitos · inventarios MC33</p>
+      <p className="muted auth-tagline">Gestión de activos RFID · depósitos · inventarios MC33</p>
       <form className="form" onSubmit={handleSubmit} autoComplete="on">
         <label className="field">
           <span>Email</span>

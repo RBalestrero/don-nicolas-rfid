@@ -7,6 +7,15 @@ export interface Categoria {
   actualizado_en: string;
 }
 
+export interface ActivoUbicacionResumen {
+  ubicacion_id: string;
+  ubicacion_codigo: string;
+  sector_id: string;
+  sector_nombre: string;
+  deposito_id: string;
+  deposito_nombre: string;
+}
+
 export interface Activo {
   id: string;
   numero_patrimonial: string;
@@ -15,9 +24,15 @@ export interface Activo {
   epc: string | null;
   datos_tecnicos: Record<string, unknown> | null;
   activo: boolean;
+  /** Si true, cada etiqueta nueva exige serie de fábrica. */
+  serializado?: boolean;
   creado_en: string;
   actualizado_en: string;
   categoria: Categoria;
+  stock_etiquetas?: number;
+  epcs?: string[];
+  /** Resumen incluido en listado/detalle (evita N+1 de /ubicacion). */
+  ubicacion?: ActivoUbicacionResumen | null;
 }
 
 export interface User {
@@ -90,6 +105,9 @@ export interface ActivoCreatePayload {
   categoria_id: string;
   epc?: string | null;
   datos_tecnicos?: Record<string, unknown> | null;
+  /** Obligatoria en el alta desde la web. */
+  ubicacion_id?: string | null;
+  serializado?: boolean;
 }
 
 export interface ActivoUpdatePayload {
@@ -99,6 +117,7 @@ export interface ActivoUpdatePayload {
   epc?: string | null;
   datos_tecnicos?: Record<string, unknown> | null;
   activo?: boolean;
+  serializado?: boolean;
 }
 
 export interface HistorialEntry {
@@ -109,6 +128,74 @@ export interface HistorialEntry {
   accion: string;
   cambios: Record<string, unknown> | null;
   creado_en: string;
+}
+
+export interface Observacion {
+  id: string;
+  activo_id: string;
+  usuario_id: string | null;
+  usuario_nombre: string | null;
+  texto: string;
+  creado_en: string;
+}
+
+export interface EpcDecodedInfo {
+  epc: string;
+  scheme: string | null;
+  articulo_code: number | null;
+  articulo_sugerido: string | null;
+  serial: number | null;
+  serial_hex: string | null;
+  system_suffix?: string | null;
+  del_sistema?: boolean;
+  valido: boolean;
+  mensaje: string;
+}
+
+export interface EtiquetaCodificacionResponse {
+  activo_id: string;
+  numero_patrimonial: string;
+  descripcion: string;
+  epc: string;
+  epc_asignado: boolean;
+  regenerado: boolean;
+  decodificado: EpcDecodedInfo;
+  stock_etiquetas?: number;
+}
+
+export interface EtiquetaLoteItem {
+  id: string;
+  epc: string;
+  serial_hex: string | null;
+  serie_fisica?: string | null;
+  decodificado: EpcDecodedInfo;
+}
+
+export interface EtiquetaLoteResponse {
+  activo_id: string;
+  numero_patrimonial: string;
+  descripcion: string;
+  cantidad: number;
+  stock_etiquetas: number;
+  etiquetas: EtiquetaLoteItem[];
+  impreso: boolean;
+  modo_simulacion: boolean;
+  zpl: string | null;
+}
+
+export interface EtiquetaRow {
+  id: string;
+  activo_id: string;
+  epc: string;
+  serial_hex: string | null;
+  serie_fisica?: string | null;
+  estado: string;
+  impresa: boolean;
+  creado_en: string;
+  impresa_en: string | null;
+  numero_patrimonial: string | null;
+  descripcion: string | null;
+  decodificado: EpcDecodedInfo | null;
 }
 
 export interface Fotografia {
@@ -122,17 +209,28 @@ export interface Fotografia {
   url: string;
 }
 
+export interface TransferenciaLineaPayload {
+  activo_id: string;
+  cantidad: number;
+  /** Si el SKU está en varias ubicaciones del depósito, indica de cuál salir. */
+  ubicacion_origen_id?: string | null;
+}
+
 export interface TransferenciaCreatePayload {
+  tipo?: "deposito" | "persona";
   deposito_origen_id: string;
-  deposito_destino_id: string;
-  activo_ids: string[];
+  deposito_destino_id?: string | null;
+  persona_destino_id?: string | null;
+  lineas: TransferenciaLineaPayload[];
   ubicacion_destino_id?: string | null;
   notas?: string | null;
+  epcs?: string[];
 }
 
 export interface DetalleTransferencia {
   id: string;
   activo_id: string;
+  etiqueta_id?: string | null;
   epc: string | null;
   numero_patrimonial: string | null;
   descripcion: string | null;
@@ -143,9 +241,14 @@ export interface DetalleTransferencia {
 
 export interface TransferenciaListItem {
   id: string;
+  tipo: "deposito" | "persona" | string;
   deposito_origen_id: string;
-  deposito_destino_id: string;
+  deposito_destino_id: string | null;
   ubicacion_destino_id: string | null;
+  persona_destino_id?: string | null;
+  persona_destino_nombre?: string | null;
+  usuario_id?: string | null;
+  usuario_nombre?: string | null;
   estado: string;
   total_activos: number;
   confirmados_origen: number;
@@ -156,9 +259,17 @@ export interface TransferenciaListItem {
 }
 
 export interface Transferencia extends TransferenciaListItem {
-  usuario_id: string | null;
   notas: string | null;
   detalles: DetalleTransferencia[];
+}
+
+export interface Persona {
+  id: string;
+  nombre: string;
+  documento: string | null;
+  activo: boolean;
+  creado_en: string;
+  actualizado_en: string;
 }
 
 export interface MovimientoItem {
@@ -210,10 +321,13 @@ export interface StockDepositoResumen {
 
 export interface TransferenciaResumenDash {
   id: string;
+  tipo?: string;
   deposito_origen_id: string;
   deposito_origen_nombre: string | null;
-  deposito_destino_id: string;
+  deposito_destino_id: string | null;
   deposito_destino_nombre: string | null;
+  persona_destino_id?: string | null;
+  persona_destino_nombre?: string | null;
   estado: string;
   total_activos: number;
   confirmados_origen: number;
@@ -230,8 +344,27 @@ export interface InventarioResumenDash {
   total_encontrado: number;
   total_faltante: number;
   total_sobrante: number;
+  total_exceso?: number;
+  auditado?: boolean;
   iniciado_en: string;
   cerrado_en: string | null;
+}
+
+export interface DispositivoMovilDash {
+  id: string;
+  modelo: string;
+  fabricante: string | null;
+  numero_serie: string | null;
+  app_version: string | null;
+  android_version: string | null;
+  usuario_id: string | null;
+  usuario_nombre: string | null;
+  ultimo_visto_en: string;
+  registrado_en: string;
+  sesion_activa: boolean;
+  en_linea: boolean;
+  /** en_linea | inactivo | sesion_cerrada */
+  estado?: string;
 }
 
 export interface DashboardResumen {
@@ -240,6 +373,7 @@ export interface DashboardResumen {
   movimientos_recientes: MovimientoItem[];
   transferencias_recientes: TransferenciaResumenDash[];
   inventarios_recientes: InventarioResumenDash[];
+  dispositivos_moviles?: DispositivoMovilDash[];
   movimientos_limit: number;
   ops_limit: number;
 }
@@ -348,6 +482,7 @@ export interface InventarioResumen {
   total_encontrado: number;
   total_faltante: number;
   total_sobrante: number;
+  total_exceso?: number;
   sin_epc: number;
 }
 
@@ -371,12 +506,14 @@ export interface InventarioListItem {
   total_encontrado: number;
   total_faltante: number;
   total_sobrante: number;
+  total_exceso?: number;
   iniciado_en: string;
   cerrado_en: string | null;
   auditado: boolean;
   auditado_en: string | null;
   auditado_por_id: string | null;
   comentario_auditoria: string | null;
+  ajuste_aplicado?: boolean;
 }
 
 export interface Inventario {
@@ -390,12 +527,14 @@ export interface Inventario {
   total_encontrado: number;
   total_faltante: number;
   total_sobrante: number;
+  total_exceso?: number;
   iniciado_en: string;
   cerrado_en: string | null;
   auditado: boolean;
   auditado_en: string | null;
   auditado_por_id: string | null;
   comentario_auditoria: string | null;
+  ajuste_aplicado?: boolean;
   resumen: InventarioResumen;
   detalles: DetalleInventario[];
 }
@@ -410,11 +549,14 @@ export interface InventarioReporte {
   auditado_en?: string | null;
   auditado_por_id?: string | null;
   comentario_auditoria?: string | null;
+  ajuste_aplicado?: boolean;
   resumen: InventarioResumen;
   coincidencia_pct: number;
   tiene_discrepancias: boolean;
   encontrados: DetalleInventario[];
   faltantes: DetalleInventario[];
+  excesos?: DetalleInventario[];
+  ajenos?: DetalleInventario[];
   sobrantes: DetalleInventario[];
   sin_epc: DetalleInventario[];
 }
@@ -422,4 +564,8 @@ export interface InventarioReporte {
 export interface InventarioAuditarPayload {
   comentario?: string | null;
   auditado?: boolean;
+}
+
+export interface InventarioDescartarPayload {
+  comentario: string;
 }

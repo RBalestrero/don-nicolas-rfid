@@ -1,17 +1,25 @@
-import { FormEvent, useState } from "react";
-import type { DepositoCreatePayload } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { Deposito, DepositoCreatePayload } from "../types";
 
 interface DepositoFormProps {
+  initial?: Deposito | null;
   onSubmit: (data: DepositoCreatePayload) => Promise<void>;
   onCancel?: () => void;
 }
 
-export default function DepositoForm({ onSubmit, onCancel }: DepositoFormProps) {
-  const [nombre, setNombre] = useState("");
-  const [descripcion, setDescripcion] = useState("");
-  const [direccion, setDireccion] = useState("");
+export default function DepositoForm({ initial = null, onSubmit, onCancel }: DepositoFormProps) {
+  const [nombre, setNombre] = useState(initial?.nombre ?? "");
+  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
+  const [direccion, setDireccion] = useState(initial?.direccion ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const editing = Boolean(initial);
+
+  useEffect(() => {
+    setNombre(initial?.nombre ?? "");
+    setDescripcion(initial?.descripcion ?? "");
+    setDireccion(initial?.direccion ?? "");
+  }, [initial]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,11 +31,13 @@ export default function DepositoForm({ onSubmit, onCancel }: DepositoFormProps) 
         descripcion: descripcion.trim() || null,
         direccion: direccion.trim() || null,
       });
-      setNombre("");
-      setDescripcion("");
-      setDireccion("");
+      if (!editing) {
+        setNombre("");
+        setDescripcion("");
+        setDireccion("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear depósito");
+      setError(err instanceof Error ? err.message : "Error al guardar depósito");
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +80,7 @@ export default function DepositoForm({ onSubmit, onCancel }: DepositoFormProps) 
           </button>
         )}
         <button type="submit" className="btn primary" disabled={submitting}>
-          {submitting ? "Guardando..." : "Crear depósito"}
+          {submitting ? "Guardando..." : editing ? "Guardar cambios" : "Crear depósito"}
         </button>
       </div>
     </form>

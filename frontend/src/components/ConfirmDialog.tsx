@@ -27,12 +27,14 @@ export default function ConfirmDialog({
     <Modal
       open={open}
       title={title}
-      subtitle={description}
       size="sm"
-      onClose={onCancel}
+      onClose={() => {
+        if (!busy) onCancel();
+      }}
       closeOnBackdrop={!busy}
+      closeOnEscape={!busy}
       footer={
-        <div className="confirm-actions">
+        <div className="modal-footer-actions">
           <button type="button" className="btn secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </button>
@@ -47,7 +49,7 @@ export default function ConfirmDialog({
         </div>
       }
     >
-      {description ? null : <p className="muted">¿Confirmás esta acción?</p>}
+      <p className="confirm-text">{description ?? "¿Confirmás esta acción?"}</p>
     </Modal>
   );
 }

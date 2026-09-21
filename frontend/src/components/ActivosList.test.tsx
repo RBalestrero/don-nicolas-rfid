@@ -9,11 +9,12 @@ const activo: Activo = {
   numero_patrimonial: "PAT-001",
   descripcion: "Notebook",
   categoria_id: "cat-1",
-  epc: "E2801",
+  epc: null,
   datos_tecnicos: null,
   activo: true,
   creado_en: "2024-01-01T00:00:00Z",
   actualizado_en: "2024-01-01T00:00:00Z",
+  stock_etiquetas: 3,
   categoria: {
     id: "cat-1",
     nombre: "Informática",
@@ -35,82 +36,68 @@ const ubicacion: UbicacionAsignada = {
 };
 
 const noopHandlers = {
-  onAssign: vi.fn(),
-  onUnassign: vi.fn(),
+  onView: vi.fn(),
   onEdit: vi.fn(),
-  onHistorial: vi.fn(),
-  onFotos: vi.fn(),
-  onDeactivate: vi.fn(),
+  onPrint: vi.fn(),
+  onDelete: vi.fn(),
 };
 
 describe("ActivosList", () => {
-  it("muestra ubicación asignada y dispara acciones densas", async () => {
+  it("muestra Ver como acción primaria y menú Más con Editar / Imprimir / Eliminar", async () => {
     const user = userEvent.setup();
-    const onAssign = vi.fn();
-    const onUnassign = vi.fn();
+    const onView = vi.fn();
     const onEdit = vi.fn();
-    const onHistorial = vi.fn();
-    const onFotos = vi.fn();
-    const onDeactivate = vi.fn();
+    const onPrint = vi.fn();
+    const onDelete = vi.fn();
 
     render(
       <ActivosList
         activos={[activo]}
         ubicaciones={{ "act-1": ubicacion }}
         loading={false}
-        assigningId={null}
-        editingId={null}
-        historialId={null}
-        fotosId={null}
-        onAssign={onAssign}
-        onUnassign={onUnassign}
+        onView={onView}
         onEdit={onEdit}
-        onHistorial={onHistorial}
-        onFotos={onFotos}
-        onDeactivate={onDeactivate}
+        onPrint={onPrint}
+        onDelete={onDelete}
       />,
     );
 
     expect(screen.getByText(/Central \/ Sector A \/ A-01/)).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^ubicación$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^ubicación$/i }));
-    expect(onAssign).toHaveBeenCalledWith("act-1");
+    await user.click(screen.getByRole("button", { name: /^ver$/i }));
+    expect(onView).toHaveBeenCalledWith("act-1");
 
-    await user.click(screen.getByRole("button", { name: /^editar$/i }));
+    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^editar$/i }));
     expect(onEdit).toHaveBeenCalledWith("act-1");
 
     await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
-    await user.click(screen.getByRole("menuitem", { name: /^fotos$/i }));
-    expect(onFotos).toHaveBeenCalledWith("act-1");
+    await user.click(screen.getByRole("menuitem", { name: /imprimir etiqueta/i }));
+    expect(onPrint).toHaveBeenCalledWith("act-1");
 
     await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
-    await user.click(screen.getByRole("menuitem", { name: /^historial$/i }));
-    expect(onHistorial).toHaveBeenCalledWith("act-1");
-
-    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
-    await user.click(screen.getByRole("menuitem", { name: /quitar ubicación/i }));
-    expect(onUnassign).toHaveBeenCalledWith("act-1");
-
-    await user.click(screen.getByRole("button", { name: /más acciones de pat-001/i }));
-    await user.click(screen.getByRole("menuitem", { name: /dar de baja/i }));
-    expect(onDeactivate).toHaveBeenCalledWith("act-1");
+    await user.click(screen.getByRole("menuitem", { name: /^eliminar$/i }));
+    expect(onDelete).toHaveBeenCalledWith("act-1");
   });
 
-  it("muestra Sin ubicación cuando no hay asignación", () => {
+  it("oculta menú Más sin permiso de escritura y muestra Sin ubicación", () => {
     render(
       <ActivosList
         activos={[activo]}
         ubicaciones={{ "act-1": null }}
         loading={false}
-        assigningId={null}
-        editingId={null}
-        historialId={null}
-        fotosId={null}
+        canWriteAssets={false}
         {...noopHandlers}
       />,
     );
 
     expect(screen.getByText("Sin ubicación")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /asignar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ver$/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /más acciones de pat-001/i }),
+    ).not.toBeInTheDocument();
   });
 });

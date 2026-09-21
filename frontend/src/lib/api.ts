@@ -71,7 +71,11 @@ async function request(path: string, options: RequestInit = {}): Promise<Respons
   }
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
   const externalSignal = options.signal;
   const onExternalAbort = () => controller.abort();
   if (externalSignal) {
@@ -102,6 +106,8 @@ async function request(path: string, options: RequestInit = {}): Promise<Respons
   } catch (err) {
     if (err instanceof ApiError) throw err;
     if (err instanceof DOMException && err.name === "AbortError") {
+      // Abort intencional del caller (unmount): propagar sin mensaje de timeout.
+      if (!timedOut && externalSignal?.aborted) throw err;
       throw new ApiError("Tiempo de espera agotado. Reintentá.", 408);
     }
     throw err;

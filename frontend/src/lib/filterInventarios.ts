@@ -16,7 +16,7 @@ export function filterInventarios(
   return lista.filter((item) => {
     if (opts.estado && item.estado !== opts.estado) return false;
     if (opts.soloDiscrepancias) {
-      const disc = (item.total_faltante ?? 0) > 0 || (item.total_sobrante ?? 0) > 0;
+      const disc = (item.total_faltante ?? 0) > 0 || (item.total_exceso ?? 0) > 0;
       if (!disc) return false;
     }
     if (opts.soloPendienteAuditoria) {
@@ -39,6 +39,8 @@ export function filterInventarios(
 function estadoLabel(estado: string): string {
   if (estado === "en_curso") return "en curso";
   if (estado === "cerrado") return "cerrado";
+  if (estado === "cancelado") return "cancelado";
+  if (estado === "descartado") return "descartado";
   return estado;
 }
 

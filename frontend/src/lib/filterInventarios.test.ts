@@ -63,6 +63,37 @@ describe("filterInventarios", () => {
         nombre,
       ),
     ).toHaveLength(1);
+    // Solo etiquetas ajenas (sobrante sin exceso) no cuenta como discrepancia
+    expect(
+      filterInventarios(
+        [
+          {
+            ...base,
+            id: "inv-ajeno",
+            total_faltante: 0,
+            total_sobrante: 2,
+            total_exceso: 0,
+          },
+        ],
+        { search: "", estado: "", soloDiscrepancias: true, soloPendienteAuditoria: false },
+        nombre,
+      ),
+    ).toHaveLength(0);
+    expect(
+      filterInventarios(
+        [
+          {
+            ...base,
+            id: "inv-exceso",
+            total_faltante: 0,
+            total_sobrante: 1,
+            total_exceso: 1,
+          },
+        ],
+        { search: "", estado: "", soloDiscrepancias: true, soloPendienteAuditoria: false },
+        nombre,
+      ),
+    ).toHaveLength(1);
     expect(
       filterInventarios(
         lista,
@@ -70,6 +101,36 @@ describe("filterInventarios", () => {
         nombre,
       ),
     ).toHaveLength(1);
+    // Descartados no cuentan como pendientes de auditoría
+    expect(
+      filterInventarios(
+        [
+          {
+            ...base,
+            id: "inv-desc",
+            estado: "descartado",
+            auditado: true,
+            comentario_auditoria: "Inválido",
+          },
+        ],
+        { search: "", estado: "descartado", soloDiscrepancias: false, soloPendienteAuditoria: false },
+        nombre,
+      ),
+    ).toHaveLength(1);
+    expect(
+      filterInventarios(
+        [
+          {
+            ...base,
+            id: "inv-desc",
+            estado: "descartado",
+            auditado: true,
+          },
+        ],
+        { search: "", estado: "", soloDiscrepancias: false, soloPendienteAuditoria: true },
+        nombre,
+      ),
+    ).toHaveLength(0);
   });
 
   it("detecta filtros activos", () => {

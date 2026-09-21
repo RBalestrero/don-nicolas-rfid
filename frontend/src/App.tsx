@@ -22,11 +22,11 @@ interface HealthResponse {
 const NAV_OPERACION: { id: AppPage; label: string }[] = [
   { id: "dashboard", label: "Operaciones" },
   { id: "inventarios", label: "Inventarios" },
-  { id: "transferencias", label: "Transferencias" },
+  { id: "transferencias", label: "Movimientos" },
 ];
 
 const NAV_MAESTROS: { id: AppPage; label: string }[] = [
-  { id: "activos", label: "Activos" },
+  { id: "activos", label: "Artículos" },
   { id: "depositos", label: "Depósitos" },
 ];
 
@@ -38,6 +38,7 @@ function HealthBadge() {
       try {
         const res = await fetch(`${API_URL}/health`);
         if (res.ok) setHealth(await res.json());
+        else setHealth(null);
       } catch {
         setHealth(null);
       }
@@ -47,11 +48,18 @@ function HealthBadge() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!health) return <span className="badge warn">API offline</span>;
+  if (!health) {
+    return <span className="badge warn" title="API offline">API offline</span>;
+  }
+  if (health.status !== "ok") {
+    return <span className="badge warn">Degradado</span>;
+  }
   return (
-    <span className={`badge ${health.status === "ok" ? "ok" : "warn"}`}>
-      {health.status === "ok" ? "Sistema OK" : "Degradado"}
-    </span>
+    <span
+      className="health-dot ok"
+      title="Sistema OK"
+      aria-label="Sistema operativo"
+    />
   );
 }
 
@@ -84,16 +92,21 @@ function NavButton({
 export default function App() {
   const { user, loading, logout } = useAuth();
   const [page, setPage] = useState<AppPage>("dashboard");
-  const showUsuarios = canManageUsers(user?.permisos, user?.rol) || canManageRoles(user?.permisos, user?.rol);
+  const canUsers = canManageUsers(user?.permisos, user?.rol);
+  const canRoles = canManageRoles(user?.permisos, user?.rol);
+  const showConfig = canUsers || canRoles;
 
-  const navAdmin = useMemo(
-    () => (showUsuarios ? ([{ id: "usuarios" as AppPage, label: "Usuarios" }] as const) : []),
-    [showUsuarios],
-  );
+  const navConfig = useMemo(() => {
+    const items: { id: AppPage; label: string }[] = [];
+    if (canUsers) items.push({ id: "usuarios", label: "Usuarios" });
+    if (canRoles) items.push({ id: "roles", label: "Roles" });
+    return items;
+  }, [canUsers, canRoles]);
 
   useEffect(() => {
-    if (!showUsuarios && page === "usuarios") setPage("dashboard");
-  }, [showUsuarios, page]);
+    if (page === "usuarios" && !canUsers) setPage(canRoles ? "roles" : "dashboard");
+    if (page === "roles" && !canRoles) setPage(canUsers ? "usuarios" : "dashboard");
+  }, [canUsers, canRoles, page]);
 
   if (loading) {
     return (
@@ -111,7 +124,7 @@ export default function App() {
             <div className="logo">DN</div>
             <div>
               <strong>Don Nicolás</strong>
-              <p className="muted">WMS · Activos RFID</p>
+              <p className="muted">WMS · Artículos RFID</p>
             </div>
           </div>
         </header>
@@ -171,10 +184,10 @@ export default function App() {
                 />
               ))}
             </div>
-            {navAdmin.length > 0 && (
+            {showConfig && navConfig.length > 0 && (
               <div className="nav-group">
-                <span className="nav-group-label">Admin</span>
-                {navAdmin.map((item) => (
+                <span className="nav-group-label">Configuración</span>
+                {navConfig.map((item) => (
                   <NavButton
                     key={item.id}
                     id={item.id}
@@ -190,11 +203,12 @@ export default function App() {
 
         <main className="workspace">
           {page === "dashboard" && <DashboardPage onNavigate={setPage} />}
-          {page === "activos" && <ActivosPage />}
-          {page === "depositos" && <DepositosPage />}
+          {page === "activos" && <ActivosPage onNavigate={setPage} />}
+          {page === "depositos" && <DepositosPage onNavigate={setPage} />}
           {page === "inventarios" && <InventariosPage />}
           {page === "transferencias" && <TransferenciasPage />}
-          {page === "usuarios" && showUsuarios && <UsuariosPage />}
+          {page === "usuarios" && canUsers && <UsuariosPage section="usuarios" />}
+          {page === "roles" && canRoles && <UsuariosPage section="roles" />}
         </main>
       </div>
     </div>

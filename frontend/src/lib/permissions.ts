@@ -40,7 +40,9 @@ export function effectivePermissions(
   permisos: string[] | null | undefined,
   rol: string | null | undefined,
 ): string[] {
-  if (permisos && permisos.length > 0) {
+  // Solo fallback de rol si el backend no envió el campo (null/undefined).
+  // `[]` es denegación explícita: no inventar permisos por nombre de rol.
+  if (permisos != null) {
     return permisos.map((p) => p.toLowerCase());
   }
   return ROLE_FALLBACK[normalizeRole(rol)] ?? [];

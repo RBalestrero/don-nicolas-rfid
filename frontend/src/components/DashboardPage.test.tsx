@@ -89,8 +89,52 @@ const resumen: DashboardResumen = {
       total_encontrado: 3,
       total_faltante: 0,
       total_sobrante: 0,
+      auditado: false,
       iniciado_en: "2024-06-01T10:00:00Z",
       cerrado_en: null,
+    },
+    {
+      id: "i-2",
+      deposito_id: "dep-2",
+      deposito_nombre: "Sur",
+      estado: "cerrado",
+      total_esperado: 8,
+      total_encontrado: 5,
+      total_faltante: 3,
+      total_sobrante: 1,
+      auditado: false,
+      iniciado_en: "2024-05-28T10:00:00Z",
+      cerrado_en: "2024-05-28T18:00:00Z",
+    },
+    {
+      id: "i-3",
+      deposito_id: "dep-3",
+      deposito_nombre: "Norte",
+      estado: "cerrado",
+      total_esperado: 6,
+      total_encontrado: 4,
+      total_faltante: 2,
+      total_sobrante: 0,
+      auditado: true,
+      iniciado_en: "2024-05-20T10:00:00Z",
+      cerrado_en: "2024-05-20T18:00:00Z",
+    },
+  ],
+  dispositivos_moviles: [
+    {
+      id: "dev-1",
+      modelo: "MC3300x",
+      fabricante: "Zebra Technologies",
+      numero_serie: "SN998877",
+      app_version: "0.1.0",
+      android_version: "11",
+      usuario_id: "u-1",
+      usuario_nombre: "Operador Depósito",
+      ultimo_visto_en: new Date().toISOString(),
+      registrado_en: "2024-06-01T10:00:00Z",
+      sesion_activa: true,
+      en_linea: true,
+      estado: "en_linea",
     },
   ],
   movimientos_limit: 20,
@@ -131,22 +175,53 @@ describe("DashboardPage", () => {
     const onNavigate = vi.fn();
     render(<DashboardPage onNavigate={onNavigate} />);
 
-    expect(await screen.findByText("Ejecución de transferencias")).toBeInTheDocument();
+    expect(await screen.findByText("Ejecución de movimientos")).toBeInTheDocument();
     expect(screen.getByText("Avance de inventarios")).toBeInTheDocument();
     expect(screen.getByText("Auditoría pendiente")).toBeInTheDocument();
     expect(screen.getByText("Cobertura de ubicación")).toBeInTheDocument();
-    expect(screen.getByText(/hay discrepancias para revisar/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ejecución de transferencias/i })).toHaveTextContent("0%");
-    expect(screen.getByRole("button", { name: /^cobertura de ubicación/i })).toHaveTextContent("2");
+    expect(screen.queryByText(/hay discrepancias para revisar/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Requiere atención")).toBeInTheDocument();
+    expect(screen.getByText(/Inventario · Sur/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 activos sin ubicación/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Inventario · Norte/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ejecución de movimientos/i })).toHaveTextContent("0%");
+    expect(screen.getByRole("button", { name: /^cobertura de ubicación/i })).toHaveTextContent("83%");
+    expect(screen.getByText("2 sin ubicar")).toBeInTheDocument();
+    expect(screen.getByText("10/12 ubicados")).toBeInTheDocument();
     expect(screen.getByText(/2 activos por recibir/i)).toBeInTheDocument();
     expect(screen.getByText(/7 activos por relevar/i)).toBeInTheDocument();
     expect(screen.getByText(/Central → Sur/)).toBeInTheDocument();
     expect(screen.getByText(/Confirmados en destino 0\/2/)).toBeInTheDocument();
     expect(screen.getByText(/Leídos 3\/10 esperados/)).toBeInTheDocument();
     expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
+    expect(screen.getByText("Dispositivos MC33")).toBeInTheDocument();
+    expect(screen.getByText(/MC3300x · S\/N SN998877/)).toBeInTheDocument();
+    expect(screen.getByText("En línea")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /ejecución de transferencias/i }));
+    await user.click(screen.getByRole("button", { name: /ver detalle de alta · pat-100/i }));
+    expect(onNavigate).toHaveBeenCalledWith("activos");
+    expect(sessionStorage.getItem("dn_act_focus")).toBe("act-1");
+    expect(sessionStorage.getItem("dn_act_search")).toBe("PAT-100");
+    sessionStorage.removeItem("dn_act_focus");
+    sessionStorage.removeItem("dn_act_search");
+
+    await user.click(screen.getByRole("button", { name: /Inventario · Sur/i }));
+    expect(onNavigate).toHaveBeenCalledWith("inventarios");
+    expect(sessionStorage.getItem("dn_inv_filter")).toBe("discrepancias");
+    sessionStorage.removeItem("dn_inv_filter");
+
+    await user.click(screen.getByRole("button", { name: /ejecución de movimientos/i }));
     expect(onNavigate).toHaveBeenCalledWith("transferencias");
+    expect(sessionStorage.getItem("dn_xfer_filter")).toBe("abiertas");
+    sessionStorage.removeItem("dn_xfer_filter");
+
+    await user.click(screen.getByRole("button", { name: /auditoría pendiente/i }));
+    expect(sessionStorage.getItem("dn_inv_filter")).toBe("pendiente_auditoria");
+    sessionStorage.removeItem("dn_inv_filter");
+
+    await user.click(screen.getByRole("button", { name: /avance de inventarios/i }));
+    expect(sessionStorage.getItem("dn_inv_filter")).toBe("en_curso");
+    sessionStorage.removeItem("dn_inv_filter");
 
     await user.selectOptions(screen.getByLabelText(/^acción$/i), "transferencia");
     await user.click(screen.getByRole("button", { name: /^filtrar$/i }));
@@ -157,6 +232,75 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByText(/PAT-200/)).toBeInTheDocument();
     expect(screen.getByText(/1 resultado/)).toBeInTheDocument();
+  });
+
+  it("muestra Inactivo y Sesión cerrada en dispositivos MC33", async () => {
+    apiFetchMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/dashboard/resumen")) {
+        return {
+          ...resumen,
+          dispositivos_moviles: [
+            {
+              id: "dev-idle",
+              modelo: "MC3300x",
+              fabricante: "Zebra Technologies",
+              numero_serie: "SN-IDLE",
+              app_version: "0.1.0",
+              android_version: "11",
+              usuario_id: "u-1",
+              usuario_nombre: "Operador",
+              ultimo_visto_en: new Date(Date.now() - 5 * 60_000).toISOString(),
+              registrado_en: "2024-06-01T10:00:00Z",
+              sesion_activa: true,
+              en_linea: false,
+              estado: "inactivo",
+            },
+            {
+              id: "dev-off",
+              modelo: "MC3300x",
+              fabricante: "Zebra Technologies",
+              numero_serie: "SN-OFF",
+              app_version: "0.1.0",
+              android_version: "11",
+              usuario_id: "u-2",
+              usuario_nombre: "Supervisor",
+              ultimo_visto_en: "2024-06-01T11:00:00Z",
+              registrado_en: "2024-06-01T10:00:00Z",
+              sesion_activa: false,
+              en_linea: false,
+              estado: "sesion_cerrada",
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    render(<DashboardPage />);
+    expect(await screen.findByText("Inactivo")).toBeInTheDocument();
+    expect(screen.getByText("Sesión cerrada")).toBeInTheDocument();
+    expect(screen.getByText(/1 inactivo/i)).toBeInTheDocument();
+  });
+
+  it("reconsulta el resumen periódicamente mientras Operaciones está abierta", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<DashboardPage />);
+      expect(await screen.findByText("Dispositivos MC33")).toBeInTheDocument();
+
+      const resumenCalls = () =>
+        apiFetchMock.mock.calls.filter(([path]) =>
+          String(path).startsWith("/dashboard/resumen"),
+        ).length;
+
+      expect(resumenCalls()).toBe(1);
+      await vi.advanceTimersByTimeAsync(35_000);
+      expect(resumenCalls()).toBeGreaterThanOrEqual(2);
+      await vi.advanceTimersByTimeAsync(35_000);
+      expect(resumenCalls()).toBeGreaterThanOrEqual(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("muestra guía de puesta en marcha cuando el sistema está vacío", async () => {

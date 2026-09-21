@@ -1,32 +1,39 @@
-import { FormEvent, useState } from "react";
-import type { CategoriaCreatePayload } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { Categoria, CategoriaCreatePayload } from "../types";
 
 interface CategoriaFormProps {
+  initial?: Categoria | null;
   onSubmit: (data: CategoriaCreatePayload) => Promise<void>;
+  onCancel?: () => void;
 }
 
-export default function CategoriaForm({ onSubmit }: CategoriaFormProps) {
-  const [nombre, setNombre] = useState("");
-  const [descripcion, setDescripcion] = useState("");
+export default function CategoriaForm({ initial = null, onSubmit, onCancel }: CategoriaFormProps) {
+  const [nombre, setNombre] = useState(initial?.nombre ?? "");
+  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const editing = Boolean(initial);
+
+  useEffect(() => {
+    setNombre(initial?.nombre ?? "");
+    setDescripcion(initial?.descripcion ?? "");
+  }, [initial]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
     setSubmitting(true);
     try {
       await onSubmit({
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
       });
-      setNombre("");
-      setDescripcion("");
-      setSuccess(true);
+      if (!editing) {
+        setNombre("");
+        setDescripcion("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear categoría");
+      setError(err instanceof Error ? err.message : "Error al guardar categoría");
     } finally {
       setSubmitting(false);
     }
@@ -53,10 +60,16 @@ export default function CategoriaForm({ onSubmit }: CategoriaFormProps) {
         />
       </label>
       {error && <p className="error">{error}</p>}
-      {success && <p className="success">Categoría creada correctamente.</p>}
-      <button type="submit" className="btn primary" disabled={submitting}>
-        {submitting ? "Guardando..." : "Crear categoría"}
-      </button>
+      <div className="form-actions">
+        {onCancel && (
+          <button type="button" className="btn secondary" onClick={onCancel}>
+            Cancelar
+          </button>
+        )}
+        <button type="submit" className="btn primary" disabled={submitting}>
+          {submitting ? "Guardando..." : editing ? "Guardar cambios" : "Crear categoría"}
+        </button>
+      </div>
     </form>
   );
 }

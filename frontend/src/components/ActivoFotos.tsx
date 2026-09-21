@@ -1,4 +1,12 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type ChangeEvent,
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { apiFetch } from "../lib/api";
 import type { Fotografia } from "../types";
 import AuthImage from "./AuthImage";
@@ -9,6 +17,8 @@ interface ActivoFotosProps {
   canWrite?: boolean;
 }
 
+const ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -16,12 +26,14 @@ function formatBytes(n: number): string {
 }
 
 export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosProps) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [fotos, setFotos] = useState<Fotografia[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
   const [esPrincipal, setEsPrincipal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -30,7 +42,7 @@ export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosPr
     setError(null);
     try {
       const data = await apiFetch<Fotografia[]>(`/activos/${activoId}/fotografias`);
-      setFotos(data);
+      setFotos(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar fotografías");
     } finally {
@@ -39,13 +51,13 @@ export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosPr
   }, [activoId]);
 
   useEffect(() => {
-    loadFotos();
+    void loadFotos();
   }, [loadFotos]);
 
-  const handleUpload = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      setError("Seleccioná una imagen para subir.");
+  const uploadFile = async (file: File) => {
+    if (!canWrite) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Seleccioná un archivo de imagen (JPEG, PNG, WebP o GIF).");
       return;
     }
     setUploading(true);
@@ -53,12 +65,11 @@ export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosPr
     try {
       const body = new FormData();
       body.append("file", file);
-      const qs = esPrincipal ? "?es_principal=true" : "";
+      const qs = esPrincipal || fotos.length === 0 ? "?es_principal=true" : "";
       await apiFetch<Fotografia>(`/activos/${activoId}/fotografias${qs}`, {
         method: "POST",
         body,
       });
-      setFile(null);
       setEsPrincipal(false);
       await loadFotos();
     } catch (err) {
@@ -66,6 +77,19 @@ export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosPr
     } finally {
       setUploading(false);
     }
+  };
+
+  const onFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) void uploadFile(file);
+  };
+
+  const onDrop = (e: DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
   };
 
   const confirmDelete = async () => {
@@ -83,70 +107,115 @@ export default function ActivoFotos({ activoId, canWrite = true }: ActivoFotosPr
     }
   };
 
+  const dropzone = canWrite ? (
+    <div className="foto-dropzone-wrap">
+      <label
+        htmlFor={inputId}
+        className={`foto-dropzone${dragOver ? " is-dragover" : ""}${uploading ? " is-busy" : ""}`}
+        aria-label="Subir fotografía"
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDragOver(false);
+        }}
+        onDrop={onDrop}
+      >
+        <span className="foto-dropzone-title">
+          {uploading ? "Subiendo…" : "Soltá una imagen o elegí archivo"}
+        </span>
+        <span className="foto-dropzone-hint muted">JPEG, PNG, WebP o GIF</span>
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="file"
+          accept={ACCEPT}
+          disabled={uploading}
+          onChange={onFileChange}
+        />
+      </label>
+      {fotos.length > 0 && (
+        <label className="field checkbox-field foto-principal-opt">
+          <input
+            type="checkbox"
+            checked={esPrincipal}
+            disabled={uploading}
+            onChange={(e) => setEsPrincipal(e.target.checked)}
+          />
+          <span>Marcar próxima como principal</span>
+        </label>
+      )}
+    </div>
+  ) : (
+    <p className="muted">Solo lectura — tu rol no puede subir ni eliminar fotos.</p>
+  );
+
   return (
     <div className="activo-fotos">
-      {canWrite ? (
-        <form className="form foto-upload-form" onSubmit={handleUpload} aria-label="Subir fotografía">
-          <label className="field">
-            <span>Archivo de imagen</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-          <label className="field checkbox-field">
-            <input
-              type="checkbox"
-              checked={esPrincipal}
-              onChange={(e) => setEsPrincipal(e.target.checked)}
-            />
-            <span>Marcar como principal</span>
-          </label>
-          <div className="form-actions">
-            <button type="submit" className="btn primary" disabled={uploading || !file}>
-              {uploading ? "Subiendo..." : "Subir foto"}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <p className="muted">Solo lectura — tu rol no puede subir ni eliminar fotos.</p>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
       )}
-
-      {error && <p className="error">{error}</p>}
 
       {loading ? (
         <p className="muted">Cargando fotografías...</p>
       ) : fotos.length === 0 ? (
-        <p className="muted">Todavía no hay fotos para este activo.</p>
+        <div className="foto-empty">
+          {canWrite ? (
+            <>
+              <p className="foto-empty-title">Todavía no hay fotos</p>
+              <p className="muted foto-empty-hint">Agregá la primera imagen del artículo.</p>
+              {dropzone}
+            </>
+          ) : (
+            <p className="muted">Todavía no hay fotos para este activo.</p>
+          )}
+        </div>
       ) : (
-        <ul className="foto-grid" aria-label="Fotografías del activo">
-          {fotos.map((foto) => (
-            <li key={foto.id} className="foto-card">
-              <AuthImage
-                path={`/fotografias/${foto.id}/archivo`}
-                alt={foto.nombre_archivo}
-                className="foto-thumb"
-              />
-              <div className="foto-meta">
-                <strong className="foto-name">{foto.nombre_archivo}</strong>
-                <span className="muted">
-                  {formatBytes(foto.tamano_bytes)}
-                  {foto.es_principal ? " · Principal" : ""}
-                </span>
-                {canWrite && (
-                  <button
-                    type="button"
-                    className="btn secondary btn-sm danger"
-                    onClick={() => setDeleteId(foto.id)}
-                  >
-                    Eliminar
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          {dropzone}
+          <ul className="foto-grid" aria-label="Fotografías del activo">
+            {fotos.map((foto) => (
+              <li key={foto.id} className="foto-card">
+                <div className="foto-thumb-wrap">
+                  <AuthImage
+                    path={`/fotografias/${foto.id}/archivo`}
+                    alt={foto.nombre_archivo}
+                    className="foto-thumb"
+                  />
+                  {foto.es_principal && (
+                    <span className="foto-principal-badge">Principal</span>
+                  )}
+                  {canWrite && (
+                    <button
+                      type="button"
+                      className="foto-delete-overlay"
+                      aria-label={`Eliminar ${foto.nombre_archivo}`}
+                      title="Eliminar"
+                      onClick={() => setDeleteId(foto.id)}
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </div>
+                <div className="foto-meta">
+                  <strong className="foto-name" title={foto.nombre_archivo}>
+                    {foto.nombre_archivo}
+                  </strong>
+                  <span className="muted">{formatBytes(foto.tamano_bytes)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <ConfirmDialog

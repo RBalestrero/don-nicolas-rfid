@@ -1,5 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
-import type { Activo, ActivoCreatePayload, Categoria } from "../types";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../lib/api";
+import type {
+  Activo,
+  ActivoCreatePayload,
+  Categoria,
+  Deposito,
+  DepositoDetalle,
+  SectorDetalle,
+  Ubicacion,
+} from "../types";
 
 interface ActivoFormProps {
   categorias: Categoria[];
@@ -16,11 +25,18 @@ export default function ActivoForm({
   initial = null,
   submitLabel,
 }: ActivoFormProps) {
+  const editing = Boolean(initial);
   const [numeroPatrimonial, setNumeroPatrimonial] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [categoriaId, setCategoriaId] = useState(categorias[0]?.id ?? "");
-  const [epc, setEpc] = useState("");
-  const [datosTecnicos, setDatosTecnicos] = useState("");
+  const [serializado, setSerializado] = useState(false);
+  const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [detalle, setDetalle] = useState<DepositoDetalle | null>(null);
+  const [depositoId, setDepositoId] = useState("");
+  const [sectorId, setSectorId] = useState("");
+  const [ubicacionId, setUbicacionId] = useState("");
+  const [loadingDepositos, setLoadingDepositos] = useState(!editing);
+  const [loadingTree, setLoadingTree] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,36 +45,92 @@ export default function ActivoForm({
       setNumeroPatrimonial("");
       setDescripcion("");
       setCategoriaId(categorias[0]?.id ?? "");
-      setEpc("");
-      setDatosTecnicos("");
+      setSerializado(false);
       return;
     }
     setNumeroPatrimonial(initial.numero_patrimonial);
     setDescripcion(initial.descripcion);
     setCategoriaId(initial.categoria_id);
-    setEpc(initial.epc ?? "");
-    setDatosTecnicos(
-      initial.datos_tecnicos ? JSON.stringify(initial.datos_tecnicos, null, 2) : "",
-    );
+    setSerializado(Boolean(initial.serializado));
   }, [initial, categorias]);
+
+  useEffect(() => {
+    if (editing) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingDepositos(true);
+      try {
+        const data = await apiFetch<Deposito[]>("/depositos");
+        if (!cancelled) setDepositos(data.filter((d) => d.activo));
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Error al cargar depósitos");
+        }
+      } finally {
+        if (!cancelled) setLoadingDepositos(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editing]);
+
+  useEffect(() => {
+    if (editing || !depositoId) {
+      setDetalle(null);
+      setSectorId("");
+      setUbicacionId("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingTree(true);
+      setSectorId("");
+      setUbicacionId("");
+      try {
+        const tree = await apiFetch<DepositoDetalle>(
+          `/depositos/${depositoId}?include_tree=true`,
+        );
+        if (!cancelled) setDetalle(tree);
+      } catch (err) {
+        if (!cancelled) {
+          setDetalle(null);
+          setError(err instanceof Error ? err.message : "Error al cargar estructura");
+        }
+      } finally {
+        if (!cancelled) setLoadingTree(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [depositoId, editing]);
+
+  const sectores: SectorDetalle[] = useMemo(
+    () => (detalle?.sectores ?? []).filter((s) => s.activo),
+    [detalle],
+  );
+
+  const ubicaciones: Ubicacion[] = useMemo(() => {
+    const sector = sectores.find((s) => s.id === sectorId);
+    return (sector?.ubicaciones ?? []).filter((u) => u.activo);
+  }, [sectores, sectorId]);
+
+  useEffect(() => {
+    setUbicacionId("");
+  }, [sectorId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!categoriaId) {
-      setError("Seleccioná una categoría o creá una antes de dar de alta un activo.");
+      setError("Seleccioná una categoría o creá una antes de dar de alta un artículo.");
       return;
     }
-
-    let parsedDatos: Record<string, unknown> | null = null;
-    if (datosTecnicos.trim()) {
-      try {
-        parsedDatos = JSON.parse(datosTecnicos) as Record<string, unknown>;
-      } catch {
-        setError("Los datos técnicos deben ser JSON válido.");
-        return;
-      }
+    if (!editing && !ubicacionId) {
+      setError("Seleccioná depósito, sector y ubicación.");
+      return;
     }
 
     setSubmitting(true);
@@ -67,30 +139,39 @@ export default function ActivoForm({
         numero_patrimonial: numeroPatrimonial.trim(),
         descripcion: descripcion.trim(),
         categoria_id: categoriaId,
-        epc: epc.trim() || null,
-        datos_tecnicos: parsedDatos,
+        serializado,
+        ...(editing
+          ? {}
+          : {
+              ubicacion_id: ubicacionId,
+              epc: null,
+              datos_tecnicos: null,
+            }),
       });
-      if (!initial) {
+      if (!editing) {
         setNumeroPatrimonial("");
         setDescripcion("");
-        setEpc("");
-        setDatosTecnicos("");
+        setSerializado(false);
+        setDepositoId("");
+        setSectorId("");
+        setUbicacionId("");
+        setDetalle(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar el activo");
+      setError(err instanceof Error ? err.message : "Error al guardar el artículo");
     } finally {
       setSubmitting(false);
     }
   };
 
   const buttonLabel =
-    submitLabel ?? (initial ? "Guardar cambios" : "Dar de alta activo");
+    submitLabel ?? (editing ? "Guardar cambios" : "Dar de alta artículo");
 
   return (
     <form
       className="form"
       onSubmit={handleSubmit}
-      aria-label={initial ? "Formulario de edición de activo" : "Formulario de alta de activo"}
+      aria-label={editing ? "Formulario de edición de artículo" : "Formulario de alta de artículo"}
     >
       <label className="field">
         <span>Número patrimonial</span>
@@ -134,25 +215,85 @@ export default function ActivoForm({
         </select>
       </label>
 
-      <label className="field">
-        <span>EPC RFID (opcional)</span>
+      <label className="field checkbox-field">
         <input
-          value={epc}
-          onChange={(e) => setEpc(e.target.value)}
-          maxLength={96}
-          placeholder="Se asigna automáticamente al imprimir etiqueta"
+          type="checkbox"
+          checked={serializado}
+          onChange={(e) => setSerializado(e.target.checked)}
+          disabled={submitting}
         />
+        <span>
+          Artículo serializado
+          <span className="muted field-hint">
+            {" "}
+            — al imprimir/codificar se pedirá el Nº de serie de fábrica de cada unidad
+          </span>
+        </span>
       </label>
 
-      <label className="field">
-        <span>Datos técnicos JSON (opcional)</span>
-        <textarea
-          value={datosTecnicos}
-          onChange={(e) => setDatosTecnicos(e.target.value)}
-          rows={3}
-          placeholder='{"marca": "Dell", "modelo": "Latitude 5540"}'
-        />
-      </label>
+      {!editing && (
+        <fieldset className="form-grid ubicacion-inicial">
+          <legend className="sr-only">Ubicación inicial</legend>
+          <label className="field">
+            <span>Depósito</span>
+            <select
+              value={depositoId}
+              onChange={(e) => setDepositoId(e.target.value)}
+              required
+              disabled={loadingDepositos || submitting}
+              aria-label="Depósito"
+            >
+              <option value="">
+                {loadingDepositos ? "Cargando…" : "Seleccioná un depósito"}
+              </option>
+              {depositos.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Sector</span>
+            <select
+              value={sectorId}
+              onChange={(e) => setSectorId(e.target.value)}
+              required
+              disabled={!depositoId || loadingTree || submitting}
+              aria-label="Sector"
+            >
+              <option value="">
+                {loadingTree ? "Cargando…" : "Seleccioná un sector"}
+              </option>
+              {sectores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Ubicación</span>
+            <select
+              value={ubicacionId}
+              onChange={(e) => setUbicacionId(e.target.value)}
+              required
+              disabled={!sectorId || submitting}
+              aria-label="Ubicación"
+            >
+              <option value="">Seleccioná una ubicación</option>
+              {ubicaciones.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.codigo}
+                  {u.descripcion ? ` — ${u.descripcion}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+      )}
 
       {error && <p className="error">{error}</p>}
 
@@ -165,7 +306,11 @@ export default function ActivoForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={submitting || categorias.length === 0}
+          disabled={
+            submitting ||
+            categorias.length === 0 ||
+            (!editing && (loadingDepositos || depositos.length === 0))
+          }
         >
           {submitting ? "Guardando..." : buttonLabel}
         </button>

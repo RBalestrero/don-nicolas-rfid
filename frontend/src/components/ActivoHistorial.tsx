@@ -1,70 +1,79 @@
+import { useEffect, useRef } from "react";
 import type { HistorialEntry } from "../types";
-
-const ACCION_LABELS: Record<string, string> = {
-  creacion: "Alta",
-  actualizacion: "Actualización",
-  desactivacion: "Baja",
-  asignacion_ubicacion: "Asignación de ubicación",
-  desasignacion_ubicacion: "Quita de ubicación",
-  etiqueta_impresa: "Impresión de etiqueta",
-  foto_agregada: "Foto agregada",
-  foto_eliminada: "Foto eliminada",
-  transferencia: "Transferencia",
-};
-
-function formatAccion(accion: string): string {
-  return ACCION_LABELS[accion] ?? accion.replace(/_/g, " ");
-}
+import { summarizeEvent } from "../lib/eventSummary";
 
 function formatFecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleString("es-AR");
+    return new Date(iso).toLocaleString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
 }
 
-function formatCambios(cambios: Record<string, unknown> | null): string | null {
-  if (!cambios || Object.keys(cambios).length === 0) return null;
-  return Object.entries(cambios)
-    .map(([campo, valor]) => {
-      if (valor && typeof valor === "object" && "anterior" in valor && "nuevo" in valor) {
-        const v = valor as { anterior: unknown; nuevo: unknown };
-        return `${campo}: ${JSON.stringify(v.anterior)} → ${JSON.stringify(v.nuevo)}`;
-      }
-      return `${campo}: ${JSON.stringify(valor)}`;
-    })
-    .join(" · ");
-}
-
 interface ActivoHistorialProps {
   entries: HistorialEntry[];
   loading: boolean;
+  focusId?: string | null;
 }
 
-export default function ActivoHistorial({ entries, loading }: ActivoHistorialProps) {
+export default function ActivoHistorial({ entries, loading, focusId = null }: ActivoHistorialProps) {
+  const focusRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    if (!focusId || loading) return;
+    focusRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusId, loading, entries]);
+
   if (loading) {
     return <p className="muted">Cargando historial...</p>;
   }
 
   if (entries.length === 0) {
-    return <p className="muted">Sin eventos registrados para este activo.</p>;
+    return <p className="muted">Todavía no hay eventos registrados para este artículo.</p>;
   }
 
   return (
-    <ol className="historial-list" aria-label="Historial del activo">
+    <ol className="evento-timeline" aria-label="Historial del activo">
       {entries.map((entry) => {
-        const detalle = formatCambios(entry.cambios);
+        const view = summarizeEvent(entry.accion, entry.cambios);
+        const focused = focusId === entry.id;
         return (
-          <li key={entry.id} className="historial-item">
-            <div className="historial-head">
-              <strong>{formatAccion(entry.accion)}</strong>
-              <span className="muted">{formatFecha(entry.creado_en)}</span>
+          <li
+            key={entry.id}
+            ref={focused ? focusRef : undefined}
+            className={`evento-item tone-${view.tone}${focused ? " is-focus" : ""}`}
+            aria-current={focused ? "true" : undefined}
+          >
+            <div className="evento-icon" aria-hidden>
+              <i className={`bi ${view.icon}`} />
             </div>
-            <p className="muted historial-user">
-              {entry.usuario_nombre ?? "Sistema"}
-            </p>
-            {detalle && <p className="historial-cambios mono">{detalle}</p>}
+            <div className="evento-body">
+              <div className="evento-head">
+                <strong>{view.title}</strong>
+                <time dateTime={entry.creado_en} className="muted">
+                  {formatFecha(entry.creado_en)}
+                </time>
+              </div>
+              {view.facts.length > 0 && (
+                <ul className="evento-facts">
+                  {view.facts.map((f, i) => (
+                    <li key={`${entry.id}-${i}`}>{f}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="evento-meta">
+                <span className="muted">
+                  <i className="bi bi-person" aria-hidden />{" "}
+                  {entry.usuario_nombre ?? "Sistema"}
+                </span>
+              </div>
+            </div>
           </li>
         );
       })}

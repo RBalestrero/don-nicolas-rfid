@@ -41,33 +41,36 @@ describe("ActivoFotos", () => {
     render(<ActivoFotos activoId="act-1" />);
 
     expect(await screen.findByText("frente.png")).toBeInTheDocument();
-    expect(screen.getByText(/Principal/)).toBeInTheDocument();
+    expect(screen.getByText(/^Principal$/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^eliminar$/i }));
-    const dialog = await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /eliminar frente\.png/i }));
+    const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith("/fotografias/foto-1", { method: "DELETE" });
     });
+    expect(await screen.findByLabelText(/subir fotografía/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/fotografías del activo/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/todavía no hay fotos/i)).toBeInTheDocument();
   });
 
-  it("sube una fotografía con FormData", async () => {
+  it("sube una fotografía automáticamente al elegir archivo", async () => {
     const user = userEvent.setup();
     apiFetchMock.mockResolvedValueOnce([]).mockResolvedValueOnce(foto).mockResolvedValueOnce([foto]);
 
     const { container } = render(<ActivoFotos activoId="act-1" />);
 
-    await screen.findByText(/todavía no hay fotos/i);
+    expect(await screen.findByLabelText(/subir fotografía/i)).toBeInTheDocument();
+    expect(screen.getByText(/soltá una imagen o elegí archivo/i)).toBeInTheDocument();
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["img"], "nueva.png", { type: "image/png" });
     await user.upload(input, file);
-    await user.click(screen.getByRole("button", { name: /subir foto/i }));
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith(
-        "/activos/act-1/fotografias",
+        "/activos/act-1/fotografias?es_principal=true",
         expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
       );
     });

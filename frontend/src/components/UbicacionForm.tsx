@@ -1,17 +1,36 @@
-import { FormEvent, useState } from "react";
-import type { Sector, UbicacionCreatePayload } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { Sector, Ubicacion, UbicacionCreatePayload } from "../types";
 
 interface UbicacionFormProps {
   sectores: Sector[];
+  initial?: Ubicacion | null;
+  /** Si se edita, el sector queda fijo. */
+  fixedSectorId?: string | null;
   onSubmit: (sectorId: string, data: UbicacionCreatePayload) => Promise<void>;
+  onCancel?: () => void;
 }
 
-export default function UbicacionForm({ sectores, onSubmit }: UbicacionFormProps) {
-  const [sectorId, setSectorId] = useState(sectores[0]?.id ?? "");
-  const [codigo, setCodigo] = useState("");
-  const [descripcion, setDescripcion] = useState("");
+export default function UbicacionForm({
+  sectores,
+  initial = null,
+  fixedSectorId = null,
+  onSubmit,
+  onCancel,
+}: UbicacionFormProps) {
+  const editing = Boolean(initial);
+  const [sectorId, setSectorId] = useState(
+    fixedSectorId ?? initial?.sector_id ?? sectores[0]?.id ?? "",
+  );
+  const [codigo, setCodigo] = useState(initial?.codigo ?? "");
+  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setSectorId(fixedSectorId ?? initial?.sector_id ?? sectores[0]?.id ?? "");
+    setCodigo(initial?.codigo ?? "");
+    setDescripcion(initial?.descripcion ?? "");
+  }, [initial, fixedSectorId, sectores]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -28,10 +47,12 @@ export default function UbicacionForm({ sectores, onSubmit }: UbicacionFormProps
         codigo: codigo.trim(),
         descripcion: descripcion.trim() || null,
       });
-      setCodigo("");
-      setDescripcion("");
+      if (!editing) {
+        setCodigo("");
+        setDescripcion("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear ubicación");
+      setError(err instanceof Error ? err.message : "Error al guardar ubicación");
     } finally {
       setSubmitting(false);
     }
@@ -39,25 +60,27 @@ export default function UbicacionForm({ sectores, onSubmit }: UbicacionFormProps
 
   return (
     <form className="form" onSubmit={handleSubmit} aria-label="Formulario de ubicación">
-      <label className="field">
-        <span>Sector</span>
-        <select
-          value={sectorId}
-          onChange={(e) => setSectorId(e.target.value)}
-          required
-          disabled={sectores.length === 0}
-        >
-          {sectores.length === 0 ? (
-            <option value="">Sin sectores disponibles</option>
-          ) : (
-            sectores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
+      {!editing && (
+        <label className="field">
+          <span>Sector</span>
+          <select
+            value={sectorId}
+            onChange={(e) => setSectorId(e.target.value)}
+            required
+            disabled={sectores.length === 0}
+          >
+            {sectores.length === 0 ? (
+              <option value="">Sin sectores disponibles</option>
+            ) : (
+              sectores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+      )}
       <label className="field">
         <span>Código</span>
         <input
@@ -77,13 +100,20 @@ export default function UbicacionForm({ sectores, onSubmit }: UbicacionFormProps
         />
       </label>
       {error && <p className="error">{error}</p>}
-      <button
-        type="submit"
-        className="btn primary"
-        disabled={submitting || sectores.length === 0}
-      >
-        {submitting ? "Guardando..." : "Crear ubicación"}
-      </button>
+      <div className="form-actions">
+        {onCancel && (
+          <button type="button" className="btn secondary" onClick={onCancel}>
+            Cancelar
+          </button>
+        )}
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={submitting || (!editing && sectores.length === 0)}
+        >
+          {submitting ? "Guardando..." : editing ? "Guardar cambios" : "Crear ubicación"}
+        </button>
+      </div>
     </form>
   );
 }

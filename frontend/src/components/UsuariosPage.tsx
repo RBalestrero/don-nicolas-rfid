@@ -17,12 +17,17 @@ import EmptyState from "./EmptyState";
 import Modal from "./Modal";
 import PageHeader from "./PageHeader";
 
-type Tab = "usuarios" | "roles";
+type Section = "usuarios" | "roles";
 
-export default function UsuariosPage() {
+interface UsuariosPageProps {
+  section?: Section;
+}
+
+export default function UsuariosPage({ section }: UsuariosPageProps) {
   const toast = useToast();
   const perms = usePermissions();
-  const [tab, setTab] = useState<Tab>(perms.canManageUsers ? "usuarios" : "roles");
+  const activeSection: Section =
+    section ?? (perms.canManageUsers ? "usuarios" : "roles");
 
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [roles, setRoles] = useState<RolCatalogo[]>([]);
@@ -82,11 +87,6 @@ export default function UsuariosPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (!perms.canManageUsers && tab === "usuarios") setTab("roles");
-    if (!perms.canManageRoles && tab === "roles" && perms.canManageUsers) setTab("usuarios");
-  }, [perms.canManageUsers, perms.canManageRoles, tab]);
-
   const roleNames = useMemo(() => roles.map((r) => r.nombre), [roles]);
 
   const filtrados = useMemo(() => {
@@ -98,6 +98,13 @@ export default function UsuariosPage() {
       return `${u.nombre} ${u.email} ${u.rol}`.toLowerCase().includes(q);
     });
   }, [usuarios, search, rolFilter, soloActivos]);
+
+  const filtersActive = Boolean(search.trim() || rolFilter || soloActivos);
+  const clearFilters = () => {
+    setSearch("");
+    setRolFilter("");
+    setSoloActivos(false);
+  };
 
   const permisosPorModulo = useMemo(() => {
     const map = new Map<string, PermisoCatalogo[]>();
@@ -283,57 +290,13 @@ export default function UsuariosPage() {
 
   return (
     <div className="page">
-      <PageHeader
-        title="Usuarios y roles"
-        subtitle="Administrá operadores y los permisos de cada rol"
-      >
-        <button type="button" className="btn secondary" onClick={load} disabled={loading || busy}>
-          Actualizar
-        </button>
-        {tab === "usuarios" && perms.canManageUsers && (
-          <button type="button" className="btn primary" onClick={openCreateUser}>
-            + Nuevo usuario
-          </button>
-        )}
-        {tab === "roles" && perms.canManageRoles && (
-          <button type="button" className="btn primary" onClick={openCreateRole}>
-            + Nuevo rol
-          </button>
-        )}
-      </PageHeader>
-
-      <div className="tabs" role="tablist" aria-label="Administración">
-        {perms.canManageUsers && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "usuarios"}
-            className={`tab ${tab === "usuarios" ? "active" : ""}`}
-            onClick={() => setTab("usuarios")}
-          >
-            Usuarios
-          </button>
-        )}
-        {perms.canManageRoles && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "roles"}
-            className={`tab ${tab === "roles" ? "active" : ""}`}
-            onClick={() => setTab("roles")}
-          >
-            Roles y permisos
-          </button>
-        )}
-      </div>
-
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
 
-      {tab === "usuarios" && perms.canManageUsers && (
+      {activeSection === "usuarios" && perms.canManageUsers && (
         <>
           <Modal
             open={showUserForm}
@@ -398,29 +361,45 @@ export default function UsuariosPage() {
             </form>
           </Modal>
 
-          <section className="card">
-            <div className="section-header">
-              <h3>Listado</h3>
-              <span className="muted">
-                {filtrados.length}
-                {filtrados.length !== usuarios.length ? ` / ${usuarios.length}` : ""} usuarios
-              </span>
-            </div>
+          <PageHeader
+            title="Usuarios"
+            subtitle="Quiénes pueden entrar y con qué rol"
+            leading={
+              usuarios.length > 0 ? (
+                <span>
+                  {filtrados.length}
+                  {filtrados.length !== usuarios.length ? ` / ${usuarios.length}` : ""} usuario
+                  {filtrados.length === 1 ? "" : "s"}
+                </span>
+              ) : null
+            }
+          >
+            {perms.canManageUsers && (
+              <button type="button" className="btn primary btn-sm" onClick={openCreateUser}>
+                + Nuevo usuario
+              </button>
+            )}
+          </PageHeader>
 
+          <section className="card">
             {usuarios.length > 0 && (
-              <div className="toolbar" role="search" aria-label="Filtrar usuarios">
+              <div className="toolbar toolbar-compact" role="search" aria-label="Filtrar usuarios">
                 <label className="field toolbar-field grow">
-                  <span>Buscar</span>
+                  <span className="sr-only">Buscar</span>
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nombre, email o rol"
+                    placeholder="Buscar nombre, email o rol…"
                   />
                 </label>
                 <label className="field toolbar-field">
-                  <span>Rol</span>
-                  <select value={rolFilter} onChange={(e) => setRolFilter(e.target.value)}>
-                    <option value="">Todos</option>
+                  <span className="sr-only">Rol</span>
+                  <select
+                    value={rolFilter}
+                    onChange={(e) => setRolFilter(e.target.value)}
+                    aria-label="Rol"
+                  >
+                    <option value="">Rol</option>
                     {roleNames.map((name) => (
                       <option key={name} value={name}>
                         {roleLabel(name)}
@@ -436,6 +415,13 @@ export default function UsuariosPage() {
                   />
                   <span>Solo activos</span>
                 </label>
+                {filtersActive && (
+                  <div className="toolbar-actions">
+                    <button type="button" className="btn secondary" onClick={clearFilters}>
+                      Limpiar
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -454,7 +440,15 @@ export default function UsuariosPage() {
                 }
               />
             ) : filtrados.length === 0 ? (
-              <EmptyState title="Sin coincidencias" description="Ningún usuario coincide con los filtros." />
+              <EmptyState
+                title="Sin coincidencias"
+                description="Ningún usuario coincide con los filtros."
+                action={
+                  <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
+                    Limpiar filtros
+                  </button>
+                }
+              />
             ) : (
               <div className="table-wrap table-panel">
                 <table className="data-table dense sticky-head">
@@ -464,7 +458,9 @@ export default function UsuariosPage() {
                       <th>Email</th>
                       <th>Rol</th>
                       <th>Estado</th>
-                      <th></th>
+                      <th className="col-actions">
+                        <span className="sr-only">Acciones</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -482,7 +478,7 @@ export default function UsuariosPage() {
                             {u.activo ? "Activo" : "Inactivo"}
                           </span>
                         </td>
-                        <td>
+                        <td className="col-actions">
                           <div className="row-actions">
                             <button
                               type="button"
@@ -494,7 +490,7 @@ export default function UsuariosPage() {
                             </button>
                             <button
                               type="button"
-                              className={`btn btn-sm ${u.activo ? "secondary danger" : "primary"}`}
+                              className={`btn btn-sm ${u.activo ? "danger" : "primary"}`}
                               onClick={() => setConfirmToggle(u)}
                               disabled={busy}
                             >
@@ -512,7 +508,7 @@ export default function UsuariosPage() {
         </>
       )}
 
-      {tab === "roles" && perms.canManageRoles && (
+      {activeSection === "roles" && perms.canManageRoles && (
         <>
           <Modal
             open={showRoleForm}
@@ -587,11 +583,25 @@ export default function UsuariosPage() {
             </form>
           </Modal>
 
+          <PageHeader
+            title="Roles"
+            subtitle="Qué puede hacer cada tipo de usuario"
+            leading={
+              roles.length > 0 ? (
+                <span>
+                  {roles.length} rol{roles.length === 1 ? "" : "es"}
+                </span>
+              ) : null
+            }
+          >
+            {perms.canManageRoles && (
+              <button type="button" className="btn primary btn-sm" onClick={openCreateRole}>
+                + Nuevo rol
+              </button>
+            )}
+          </PageHeader>
+
           <section className="card">
-            <div className="section-header">
-              <h3>Roles</h3>
-              <span className="muted">{roles.length} roles</span>
-            </div>
             {loading ? (
               <p className="muted" aria-busy="true">
                 Cargando…
@@ -611,19 +621,23 @@ export default function UsuariosPage() {
                 <table className="data-table dense sticky-head">
                   <thead>
                     <tr>
-                      <th>Rol</th>
+                      <th className="col-rol">Rol</th>
                       <th>Permisos</th>
                       <th className="num">Usuarios</th>
-                      <th></th>
+                      <th className="col-actions">
+                        <span className="sr-only">Acciones</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {roles.map((r) => (
                       <tr key={r.id}>
-                        <td>
-                          <strong>{roleLabel(r.nombre)}</strong>
+                        <td className="col-rol">
+                          <span className="rol-title">
+                            <strong>{roleLabel(r.nombre)}</strong>
+                            {r.es_sistema && <span className="badge ok">Sistema</span>}
+                          </span>
                           <div className="muted mono">{r.nombre}</div>
-                          {r.es_sistema && <span className="badge ok">Sistema</span>}
                           {r.descripcion && <div className="muted">{r.descripcion}</div>}
                         </td>
                         <td>
@@ -631,20 +645,27 @@ export default function UsuariosPage() {
                             {(r.permisos ?? []).length === 0 ? (
                               <span className="muted">Sin permisos</span>
                             ) : (
-                              (r.permisos ?? []).map((code) => (
-                                <span key={code} className="perm-chip mono">
-                                  {code}
-                                </span>
-                              ))
+                              <>
+                                {(r.permisos ?? []).slice(0, 3).map((code) => (
+                                  <span key={code} className="perm-chip mono">
+                                    {code}
+                                  </span>
+                                ))}
+                                {(r.permisos ?? []).length > 3 && (
+                                  <span className="muted">
+                                    +{(r.permisos ?? []).length - 3}
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
                         <td className="num">{r.usuarios_count ?? 0}</td>
-                        <td>
+                        <td className="col-actions">
                           <div className="row-actions">
                             <button
                               type="button"
-                              className="btn secondary btn-sm"
+                              className="btn ghost btn-sm"
                               onClick={() => openEditRole(r)}
                               disabled={busy}
                             >
@@ -653,7 +674,7 @@ export default function UsuariosPage() {
                             {!r.es_sistema && (
                               <button
                                 type="button"
-                                className="btn secondary btn-sm danger"
+                                className="btn ghost btn-sm danger-text"
                                 onClick={() => setConfirmDeleteRole(r)}
                                 disabled={busy || (r.usuarios_count ?? 0) > 0}
                                 title={

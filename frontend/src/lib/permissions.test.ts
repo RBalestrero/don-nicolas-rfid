@@ -36,6 +36,12 @@ describe("permissions", () => {
     expect(canManageUsers(["users.manage", "roles.manage"])).toBe(true);
   });
 
+  it("permisos vacíos no usan fallback de rol", () => {
+    expect(canWriteAssets([], "admin")).toBe(false);
+    expect(canManageUsers([], "admin")).toBe(false);
+    expect(canAuditInventory([], "supervisor")).toBe(false);
+  });
+
   it("etiqueta roles legibles", () => {
     expect(roleLabel("operador_deposito")).toBe("Depósito");
     expect(roleLabel("admin")).toBe("Admin");

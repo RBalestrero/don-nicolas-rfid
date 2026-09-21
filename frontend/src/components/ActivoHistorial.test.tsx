@@ -27,18 +27,19 @@ const entries: HistorialEntry[] = [
 ];
 
 describe("ActivoHistorial", () => {
-  it("muestra eventos con usuario y cambios", () => {
+  it("muestra eventos legibles sin dumps técnicos", () => {
     render(<ActivoHistorial entries={entries} loading={false} />);
 
-    expect(screen.getByText("Actualización")).toBeInTheDocument();
-    expect(screen.getByText("Alta")).toBeInTheDocument();
+    expect(screen.getByText("Datos actualizados")).toBeInTheDocument();
+    expect(screen.getByText("Alta del artículo")).toBeInTheDocument();
     expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(screen.getByText("Sistema")).toBeInTheDocument();
-    expect(screen.getByText(/descripcion:.*"Viejo".*"Nuevo"/)).toBeInTheDocument();
+    expect(screen.getByText("Descripción: Viejo → Nuevo")).toBeInTheDocument();
+    expect(screen.queryByText(/JSON|uuid|"Viejo"/i)).not.toBeInTheDocument();
   });
 
   it("muestra estado vacío", () => {
     render(<ActivoHistorial entries={[]} loading={false} />);
-    expect(screen.getByText(/sin eventos/i)).toBeInTheDocument();
+    expect(screen.getByText(/todavía no hay eventos/i)).toBeInTheDocument();
   });
 });
