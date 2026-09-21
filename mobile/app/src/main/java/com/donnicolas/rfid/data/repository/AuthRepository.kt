@@ -96,6 +96,7 @@ class AuthRepository(
                     email = me.email,
                     nombre = me.nombre,
                     rol = me.rol,
+                    permisos = me.permisos,
                 ),
             )
         } catch (e: Exception) {
@@ -130,6 +131,7 @@ class AuthRepository(
                     email = me.email,
                     nombre = me.nombre,
                     rol = me.rol,
+                    permisos = me.permisos,
                 ),
             )
         } catch (e: Exception) {

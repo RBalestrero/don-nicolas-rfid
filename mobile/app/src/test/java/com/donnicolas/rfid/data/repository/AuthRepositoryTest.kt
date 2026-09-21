@@ -76,7 +76,8 @@ class AuthRepositoryTest {
         assertTrue(result is AuthResult.Error)
         val error = (result as AuthResult.Error).error
         assertEquals("AUTH_INVALID_CREDENTIALS", error.code)
-        assertTrue(error.detail.contains("Credenciales inválidas"))
+        assertEquals("Email o contraseña incorrectos", error.title)
+        assertTrue(error.detail.contains("Verificá", ignoreCase = true))
         assertEquals(401, error.httpStatus)
         verify(tokenStore).clear()
         verify(tokenStore, never()).saveToken(any())
@@ -93,7 +94,9 @@ class AuthRepositoryTest {
         assertTrue(result is AuthResult.Error)
         val error = (result as AuthResult.Error).error
         assertEquals("NET_CONNECTION_REFUSED", error.code)
-        assertTrue(error.detail.contains("10.0.2.2:8000") || error.detail.contains("Postgres"))
+        assertEquals("No se pudo conectar al servidor", error.title)
+        assertTrue(error.detail.contains("Wi‑Fi") || error.detail.contains("IP"))
+        assertTrue(error.cause.orEmpty().contains("10.0.2.2:8000") || error.endpoint!!.contains("auth/login"))
         assertTrue(error.endpoint!!.contains("auth/login"))
     }
 
@@ -111,7 +114,11 @@ class AuthRepositoryTest {
         val error = (result as AuthResult.Error).error
         assertEquals("DB_CONNECTION_FAILED", error.code)
         assertEquals(503, error.httpStatus)
-        assertTrue(error.detail.contains("PostgreSQL"))
+        assertEquals("Servidor no disponible", error.title)
+        assertTrue(
+            error.detail.contains("caído", ignoreCase = true) ||
+                error.cause.orEmpty().contains("PostgreSQL"),
+        )
     }
 
     @Test

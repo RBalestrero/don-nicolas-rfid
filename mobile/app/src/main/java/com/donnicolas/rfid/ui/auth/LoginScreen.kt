@@ -1,158 +1,147 @@
 package com.donnicolas.rfid.ui.auth
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.donnicolas.rfid.data.model.AppError
+import com.donnicolas.rfid.ui.components.ErrorBanner
+import com.donnicolas.rfid.ui.components.PrimaryAction
 
 @Composable
 fun LoginScreen(
     state: LoginUiState,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onApiHostChange: (String) -> Unit = {},
     onLogin: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Don Nicolás RFID",
+            text = "Don Nicolás",
             style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = "Acceso operativo de campo",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "WMS · RFID de campo",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            text = "API: ${com.donnicolas.rfid.BuildConfig.API_HOST}:8000",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = state.email,
-            onValueChange = onEmailChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Email") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            enabled = !state.loading,
+        val fieldColors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = state.password,
-            onValueChange = onPasswordChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Contraseña") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            enabled = !state.loading,
-        )
+        val formShape = RoundedCornerShape(8.dp)
 
-        state.error?.let { error ->
-            Spacer(modifier = Modifier.height(16.dp))
-            ErrorPanel(error = error)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface, formShape)
+                .border(1.dp, MaterialTheme.colorScheme.outline, formShape)
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+        ) {
+            OutlinedTextField(
+                value = state.email,
+                onValueChange = onEmailChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Email") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Email, contentDescription = null)
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                enabled = !state.loading,
+                colors = fieldColors,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.password,
+                onValueChange = onPasswordChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Contraseña") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Lock, contentDescription = null)
+                },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                enabled = !state.loading,
+                colors = fieldColors,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.apiHost,
+                onValueChange = onApiHostChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Servidor (IP Wi‑Fi)") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Dns, contentDescription = null)
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                enabled = !state.loading,
+                colors = fieldColors,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Misma red Wi‑Fi que la PC · puerto 8000",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        state.error?.let { error ->
+            Spacer(modifier = Modifier.height(10.dp))
+            ErrorBanner(error = error)
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         if (state.loading) {
             CircularProgressIndicator()
         } else {
-            Button(
-                onClick = onLogin,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Ingresar")
-            }
+            PrimaryAction(text = "Ingresar", onClick = onLogin, modifier = Modifier.fillMaxWidth())
         }
-    }
-}
-
-@Composable
-private fun ErrorPanel(error: AppError) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                shape = MaterialTheme.shapes.medium,
-            )
-            .padding(12.dp),
-    ) {
-        Text(
-            text = error.code,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.error,
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = error.title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.error,
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = error.detail,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        error.httpStatus?.let { status ->
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "HTTP $status",
-                style = MaterialTheme.typography.labelMedium,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        error.endpoint?.let { endpoint ->
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = endpoint,
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        error.cause?.let { cause ->
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Causa: ${cause.take(300)}",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

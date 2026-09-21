@@ -13,6 +13,12 @@ interface WarehouseApi {
         @Query("include_inactive") includeInactive: Boolean = false,
     ): List<DepositoDto>
 
+    @GET("depositos/{id}")
+    suspend fun getDeposito(
+        @Path("id") depositoId: String,
+        @Query("include_tree") includeTree: Boolean = false,
+    ): DepositoTreeDto
+
     @GET("depositos/{id}/stock")
     suspend fun getStock(@Path("id") depositoId: String): StockDepositoDto
 }
@@ -40,6 +46,9 @@ interface InventoryApi {
         @Body body: InventarioLecturasDto,
     ): InventarioDto
 
+    @POST("inventarios/{id}/lecturas/reset")
+    suspend fun resetearLecturas(@Path("id") id: String): InventarioDto
+
     @POST("inventarios/{id}/cerrar")
     suspend fun cerrar(
         @Path("id") id: String,
@@ -55,6 +64,32 @@ data class DepositoDto(
     val nombre: String,
     val descripcion: String? = null,
     val direccion: String? = null,
+    val activo: Boolean = true,
+)
+
+/** Respuesta de GET /depositos/{id}?include_tree=true */
+data class DepositoTreeDto(
+    val id: String,
+    val nombre: String,
+    val descripcion: String? = null,
+    val direccion: String? = null,
+    val activo: Boolean = true,
+    val sectores: List<SectorTreeDto> = emptyList(),
+)
+
+data class SectorTreeDto(
+    val id: String,
+    val nombre: String,
+    @Json(name = "deposito_id") val depositoId: String? = null,
+    val activo: Boolean = true,
+    val ubicaciones: List<UbicacionDto> = emptyList(),
+)
+
+data class UbicacionDto(
+    val id: String,
+    val codigo: String,
+    val descripcion: String? = null,
+    @Json(name = "sector_id") val sectorId: String? = null,
     val activo: Boolean = true,
 )
 
@@ -76,6 +111,7 @@ data class InventarioCreateDto(
     @Json(name = "deposito_id") val depositoId: String,
     @Json(name = "sector_id") val sectorId: String? = null,
     @Json(name = "ubicacion_id") val ubicacionId: String? = null,
+    @Json(name = "activo_id") val activoId: String? = null,
 )
 
 data class InventarioLecturasDto(

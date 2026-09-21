@@ -60,7 +60,7 @@ class RfidScanViewModel(
                         error = AppError(
                             code = "RFID_CONNECT_FAILED",
                             title = "No se pudo conectar el lector RFID",
-                            detail = "Falló connect() en modo ${reader.modeName}.",
+                            detail = "Reintentá o reiniciá el lector desde el menú.",
                             cause = e.message ?: e.toString(),
                         ),
                     )
@@ -85,8 +85,8 @@ class RfidScanViewModel(
                         scanning = false,
                         error = AppError(
                             code = "RFID_START_INVENTORY_FAILED",
-                            title = "No se pudo iniciar la lectura masiva",
-                            detail = "startInventory() falló en modo ${reader.modeName}.",
+                            title = "No se pudo iniciar la lectura",
+                            detail = "Reintentá. Si sigue fallando, reconectá el lector.",
                             cause = e.message ?: e.toString(),
                         ),
                     )
@@ -107,7 +107,7 @@ class RfidScanViewModel(
                         error = AppError(
                             code = "RFID_STOP_INVENTORY_FAILED",
                             title = "No se pudo detener la lectura",
-                            detail = "stopInventory() falló en modo ${reader.modeName}.",
+                            detail = "Reintentá. Si el lector sigue activo, reconectalo.",
                             cause = e.message ?: e.toString(),
                         ),
                     )
@@ -124,11 +124,11 @@ class RfidScanViewModel(
 
     override fun onCleared() {
         eventsJob?.cancel()
-        viewModelScope.launch {
-            runCatching {
-                reader.stopInventory()
-                reader.disconnect()
+        try {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                kotlinx.coroutines.withTimeout(1_500) { reader.stopInventory() }
             }
+        } catch (_: Exception) {
         }
         super.onCleared()
     }

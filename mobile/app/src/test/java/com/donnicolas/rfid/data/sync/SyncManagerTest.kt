@@ -76,6 +76,8 @@ private class FakeInventoryApi(
     override suspend fun registrarLecturas(id: String, body: InventarioLecturasDto): InventarioDto =
         error("no usado")
 
+    override suspend fun resetearLecturas(id: String): InventarioDto = error("no usado")
+
     override suspend fun cancelar(id: String): InventarioDto = error("no usado")
 }
 

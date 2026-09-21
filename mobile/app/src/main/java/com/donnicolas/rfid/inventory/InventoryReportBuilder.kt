@@ -19,12 +19,7 @@ object InventoryReportBuilder {
         val sobrantes = detalles.filter { it.estado == "sobrante" }
         val esperado = inventario.resumen?.totalEsperado ?: inventario.totalEsperado
         val encontrado = inventario.resumen?.totalEncontrado ?: inventario.totalEncontrado
-        // Sin el reporte del servidor no se puede clasificar exceso vs ajeno
-        // (requiere el catálogo de artículos del depósito): se usa el contador
-        // que ya trae el inventario y el resto queda como ajeno.
-        val totalExceso = inventario.resumen?.totalExceso ?: inventario.totalExceso
-        val excesos = sobrantes.take(totalExceso)
-        val ajenos = sobrantes.drop(totalExceso)
+        val (excesos, ajenos) = ArticleKeys.clasificarSobrantes(detalles)
         val coincidencia = if (esperado <= 0) 0.0 else (100.0 * encontrado / esperado)
         return InventoryReport(
             esperado = esperado,

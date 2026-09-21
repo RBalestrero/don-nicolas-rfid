@@ -3,6 +3,8 @@
 # api.host=<IP-LAN-de-tu-PC>
 #
 # Ejemplos:
-#   api.host=192.168.100.164   # Wi‑Fi / cuna (recomendado)
+#   api.host=192.168.100.158   # Wi‑Fi (misma red que el MC33). Sin USB.
 #   api.host=127.0.0.1         # Solo con: adb reverse tcp:8000 tcp:8000
 #   api.host=10.0.2.2          # Emulador Android
+#
+# En el login de la APK se puede cambiar la IP sin reinstalar.

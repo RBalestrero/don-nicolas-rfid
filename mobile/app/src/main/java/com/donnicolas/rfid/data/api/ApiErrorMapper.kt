@@ -26,70 +26,57 @@ object ApiErrorMapper {
         baseUrl: String,
         endpoint: String,
     ): AppError {
+        val url = fullUrl(baseUrl, endpoint)
         return when (throwable) {
             is HttpException -> fromHttp(throwable, operation, baseUrl, endpoint)
             is UnknownHostException -> AppError(
                 code = "NET_UNKNOWN_HOST",
-                title = "Host de API inaccesible",
-                detail = "No se pudo resolver el host de la API durante $operation. " +
-                    "Verificá que la URL base sea correcta y que el dispositivo/emulador " +
-                    "pueda alcanzar esa red. URL base configurada: $baseUrl",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "No se encontró el servidor",
+                detail = "Revisá la IP del servidor y que el MC33 esté en la misma Wi‑Fi.",
+                endpoint = url,
+                cause = "Host no resuelve · $operation · $url · ${throwable.message}",
             )
             is ConnectException -> AppError(
                 code = "NET_CONNECTION_REFUSED",
-                title = "Conexión rechazada por la API",
-                detail = "El servidor rechazó la conexión TCP durante $operation. " +
-                    "La API no está escuchando o el puerto/firewall bloquea el acceso. " +
-                    "En Wi‑Fi configurá api.host=<IP-LAN-PC> en mobile/local.properties " +
-                    "(misma red que el MC33). Emulador: 10.0.2.2. URL base: $baseUrl. " +
-                    "También confirmá que Postgres y la API estén levantados.",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "No se pudo conectar al servidor",
+                detail = "Revisá la IP del servidor y que esté en la misma Wi‑Fi.",
+                endpoint = url,
+                cause = "Conexión rechazada · $operation · $url · ${throwable.message}",
             )
             is SocketTimeoutException, is TimeoutException -> AppError(
                 code = "NET_TIMEOUT",
-                title = "Tiempo de espera agotado",
-                detail = "La API no respondió a tiempo durante $operation. " +
-                    "Puede estar caída, saturada o la red es inestable. URL: ${fullUrl(baseUrl, endpoint)}",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "El servidor no respondió",
+                detail = "Reintentá en unos segundos. Si sigue fallando, revisá la Wi‑Fi.",
+                endpoint = url,
+                cause = "Timeout · $operation · $url · ${throwable.message}",
             )
             is SSLException -> AppError(
                 code = "NET_SSL",
-                title = "Falla de seguridad TLS/SSL",
-                detail = "Falló el handshake TLS durante $operation. " +
-                    "Si usás HTTP en desarrollo, confirmá cleartextTraffic y networkSecurityConfig. " +
-                    "URL: ${fullUrl(baseUrl, endpoint)}",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "Error de conexión segura",
+                detail = "No se pudo establecer una conexión segura con el servidor.",
+                endpoint = url,
+                cause = "TLS/SSL · $operation · $url · ${throwable.message}",
             )
             is JsonDataException, is JsonEncodingException, is EOFException -> AppError(
                 code = "API_RESPONSE_PARSE",
-                title = "Respuesta de API inválida",
-                detail = "La respuesta JSON de $operation no coincide con el contrato esperado. " +
-                    "Puede ser un endpoint incorrecto, un proxy intermedio o una versión vieja de la API. " +
-                    "URL: ${fullUrl(baseUrl, endpoint)}",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "Respuesta inesperada del servidor",
+                detail = "La app no pudo interpretar la respuesta. Reintentá o avisá a sistemas.",
+                endpoint = url,
+                cause = "Parse · $operation · $url · ${throwable.message}",
             )
             is IOException -> AppError(
                 code = "NET_IO",
-                title = "Error de red (I/O)",
-                detail = "Falló la comunicación de red durante $operation. " +
-                    "Detalle del sistema: ${throwable.javaClass.simpleName}. " +
-                    "URL: ${fullUrl(baseUrl, endpoint)}",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message,
+                title = "Problema de red",
+                detail = "Se cortó la comunicación. Revisá la Wi‑Fi e intentá de nuevo.",
+                endpoint = url,
+                cause = "${throwable.javaClass.simpleName} · $operation · $url · ${throwable.message}",
             )
             else -> AppError(
                 code = "APP_UNEXPECTED",
-                title = "Error inesperado en la app",
-                detail = "Ocurrió una excepción no clasificada durante $operation " +
-                    "(${throwable.javaClass.name}). Revisá logs de Logcat con el tag DonNicolasAuth.",
-                endpoint = fullUrl(baseUrl, endpoint),
-                cause = throwable.message ?: throwable.toString(),
+                title = "Algo salió mal",
+                detail = "Reintentá. Si el problema continúa, avisá a sistemas.",
+                endpoint = url,
+                cause = "${throwable.javaClass.name} · $operation · ${throwable.message ?: throwable}",
             )
         }
     }
@@ -104,115 +91,99 @@ object ApiErrorMapper {
         val rawBody = exception.response()?.errorBody()?.string().orEmpty()
         val (serverCode, serverDetail) = extractServerDetail(rawBody)
         val url = fullUrl(baseUrl, endpoint)
-
         val isLogin = endpoint.contains("auth/login")
+        val serverHint = serverDetail?.takeIf { it.isNotBlank() && it.length <= 120 }
 
         val mapped = when (status) {
             400 -> AppError(
                 code = "API_BAD_REQUEST",
-                title = if (isLogin) "Solicitud de login inválida" else "Solicitud inválida",
-                detail = "La API rechazó el cuerpo de la solicitud (HTTP 400) en $operation. " +
-                    serverDetailOrFallback(serverDetail, "Revisá los datos enviados."),
+                title = if (isLogin) "Datos de ingreso inválidos" else "Datos inválidos",
+                detail = serverHint
+                    ?: if (isLogin) {
+                        "Revisá email, contraseña e IP del servidor."
+                    } else {
+                        "Revisá los datos e intentá de nuevo."
+                    },
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             401 -> if (isLogin) {
                 AppError(
                     code = "AUTH_INVALID_CREDENTIALS",
-                    title = "Credenciales inválidas",
-                    detail = "Email o contraseña incorrectos (HTTP 401). " +
-                        serverDetailOrFallback(serverDetail, "Verificá el usuario y la contraseña."),
+                    title = "Email o contraseña incorrectos",
+                    detail = "Verificá tus datos e intentá de nuevo.",
                     httpStatus = status,
                     endpoint = url,
-                    cause = rawBody.ifBlank { null },
+                    cause = techCause(status, operation, url, rawBody, serverDetail),
                 )
             } else {
                 AppError(
                     code = "AUTH_SESSION_EXPIRED",
                     title = "Sesión expirada",
-                    detail = "El token venció o fue revocado durante $operation (HTTP 401). " +
-                        "Volvé a iniciar sesión para continuar.",
+                    detail = "Volvé a iniciar sesión para continuar.",
                     httpStatus = status,
                     endpoint = url,
-                    cause = rawBody.ifBlank { null },
+                    cause = techCause(status, operation, url, rawBody, serverDetail),
                 )
             }
             403 -> AppError(
                 code = "AUTH_FORBIDDEN",
-                title = "Acceso denegado",
-                detail = "La API denegó el acceso (HTTP 403) durante $operation. " +
-                    serverDetailOrFallback(serverDetail, "El usuario no tiene permisos suficientes."),
+                title = "Sin permiso",
+                detail = serverHint
+                    ?: "Tu usuario no puede realizar esta acción. Pedí acceso a un administrador.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             404 -> AppError(
                 code = "API_ENDPOINT_NOT_FOUND",
-                title = "Endpoint no encontrado",
-                detail = "La ruta de $operation no existe (HTTP 404). " +
-                    "Verificá API_BASE_URL y que el backend esté en la versión correcta. " +
-                    "URL llamada: $url",
+                title = "No se encontró el recurso",
+                detail = "Puede que se haya borrado o la IP apunte a otro servidor. Revisá la IP.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             409 -> AppError(
                 code = "API_CONFLICT",
                 title = "El estado cambió en el servidor",
-                detail = "La API rechazó $operation por conflicto de estado (HTTP 409). " +
-                    serverDetailOrFallback(
-                        serverDetail,
-                        "El inventario pudo haberse cerrado o cancelado desde otro dispositivo. " +
-                            "Volvé atrás y actualizá la lista.",
-                    ),
+                detail = serverHint
+                    ?: "El inventario pudo cerrarse o cancelarse en otro lado. Actualizá la lista.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             422 -> AppError(
                 code = "API_VALIDATION",
-                title = "Validación fallida",
-                detail = "La API reportó errores de validación (HTTP 422) en $operation. " +
-                    serverDetailOrFallback(
-                        serverDetail,
-                        "Revisá los datos enviados.",
-                    ),
+                title = "Datos no válidos",
+                detail = serverHint ?: "Revisá los datos enviados e intentá de nuevo.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             500 -> AppError(
                 code = "API_INTERNAL_ERROR",
-                title = "Error interno del servidor",
-                detail = "La API respondió HTTP 500 durante $operation. " +
-                    "Causa frecuente: PostgreSQL caído o migraciones pendientes. " +
-                    "Revisá health en /api/v1/health (database debe ser 'connected'). " +
-                    serverDetailOrFallback(serverDetail, "Sin detalle adicional del servidor."),
+                title = "Error en el servidor",
+                detail = "Reintentá en unos segundos. Si sigue fallando, avisá a sistemas.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             502, 503, 504 -> AppError(
                 code = "API_UNAVAILABLE",
-                title = "API no disponible",
-                detail = "La API no está operativa (HTTP $status) durante $operation. " +
-                    serverDetailOrFallback(
-                        serverDetail,
-                        "Levantá Postgres (`docker compose up -d postgres`) y la API (`bash scripts/dev-api.sh`).",
-                    ),
+                title = "Servidor no disponible",
+                detail = "El servidor está caído o reiniciando. Reintentá en unos minutos.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
             else -> AppError(
                 code = "API_HTTP_$status",
-                title = "Respuesta HTTP inesperada",
-                detail = "La API respondió HTTP $status durante $operation. " +
-                    serverDetailOrFallback(serverDetail, "Sin detalle adicional del servidor."),
+                title = "Respuesta inesperada del servidor",
+                detail = serverHint ?: "Reintentá. Si el problema continúa, avisá a sistemas.",
                 httpStatus = status,
                 endpoint = url,
-                cause = rawBody.ifBlank { null },
+                cause = techCause(status, operation, url, rawBody, serverDetail),
             )
         }
 
@@ -221,6 +192,18 @@ object ApiErrorMapper {
         } else {
             mapped
         }
+    }
+
+    private fun techCause(
+        status: Int,
+        operation: String,
+        url: String,
+        rawBody: String,
+        serverDetail: String?,
+    ): String {
+        val body = rawBody.ifBlank { serverDetail.orEmpty() }.take(300)
+        return "HTTP $status · $operation · $url" +
+            if (body.isNotBlank()) " · $body" else ""
     }
 
     private fun extractServerDetail(rawBody: String): Pair<String?, String?> {
@@ -264,10 +247,6 @@ object ApiErrorMapper {
         } catch (_: Exception) {
             null to rawBody.take(500)
         }
-    }
-
-    private fun serverDetailOrFallback(serverDetail: String?, fallback: String): String {
-        return if (serverDetail.isNullOrBlank()) fallback else "Detalle del servidor: $serverDetail"
     }
 
     private fun fullUrl(baseUrl: String, endpoint: String): String {

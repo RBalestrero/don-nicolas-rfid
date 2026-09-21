@@ -123,6 +123,34 @@ class InventoryReportBuilderTest {
     }
 
     @Test
+    fun `fromInventario clasifica exceso por artículo no por posición`() {
+        val sameArt = "D100000003E90000000001A1"
+        val extraSame = "D100000003E90000000009A1"
+        val alien = "D100000003EA00000000001A1"
+        val inventario = InventarioDto(
+            id = "inv-keys",
+            depositoId = "dep-1",
+            estado = "cerrado",
+            totalEsperado = 1,
+            totalEncontrado = 1,
+            totalFaltante = 0,
+            totalSobrante = 2,
+            totalExceso = 0,
+            resumen = InventarioResumenDto(1, 1, 0, 2, totalExceso = 0),
+            detalles = listOf(
+                DetalleInventarioDto("1", "act-a", sameArt, "ABC-1001", "Notebook", "encontrado"),
+                DetalleInventarioDto("2", null, extraSame, null, "Extra", "sobrante"),
+                DetalleInventarioDto("3", null, alien, null, "Ajeno", "sobrante"),
+            ),
+        )
+        val report = InventoryReportBuilder.fromInventario(inventario)
+        assertTrue(report.tieneDiscrepancias)
+        assertEquals(1, report.exceso)
+        assertEquals(1, report.ajeno)
+        assertEquals(extraSame, report.excesos.single().epc)
+    }
+
+    @Test
     fun `backend sin listas exceso ajeno trata los sobrantes como ajenos`() {
         val reporte = InventarioReporteDto(
             inventarioId = "inv-5",

@@ -1,6 +1,19 @@
 package com.donnicolas.rfid.ui.inventory
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +23,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,9 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.donnicolas.rfid.data.api.ActivoDto
+import com.donnicolas.rfid.data.api.ActivoUbicacionStockDto
 import com.donnicolas.rfid.data.api.DepositoDto
 import com.donnicolas.rfid.data.api.InventarioListItemDto
 import com.donnicolas.rfid.inventory.ArticleCount
@@ -31,28 +51,23 @@ import com.donnicolas.rfid.inventory.InventoryArticleAggregator
 import com.donnicolas.rfid.inventory.InventoryReport
 import com.donnicolas.rfid.inventory.ReportFilter
 import com.donnicolas.rfid.ui.components.AppScaffold
+import com.donnicolas.rfid.ui.components.BannerTone
 import com.donnicolas.rfid.ui.components.ChipTone
 import com.donnicolas.rfid.ui.components.ConfirmDialog
 import com.donnicolas.rfid.ui.components.DangerAction
 import com.donnicolas.rfid.ui.components.ErrorBanner
+import com.donnicolas.rfid.ui.components.FilterChip
 import com.donnicolas.rfid.ui.components.InventorySessionSheet
 import com.donnicolas.rfid.ui.components.ListRow
+import com.donnicolas.rfid.ui.components.MessageBanner
 import com.donnicolas.rfid.ui.components.MetricRow
 import com.donnicolas.rfid.ui.components.OverflowMenuItem
 import com.donnicolas.rfid.ui.components.PrimaryAction
 import com.donnicolas.rfid.ui.components.SecondaryAction
 import com.donnicolas.rfid.ui.components.StatusChip
+import com.donnicolas.rfid.ui.theme.WmsExcess
 import com.donnicolas.rfid.ui.theme.WmsOk
 import com.donnicolas.rfid.ui.theme.WmsWarn
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.ui.graphics.Color
 
 private val OpenBadgeYellow = Color(0xFFCA8A04)
 
@@ -61,11 +76,16 @@ private enum class PendingConfirm {
     FINISH,
     CANCEL,
     CANCEL_SELECTED,
+    CLEAR_READS,
 }
 
 @Composable
 fun InventoryScreen(
     state: InventoryUiState,
+    onSelectScope: (InventoryScope) -> Unit,
+    onArticuloQueryChange: (String) -> Unit,
+    onSelectArticulo: (ActivoDto) -> Unit,
+    onSelectUbicacionStock: (ActivoUbicacionStockDto) -> Unit,
     onSelectDeposito: (DepositoDto) -> Unit,
     onRefreshDepositos: () -> Unit,
     onStartNew: () -> Unit,
@@ -78,11 +98,13 @@ fun InventoryScreen(
     onCancelOpenSelected: () -> Unit,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
+    onClearReads: () -> Unit,
     onSync: () -> Unit,
     onClose: () -> Unit,
     onCancel: () -> Unit,
     onLeaveWithoutClosing: () -> Unit,
     onBackToSelect: () -> Unit,
+    onNavigateBackFromSelect: () -> Unit,
     onFinishResult: () -> Unit,
     onOpenHistory: () -> Unit,
     onRefreshHistory: () -> Unit,
@@ -96,16 +118,27 @@ fun InventoryScreen(
     val selectionMode = state.openSelectionMode
 
     val stepTitle = when (state.step) {
-        InventoryStep.SELECT_DEPOSITO -> "Inventario"
+        InventoryStep.CHOICE_SCOPE -> "Inventario"
+        InventoryStep.SELECT_ARTICULO -> "Artículo"
+        InventoryStep.SELECT_UBICACION -> "Ubicación"
+        InventoryStep.SELECT_DEPOSITO -> "Depósito"
         InventoryStep.CHOICE_SESSION -> "En curso"
-        InventoryStep.SCANNING -> "Conteo"
+        InventoryStep.SCANNING -> if (state.articuloUbicacionMode) {
+            state.selectedActivo?.numeroPatrimonial ?: "Conteo"
+        } else {
+            "Conteo"
+        }
         InventoryStep.RESULT -> "Resumen"
         InventoryStep.HISTORY -> "Historial"
     }
     val onBack = when (state.step) {
-        InventoryStep.SELECT_DEPOSITO -> onBackHome
+        InventoryStep.CHOICE_SCOPE -> onBackHome
+        InventoryStep.SELECT_ARTICULO,
+        InventoryStep.SELECT_UBICACION,
+        InventoryStep.SELECT_DEPOSITO,
+        -> onNavigateBackFromSelect
         InventoryStep.CHOICE_SESSION -> {
-            if (selectionMode) onExitOpenSelection else onBackToSelect
+            if (selectionMode) onExitOpenSelection else onNavigateBackFromSelect
         }
         InventoryStep.SCANNING -> {
             { showSessionSheet = true }
@@ -115,8 +148,11 @@ fun InventoryScreen(
     }
 
     val menuItems = when (state.step) {
+        InventoryStep.CHOICE_SCOPE,
+        InventoryStep.SELECT_ARTICULO,
+        InventoryStep.SELECT_UBICACION,
+        -> emptyList()
         InventoryStep.SELECT_DEPOSITO -> listOf(
-            OverflowMenuItem("Historial", enabled = !state.loading, onClick = onOpenHistory),
             OverflowMenuItem("Actualizar depósitos", enabled = !state.loading, onClick = onRefreshDepositos),
         )
         InventoryStep.CHOICE_SESSION -> if (selectionMode) {
@@ -131,16 +167,35 @@ fun InventoryScreen(
             )
         }
         InventoryStep.SCANNING -> listOf(
-            OverflowMenuItem("Sincronizar", enabled = !state.loading && !state.offlineMode, onClick = onSync),
-            OverflowMenuItem("Reconectar lector", onClick = onReconnect),
-        )
+            OverflowMenuItem(
+                "Borrar lecturas",
+                enabled = !state.loading && state.uniqueReads > 0,
+                destructive = true,
+                onClick = { pendingConfirm = PendingConfirm.CLEAR_READS },
+            ),
+        ) + if (!state.articuloUbicacionMode) {
+            listOf(
+                OverflowMenuItem("Sincronizar", enabled = !state.loading && !state.offlineMode, onClick = onSync),
+                OverflowMenuItem("Reconectar lector", onClick = onReconnect),
+            )
+        } else {
+            listOf(OverflowMenuItem("Reconectar lector", onClick = onReconnect))
+        }
         InventoryStep.RESULT -> listOf(
-            OverflowMenuItem("Inicio", onClick = onBackHome),
+            OverflowMenuItem(
+                "Inicio",
+                onClick = {
+                    onFinishResult()
+                    onBackHome()
+                },
+            ),
         )
         InventoryStep.HISTORY -> listOf(
             OverflowMenuItem("Actualizar", enabled = !state.loading, onClick = onRefreshHistory),
         )
     }
+
+    BackHandler(onBack = onBack)
 
     if (showSessionSheet && state.step == InventoryStep.SCANNING) {
         InventorySessionSheet(
@@ -154,7 +209,11 @@ fun InventoryScreen(
     when (pendingConfirm) {
         PendingConfirm.FINISH -> ConfirmDialog(
             title = "Finalizar inventario",
-            message = "Se cerrará el conteo, se ajustará el stock y verás el resumen. ¿Continuar?",
+            message = if (state.articuloUbicacionMode) {
+                "Se envía a auditoría. El stock se ajusta al confirmar en la web."
+            } else {
+                "Se cierra el conteo. El stock se ajusta al auditar en la web."
+            },
             confirmLabel = "Finalizar",
             onConfirm = {
                 pendingConfirm = PendingConfirm.NONE
@@ -164,7 +223,7 @@ fun InventoryScreen(
         )
         PendingConfirm.CANCEL -> ConfirmDialog(
             title = "Cancelar inventario",
-            message = "Se descarta este conteo. No quedará disponible para retomar.",
+            message = "Se descarta este conteo. No se puede retomar.",
             confirmLabel = "Cancelar conteo",
             destructive = true,
             onConfirm = {
@@ -175,12 +234,23 @@ fun InventoryScreen(
         )
         PendingConfirm.CANCEL_SELECTED -> ConfirmDialog(
             title = "Cancelar seleccionados",
-            message = "Se cancelarán $selectedCount inventario(s) en curso. No se podrán retomar.",
+            message = "Se cancelan $selectedCount inventario(s). No se pueden retomar.",
             confirmLabel = "Cancelar $selectedCount",
             destructive = true,
             onConfirm = {
                 pendingConfirm = PendingConfirm.NONE
                 onCancelOpenSelected()
+            },
+            onDismiss = { pendingConfirm = PendingConfirm.NONE },
+        )
+        PendingConfirm.CLEAR_READS -> ConfirmDialog(
+            title = "Borrar lecturas",
+            message = "Se descartan las etiquetas leídas. El inventario sigue abierto.",
+            confirmLabel = "Borrar",
+            destructive = true,
+            onConfirm = {
+                pendingConfirm = PendingConfirm.NONE
+                onClearReads()
             },
             onDismiss = { pendingConfirm = PendingConfirm.NONE },
         )
@@ -190,7 +260,15 @@ fun InventoryScreen(
     AppScaffold(
         title = stepTitle,
         onBack = onBack,
-        subtitle = state.selectedDeposito?.nombre,
+        subtitle = when {
+            state.articuloUbicacionMode && state.step == InventoryStep.SCANNING ->
+                state.selectedUbicacionStock?.let {
+                    "${it.depositoNombre} · ${it.ubicacionCodigo}"
+                }
+            state.selectedActivo != null && state.step != InventoryStep.CHOICE_SCOPE ->
+                state.selectedActivo.numeroPatrimonial
+            else -> state.selectedDeposito?.nombre
+        },
         trailing = {
             when {
                 state.offlineMode -> StatusChip("Off", ChipTone.Warn)
@@ -205,24 +283,26 @@ fun InventoryScreen(
                 {
                     if (state.scanning) {
                         PrimaryAction(
-                            text = "Detener lectura",
+                            text = "Parar",
                             onClick = onStopScan,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             PrimaryAction(
-                                text = "Leer RFID",
+                                text = "Leer",
                                 onClick = onStartScan,
                                 enabled = !state.loading,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.weight(1f),
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            PrimaryAction(
-                                text = "Listo",
+                            SecondaryAction(
+                                text = if (state.articuloUbicacionMode) "Listo" else "Listo",
                                 onClick = { pendingConfirm = PendingConfirm.FINISH },
                                 enabled = !state.loading,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
@@ -266,7 +346,7 @@ fun InventoryScreen(
                     )
                 }
             }
-            InventoryStep.SELECT_DEPOSITO -> {
+            InventoryStep.CHOICE_SCOPE -> {
                 {
                     SecondaryAction(
                         text = "Ver historial",
@@ -276,18 +356,35 @@ fun InventoryScreen(
                     )
                 }
             }
+            InventoryStep.SELECT_DEPOSITO -> {
+                if (state.scope != InventoryScope.ARTICULO) {
+                    {
+                        SecondaryAction(
+                            text = "Ver historial",
+                            onClick = onOpenHistory,
+                            enabled = !state.loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else {
+                    null
+                }
+            }
             else -> null
         },
     ) {
-        state.statusMessage?.let { msg ->
-            Text(
-                text = msg,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        state.statusMessage?.takeIf { state.step != InventoryStep.SCANNING || !state.articuloUbicacionMode }?.let { msg ->
+            MessageBanner(
+                message = msg,
+                tone = if (msg.contains("error", ignoreCase = true) ||
+                    msg.contains("No se pudo", ignoreCase = true)
+                ) {
+                    BannerTone.Warn
+                } else {
+                    BannerTone.Info
+                },
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
 
         state.error?.let {
@@ -300,33 +397,180 @@ fun InventoryScreen(
             Spacer(modifier = Modifier.height(6.dp))
         }
 
-        when (state.step) {
-            InventoryStep.SELECT_DEPOSITO -> SelectDepositoStep(
-                depositos = state.depositos,
-                openCountByDeposito = state.openCountByDeposito,
-                loading = state.loading,
-                onSelect = onSelectDeposito,
+        AnimatedContent(
+            targetState = state.step,
+            transitionSpec = {
+                (fadeIn() + slideInHorizontally { it / 8 }) togetherWith
+                    (fadeOut() + slideOutHorizontally { -it / 8 })
+            },
+            label = "inventoryStep",
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) { step ->
+            when (step) {
+                InventoryStep.CHOICE_SCOPE -> ChoiceScopeStep(onSelect = onSelectScope)
+                InventoryStep.SELECT_ARTICULO -> SelectArticuloStep(
+                    query = state.articuloQuery,
+                    results = state.articuloResults,
+                    searching = state.searchingArticulos,
+                    loading = state.loading,
+                    onQueryChange = onArticuloQueryChange,
+                    onSelect = onSelectArticulo,
+                )
+                InventoryStep.SELECT_UBICACION -> SelectUbicacionStockStep(
+                    slots = state.ubicacionesStock,
+                    loading = state.loading,
+                    onSelect = onSelectUbicacionStock,
+                )
+                InventoryStep.SELECT_DEPOSITO -> SelectDepositoStep(
+                    depositos = state.depositos,
+                    openCountByDeposito = state.openCountByDeposito,
+                    loading = state.loading,
+                    onSelect = onSelectDeposito,
+                )
+                InventoryStep.CHOICE_SESSION -> ChoiceSessionStep(
+                    sessions = state.openSessions,
+                    selectionMode = selectionMode,
+                    selectedIds = state.selectedOpenIds,
+                    onEnterSelection = onEnterOpenSelection,
+                    onToggle = onToggleOpenSelected,
+                    onSelectAll = onSelectAllOpen,
+                    onClearSelection = onClearOpenSelection,
+                    onResume = onResume,
+                )
+                InventoryStep.SCANNING -> ScanningStep(state = state)
+                InventoryStep.RESULT -> ResultStep(
+                    state = state,
+                    onFilter = onReportFilter,
+                )
+                InventoryStep.HISTORY -> HistoryStep(
+                    sessions = state.historySessions,
+                    depositos = state.depositos,
+                    loading = state.loading,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChoiceScopeStep(onSelect: (InventoryScope) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "¿Qué querés inventariar?",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ListRow(
+            title = "Depósito completo",
+            subtitle = "Cuenta todos los artículos del depósito",
+            onClick = { onSelect(InventoryScope.DEPOSITO) },
+        )
+        ListRow(
+            title = "Un artículo",
+            subtitle = "Inventariá un SKU en una ubicación",
+            onClick = { onSelect(InventoryScope.ARTICULO) },
+        )
+    }
+}
+
+@Composable
+private fun SelectUbicacionStockStep(
+    slots: List<ActivoUbicacionStockDto>,
+    loading: Boolean,
+    onSelect: (ActivoUbicacionStockDto) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Elegí la ubicación a inventariar",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        if (slots.isEmpty() && !loading) {
+            Text(
+                text = "Sin ubicaciones con stock.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            InventoryStep.CHOICE_SESSION -> ChoiceSessionStep(
-                sessions = state.openSessions,
-                selectionMode = selectionMode,
-                selectedIds = state.selectedOpenIds,
-                onEnterSelection = onEnterOpenSelection,
-                onToggle = onToggleOpenSelected,
-                onSelectAll = onSelectAllOpen,
-                onClearSelection = onClearOpenSelection,
-                onResume = onResume,
-            )
-            InventoryStep.SCANNING -> ScanningStep(state = state)
-            InventoryStep.RESULT -> ResultStep(
-                state = state,
-                onFilter = onReportFilter,
-            )
-            InventoryStep.HISTORY -> HistoryStep(
-                sessions = state.historySessions,
-                depositos = state.depositos,
-                loading = state.loading,
-            )
+        }
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items(slots, key = { it.ubicacionId }) { slot ->
+                ListRow(
+                    title = slot.ubicacionCodigo,
+                    subtitle = "${slot.depositoNombre} · ${slot.sectorNombre} · ${slot.cantidad} u.",
+                    trailing = slot.cantidad.toString(),
+                    onClick = { onSelect(slot) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectArticuloStep(
+    query: String,
+    results: List<ActivoDto>,
+    searching: Boolean,
+    loading: Boolean,
+    onQueryChange: (String) -> Unit,
+    onSelect: (ActivoDto) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Buscá por SKU o descripción",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Artículo") },
+            placeholder = { Text("Ej. SKU-001") },
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        when {
+            searching -> {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
+            query.trim().length < 2 -> {
+                Text(
+                    text = "Escribí al menos 2 caracteres.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            results.isEmpty() && !loading -> {
+                Text(
+                    text = "Sin resultados.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(results, key = { it.id }) { activo ->
+                        ListRow(
+                            title = activo.numeroPatrimonial,
+                            subtitle = activo.descripcion,
+                            onClick = { onSelect(activo) },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -338,36 +582,38 @@ private fun SelectDepositoStep(
     loading: Boolean,
     onSelect: (DepositoDto) -> Unit,
 ) {
-    Text(
-        text = "Elegí el depósito a contar",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(6.dp))
-    if (depositos.isEmpty() && !loading) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "No hay depósitos activos.",
+            text = "Elegí el depósito a contar",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(depositos, key = { it.id }) { deposito ->
-            val openCount = openCountByDeposito[deposito.id] ?: 0
-            ListRow(
-                title = deposito.nombre,
-                subtitle = when {
-                    openCount == 1 -> "1 inventario en curso"
-                    openCount > 1 -> "$openCount inventarios en curso"
-                    else -> deposito.direccion?.takeIf { it.isNotBlank() } ?: "Tocá para continuar"
-                },
-                trailing = if (openCount > 0) openCount.toString() else null,
-                trailingColor = if (openCount > 0) OpenBadgeYellow else null,
-                onClick = { onSelect(deposito) },
+        Spacer(modifier = Modifier.height(6.dp))
+        if (depositos.isEmpty() && !loading) {
+            Text(
+                text = "No hay depósitos activos.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items(depositos, key = { it.id }) { deposito ->
+                val openCount = openCountByDeposito[deposito.id] ?: 0
+                ListRow(
+                    title = deposito.nombre,
+                    subtitle = when {
+                        openCount == 1 -> "1 inventario en curso"
+                        openCount > 1 -> "$openCount inventarios en curso"
+                        else -> deposito.direccion?.takeIf { it.isNotBlank() } ?: "Tocá para continuar"
+                    },
+                    trailing = if (openCount > 0) openCount.toString() else null,
+                    trailingColor = if (openCount > 0) OpenBadgeYellow else null,
+                    onClick = { onSelect(deposito) },
+                )
+            }
         }
     }
 }
@@ -384,108 +630,109 @@ private fun ChoiceSessionStep(
     onClearSelection: () -> Unit,
     onResume: (InventarioListItemDto) -> Unit,
 ) {
-    Text(
-        text = if (selectionMode) {
-            "Marcá inventarios para cancelar"
-        } else {
-            "Tocá para retomar · mantené para seleccionar"
-        },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(8.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = if (selectionMode) {
+                "Marcá inventarios para cancelar"
+            } else {
+                "Tocá para retomar · mantené para seleccionar"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
-    if (selectionMode && sessions.isNotEmpty()) {
-        val allSelected = selectedIds.size == sessions.size && sessions.isNotEmpty()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                .clickable {
-                    if (allSelected) onClearSelection() else onSelectAll()
-                }
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = allSelected,
-                onCheckedChange = { checked ->
-                    if (checked) onSelectAll() else onClearSelection()
-                },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = MaterialTheme.colorScheme.error,
-                ),
-            )
-            Text(
-                text = if (allSelected) "Deseleccionar todos" else "Seleccionar todos",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(sessions, key = { it.id }) { session ->
-            val selected = session.id in selectedIds
+        if (selectionMode && sessions.isNotEmpty()) {
+            val allSelected = selectedIds.size == sessions.size && sessions.isNotEmpty()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        if (selected) Color(0xFFFFF7ED) else MaterialTheme.colorScheme.surface,
-                        RoundedCornerShape(6.dp),
-                    )
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
-                    .combinedClickable(
-                        onClick = {
-                            if (selectionMode) {
-                                onToggle(session.id)
-                            } else {
-                                onResume(session)
-                            }
-                        },
-                        onLongClick = {
-                            onEnterSelection(session.id)
-                        },
-                    )
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                    .clickable {
+                        if (allSelected) onClearSelection() else onSelectAll()
+                    }
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (selectionMode) {
-                    Checkbox(
-                        checked = selected,
-                        onCheckedChange = { onToggle(session.id) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.error,
-                        ),
-                    )
-                }
-                Column(
+                Checkbox(
+                    checked = allSelected,
+                    onCheckedChange = { checked ->
+                        if (checked) onSelectAll() else onClearSelection()
+                    },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.error,
+                    ),
+                )
+                Text(
+                    text = if (allSelected) "Deseleccionar todos" else "Seleccionar todos",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items(sessions, key = { it.id }) { session ->
+                val selected = session.id in selectedIds
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 8.dp, horizontal = 8.dp),
-                ) {
-                    Text(
-                        text = "${session.totalEncontrado} / ${session.totalEsperado} leídos",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "Iniciado ${formatIniciado(session.iniciadoEn)}" +
-                            if (session.totalSobrante > 0) " · +${session.totalSobrante} sobra" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (!selectionMode) {
-                        Text(
-                            text = "Retomar →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                        .fillMaxWidth()
+                        .background(
+                            if (selected) Color(0xFFFFF7ED) else MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(6.dp),
                         )
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                        .combinedClickable(
+                            onClick = {
+                                if (selectionMode) {
+                                    onToggle(session.id)
+                                } else {
+                                    onResume(session)
+                                }
+                            },
+                            onLongClick = {
+                                onEnterSelection(session.id)
+                            },
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (selectionMode) {
+                        Checkbox(
+                            checked = selected,
+                            onCheckedChange = { onToggle(session.id) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = MaterialTheme.colorScheme.error,
+                            ),
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 8.dp, horizontal = 8.dp),
+                    ) {
+                        Text(
+                            text = "${session.totalEncontrado} / ${session.totalEsperado} leídos",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Iniciado ${formatIniciado(session.iniciadoEn)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!selectionMode) {
+                            Text(
+                                text = "Retomar →",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }
@@ -500,79 +747,64 @@ private fun HistoryStep(
     loading: Boolean,
 ) {
     val nombreById = remember(depositos) { depositos.associate { it.id to it.nombre } }
-    Text(
-        text = "Inventarios cerrados recientemente",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(8.dp))
-    if (sessions.isEmpty() && !loading) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Todavía no hay inventarios finalizados.",
+            text = "Inventarios cerrados recientemente",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(sessions, key = { it.id }) { session ->
-            val kpis = sessionKpis(session)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
-                    .padding(10.dp),
-            ) {
-                Text(
-                    text = nombreById[session.depositoId] ?: "Depósito",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "Cerrado ${formatIniciado(session.cerradoEn ?: session.iniciadoEn)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = when {
-                        session.auditado -> "Auditado en la web"
-                        session.tieneDiscrepancias -> "Pendiente de auditar · con diferencias"
-                        else -> "Pendiente de auditar"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = when {
-                        session.auditado -> WmsOk
-                        session.tieneDiscrepancias -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                MetricRow(
-                    items = listOf(
-                        "Antes" to kpis.stockAntes.toString(),
-                        "Leídos" to kpis.leidos.toString(),
-                        "Desp." to kpis.stockDespues.toString(),
-                        "Dif." to formatDiff(kpis.diferencia),
-                    ),
-                )
-                if (session.totalExceso > 0 || session.totalAjeno > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        if (sessions.isEmpty() && !loading) {
+            Text(
+                text = "Todavía no hay inventarios finalizados.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(sessions, key = { it.id }) { session ->
+                val kpis = sessionKpis(session)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                        .padding(10.dp),
+                ) {
                     Text(
-                        text = listOfNotNull(
-                            "${session.totalExceso} de más del depósito"
-                                .takeIf { session.totalExceso > 0 },
-                            "${session.totalAjeno} ajena${if (session.totalAjeno == 1) "" else "s"}"
-                                .takeIf { session.totalAjeno > 0 },
-                        ).joinToString(" · "),
+                        text = nombreById[session.depositoId] ?: "Depósito",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Cerrado ${formatIniciado(session.cerradoEn ?: session.iniciadoEn)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (session.totalExceso > 0) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            WmsWarn
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = when {
+                            session.auditado -> "Auditado en la web"
+                            session.tieneDiscrepancias -> "Pendiente de auditar · con diferencias"
+                            else -> "Pendiente de auditar"
                         },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when {
+                            session.auditado -> WmsOk
+                            session.tieneDiscrepancias -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    MetricRow(
+                        items = listOf(
+                            "Antes" to kpis.stockAntes.toString(),
+                            "Leídos" to kpis.leidos.toString(),
+                            "Desp." to kpis.stockDespues.toString(),
+                            "Dif." to formatDiff(kpis.diferencia),
+                        ),
                     )
                 }
             }
@@ -616,34 +848,60 @@ private fun formatDiff(n: Int): String = if (n > 0) "+$n" else "$n"
 
 @Composable
 private fun ScanningStep(state: InventoryUiState) {
-    val compare = state.compare
-    if (compare != null) {
-        MetricRow(
-            items = listOf(
-                "Stock" to compare.esperado.toString(),
-                "Leído" to compare.encontrado.toString(),
-                "Faltan" to compare.faltante.toString(),
-            ),
-        )
-        if (compare.sobrante > 0) {
-            Spacer(modifier = Modifier.height(2.dp))
+    if (state.articuloUbicacionMode) {
+        val leidos = state.uniqueReads
+        val stock = state.compare?.esperado
+            ?: state.inventario?.totalEsperado
+            ?: state.selectedUbicacionStock?.cantidad
+            ?: 0
+        val tone = when {
+            leidos < stock -> MaterialTheme.colorScheme.error
+            leidos > stock -> WmsExcess
+            else -> WmsOk
+        }
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                text = "+${compare.sobrante} sobrante${if (compare.sobrante == 1) "" else "s"}",
-                style = MaterialTheme.typography.labelSmall,
-                color = WmsWarn,
+                text = "$leidos/$stock",
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Bold,
+                color = tone,
             )
         }
+        return
     }
-    Spacer(modifier = Modifier.height(6.dp))
-    Text(
-        text = "${state.articleCounts.size} artículos · ${state.uniqueReads} etiquetas",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(4.dp))
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(state.articleCounts, key = { it.key }) { row ->
-            ArticleCountRow(row)
+    Column(modifier = Modifier.fillMaxSize()) {
+        val compare = state.compare
+            if (compare != null) {
+            MetricRow(
+                items = listOf(
+                    "Stock" to compare.esperado.toString(),
+                    "Leído" to compare.encontrado.toString(),
+                    "Faltan" to compare.faltante.toString(),
+                ),
+            )
+            if (state.sinEpcExpected > 0) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${state.sinEpcExpected} sin etiqueta RFID: el cierre las marca faltantes",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "${state.articleCounts.size} artículos · ${state.uniqueReads} etiquetas",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(state.articleCounts, key = { it.key }) { row ->
+                ArticleCountRow(row)
+            }
         }
     }
 }
@@ -653,155 +911,124 @@ private fun ResultStep(
     state: InventoryUiState,
     onFilter: (ReportFilter) -> Unit,
 ) {
-    val report = state.report
-    if (report != null) {
-        val kpis = reportKpis(report)
+    Column(modifier = Modifier.fillMaxSize()) {
+        val report = state.report
+        if (report != null) {
+            val kpis = reportKpis(report)
+            Text(
+                text = when {
+                    report.faltante > 0 -> "Inventario cerrado con faltantes"
+                    else -> "Inventario cerrado sin diferencias"
+                },
+                style = MaterialTheme.typography.titleSmall,
+                color = when {
+                    report.faltante > 0 -> MaterialTheme.colorScheme.error
+                    else -> WmsOk
+                },
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "Coincidencia ${"%.0f".format(report.coincidenciaPct)}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            MetricRow(
+                items = listOf(
+                    "Antes" to kpis.stockAntes.toString(),
+                    "Leídos" to kpis.leidos.toString(),
+                    "Desp." to kpis.stockDespues.toString(),
+                    "Dif." to formatDiff(kpis.diferencia),
+                ),
+            )
+            if (report.faltante > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${report.faltante} faltante${if (report.faltante == 1) "" else "s"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Detalle por artículo",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FilterChip(
+                    text = "Faltan",
+                    selected = state.reportFilter == ReportFilter.FALTANTES,
+                    onClick = { onFilter(ReportFilter.FALTANTES) },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    text = "OK",
+                    selected = state.reportFilter == ReportFilter.ENCONTRADOS,
+                    onClick = { onFilter(ReportFilter.ENCONTRADOS) },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    text = "Todos",
+                    selected = state.reportFilter == ReportFilter.TODOS,
+                    onClick = { onFilter(ReportFilter.TODOS) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val articles = InventoryArticleAggregator.filter(state.articleCounts, state.reportFilter)
         Text(
-            text = when {
-                report.faltante > 0 -> "Inventario cerrado con faltantes"
-                report.exceso > 0 -> "Inventario cerrado con excesos"
-                report.ajeno > 0 -> "Inventario cerrado · etiquetas ajenas"
-                else -> "Inventario cerrado sin diferencias"
-            },
-            style = MaterialTheme.typography.titleSmall,
-            color = when {
-                report.faltante > 0 -> MaterialTheme.colorScheme.error
-                report.exceso > 0 -> MaterialTheme.colorScheme.error
-                report.ajeno > 0 -> WmsWarn
-                else -> WmsOk
-            },
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = "Coincidencia ${"%.0f".format(report.coincidenciaPct)}%",
+            text = "${articles.size} artículo${if (articles.size == 1) "" else "s"}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        MetricRow(
-            items = listOf(
-                "Antes" to kpis.stockAntes.toString(),
-                "Leídos" to kpis.leidos.toString(),
-                "Desp." to kpis.stockDespues.toString(),
-                "Dif." to formatDiff(kpis.diferencia),
-            ),
-        )
-        if (report.faltante > 0 || report.sobrante > 0) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = listOfNotNull(
-                    "${report.faltante} faltante${if (report.faltante == 1) "" else "s"}"
-                        .takeIf { report.faltante > 0 },
-                    ("${report.exceso} de más del depósito " +
-                        "(no incorporad${if (report.exceso == 1) "a" else "as"})")
-                        .takeIf { report.exceso > 0 },
-                    ("${report.ajeno} etiqueta${if (report.ajeno == 1) "" else "s"} " +
-                        "ajena${if (report.ajeno == 1) "" else "s"} al depósito")
-                        .takeIf { report.ajeno > 0 },
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (report.faltante > 0 || report.exceso > 0) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    WmsWarn
-                },
-            )
+        Spacer(modifier = Modifier.height(2.dp))
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(articles, key = { it.key }) { row ->
+                ArticleCountRow(row)
+            }
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Detalle por artículo",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            FilterChipBtn("Falt", ReportFilter.FALTANTES, state.reportFilter, onFilter, Modifier.weight(1f))
-            FilterChipBtn("Sobr", ReportFilter.SOBRANTES, state.reportFilter, onFilter, Modifier.weight(1f))
-            FilterChipBtn("OK", ReportFilter.ENCONTRADOS, state.reportFilter, onFilter, Modifier.weight(1f))
-            FilterChipBtn("Todos", ReportFilter.TODOS, state.reportFilter, onFilter, Modifier.weight(1f))
-        }
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    val articles = InventoryArticleAggregator.filter(state.articleCounts, state.reportFilter)
-    Text(
-        text = "${articles.size} artículo${if (articles.size == 1) "" else "s"}",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(2.dp))
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(articles, key = { it.key }) { row ->
-            ArticleCountRow(row)
-        }
-    }
-}
-
-@Composable
-private fun FilterChipBtn(
-    label: String,
-    filter: ReportFilter,
-    selected: ReportFilter,
-    onFilter: (ReportFilter) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (selected == filter) {
-        PrimaryAction(text = label, onClick = { onFilter(filter) }, modifier = modifier)
-    } else {
-        SecondaryAction(text = label, onClick = { onFilter(filter) }, modifier = modifier)
     }
 }
 
 @Composable
 private fun ArticleCountRow(row: ArticleCount) {
-    val statusLabel = when (row.status) {
-        ArticleStatus.OK -> "OK"
-        ArticleStatus.PARCIAL -> "PARCIAL"
-        ArticleStatus.FALTA -> "FALTA"
-        ArticleStatus.SOBRA -> "SOBRA"
-    }
-    val statusColor = when (row.status) {
+    val countColor = when (row.status) {
         ArticleStatus.OK -> WmsOk
-        ArticleStatus.PARCIAL, ArticleStatus.SOBRA -> WmsWarn
+        ArticleStatus.PARCIAL -> WmsWarn
         ArticleStatus.FALTA -> MaterialTheme.colorScheme.error
+        ArticleStatus.EXCESO -> WmsExcess
+        ArticleStatus.SOBRA -> WmsExcess
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 5.dp),
+            .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = row.articulo,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = buildString {
-                    append(statusLabel)
-                    row.descripcion?.takeIf { it.isNotBlank() }?.let {
-                        append(" · ")
-                        append(it)
-                    }
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = statusColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            text = row.descripcion?.takeIf { it.isNotBlank() } ?: row.articulo,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+        )
         Text(
             text = row.cantidadLabel,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
+            color = countColor,
         )
     }
 }

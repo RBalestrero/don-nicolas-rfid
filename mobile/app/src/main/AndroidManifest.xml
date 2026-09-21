@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Serial de fábrica Zebra vía OEMInfo (requiere Access Manager / StageNow). -->
+    <uses-permission android:name="com.zebra.provider.READ" />
+
+    <queries>
+        <provider android:authorities="oem_info" />
+        <package android:name="com.zebra.zebracontentprovider" />
+    </queries>
 
     <application
         android:name=".DonNicolasApp"

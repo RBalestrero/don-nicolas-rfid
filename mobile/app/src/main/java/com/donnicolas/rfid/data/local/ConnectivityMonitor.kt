@@ -10,14 +10,14 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConnectivityMonitor(
     context: Context,
-    apiHost: String = BuildConfig.API_HOST,
+    private val apiHostProvider: () -> String = { BuildConfig.API_HOST },
 ) {
     private val cm =
         context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
 
     /** La API vive en el propio dispositivo (USB + `adb reverse`): no necesita red. */
-    private val apiOnLoopback = apiHost in LOOPBACK_HOSTS
+    private fun apiOnLoopback(): Boolean = apiHostProvider() in LOOPBACK_HOSTS
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -61,7 +61,7 @@ class ConnectivityMonitor(
             }
         }
         // Sin red activa las llamadas a loopback siguen siendo válidas (USB + adb reverse).
-        return apiOnLoopback
+        return apiOnLoopback()
     }
 
     fun addListener(listener: (Boolean) -> Unit) {

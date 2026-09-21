@@ -3,6 +3,7 @@ package com.donnicolas.rfid.data.api
 import com.donnicolas.rfid.BuildConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -13,12 +14,25 @@ import java.util.concurrent.TimeUnit
 class ApiClient(
     baseUrl: String,
     tokenProvider: () -> String?,
+    /** URL viva (Wi‑Fi LAN). Permite cambiar el host sin reinstalar la APK. */
+    urlProvider: () -> String = { baseUrl },
     /** Se invoca cuando la API responde 401 fuera del login (token vencido). */
     onUnauthorized: () -> Unit = {},
 ) {
     private val moshi: Moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
+
+    private val rewriteHostInterceptor = Interceptor { chain ->
+        val target = urlProvider().toHttpUrlOrNull()
+            ?: return@Interceptor chain.proceed(chain.request())
+        val url = chain.request().url.newBuilder()
+            .scheme(target.scheme)
+            .host(target.host)
+            .port(target.port)
+            .build()
+        chain.proceed(chain.request().newBuilder().url(url).build())
+    }
 
     private val authInterceptor = Interceptor { chain ->
         val token = tokenProvider()
@@ -52,6 +66,8 @@ class ApiClient(
     private val okHttp: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .addInterceptor(rewriteHostInterceptor)
         .addInterceptor(authInterceptor)
         .addInterceptor(sessionExpiryInterceptor)
         .addInterceptor(
@@ -71,4 +87,5 @@ class ApiClient(
     val warehouseApi: WarehouseApi = retrofit.create(WarehouseApi::class.java)
     val inventoryApi: InventoryApi = retrofit.create(InventoryApi::class.java)
     val assetsApi: AssetsApi = retrofit.create(AssetsApi::class.java)
+    val devicesApi: DevicesApi = retrofit.create(DevicesApi::class.java)
 }

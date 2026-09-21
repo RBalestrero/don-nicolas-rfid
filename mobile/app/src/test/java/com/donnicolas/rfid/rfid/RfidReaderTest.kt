@@ -102,6 +102,24 @@ class RfidInventorySessionTest {
     }
 
     @Test
+    fun `clear vacia el lote para reintentar`() {
+        val session = RfidInventorySession()
+        session.start()
+        session.ingest(RfidTag(epc = epc1, rssi = -50))
+        session.ingest(RfidTag(epc = epc2, rssi = -55))
+        assertEquals(2, session.epcSet().size)
+
+        session.clear()
+
+        assertEquals(0, session.epcSet().size)
+        assertEquals(0, session.snapshot().uniqueTags)
+        assertEquals(0, session.snapshot().totalReads)
+        session.start()
+        session.ingest(RfidTag(epc = epc1, rssi = -48))
+        assertEquals(1, session.epcSet().size)
+    }
+
+    @Test
     fun `requireMinimumUnique reporta error tipado`() {
         val session = RfidInventorySession()
         session.start()
@@ -109,6 +127,45 @@ class RfidInventorySessionTest {
         val error = session.snapshot().requireMinimumUnique(10)
         assertNotNull(error)
         assertEquals("RFID_INVENTORY_BELOW_TARGET", error!!.code)
+    }
+}
+
+class SimulatedLocateTest {
+    @Test
+    fun `startLocate emite proximidad creciente del EPC armado`() = runBlocking {
+        val reader = SimulatedRfidReader()
+        reader.connect()
+        reader.armLocateTarget("D100000000010000000001A1")
+
+        val collector = launch {
+            val update = withTimeout(3_000) {
+                reader.events().filterIsInstance<RfidEvent.LocateUpdate>().first()
+            }
+            // Puede ser la muestra u otra unidad del mismo ART (serial distinto)
+            assertEquals(1L, EpcScheme.decodeArticuloCode(update.epc))
+            assertTrue(update.relativeDistance in 1..100)
+            assertTrue(update.rssi < 0)
+        }
+        delay(20)
+        reader.startLocate()
+        collector.join()
+        reader.stopLocate()
+        reader.clearLocateTarget()
+    }
+
+    @Test
+    fun `startLocate sin target emite RFID_LOCATE_NO_TARGET`() = runBlocking {
+        val reader = SimulatedRfidReader()
+        reader.connect()
+        val collector = launch {
+            val event = withTimeout(2_000) {
+                reader.events().filterIsInstance<RfidEvent.Failure>().first()
+            }
+            assertEquals("RFID_LOCATE_NO_TARGET", event.error.code)
+        }
+        delay(20)
+        reader.startLocate()
+        collector.join()
     }
 }
 

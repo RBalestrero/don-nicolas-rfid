@@ -17,4 +17,5 @@ data class UserResponseDto(
     val email: String,
     val nombre: String,
     val rol: String,
+    val permisos: List<String> = emptyList(),
 )

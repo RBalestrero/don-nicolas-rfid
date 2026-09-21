@@ -38,8 +38,16 @@ class SimulatedRfidReader(
     private var locateJob: Job? = null
     private var triggerMode: RfidTriggerMode = RfidTriggerMode.INVENTORY
     private var locateTargetEpc: String? = null
+    private var locateArticuloCode: Long? = null
+    private var locatePrefix: String? = null
+    private var inventorySkuPrefix: String? = null
     private val catalog: List<String> = (1..uniqueTagTarget).map { index ->
-        "E2801160%016X".format(index.toLong())
+        // D1 + art(10) + ser(10) + A1 — incluye algunos ajenos para probar el filtro
+        if (index % 17 == 0) {
+            "E2801160%016X".format(index.toLong())
+        } else {
+            "D1%010X%010XA1".format(index.toLong() % 1_000_000, index.toLong())
+        }
     }
 
     override fun events(): Flow<RfidEvent> = eventsFlow.asSharedFlow()
@@ -65,6 +73,9 @@ class SimulatedRfidReader(
         stopLocateInternal()
         mutex.withLock {
             locateTargetEpc = null
+            locateArticuloCode = null
+            locatePrefix = null
+            inventorySkuPrefix = null
             triggerMode = RfidTriggerMode.INVENTORY
             setState(RfidReaderState.DISCONNECTED)
         }
@@ -119,6 +130,29 @@ class SimulatedRfidReader(
         }
     }
 
+    override suspend fun armSkuInventoryFilter(articuloPrefix: String) {
+        val pattern = LocateProximity.normalizeEpc(articuloPrefix)
+            ?: throw IllegalArgumentException("Prefijo vacío")
+        require(pattern.length == EpcScheme.ARTICULO_PREFIX_HEX_LEN) {
+            "Prefijo debe tener ${EpcScheme.ARTICULO_PREFIX_HEX_LEN} hex"
+        }
+        stopInventoryInternal()
+        stopLocateInternal()
+        mutex.withLock {
+            inventorySkuPrefix = pattern
+            triggerMode = RfidTriggerMode.INVENTORY
+            if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
+                setState(RfidReaderState.READY)
+            }
+        }
+    }
+
+    override suspend fun clearSkuInventoryFilter() {
+        mutex.withLock {
+            inventorySkuPrefix = null
+        }
+    }
+
     override suspend fun setTriggerMode(mode: RfidTriggerMode) {
         stopInventoryInternal()
         stopLocateInternal()
@@ -126,6 +160,8 @@ class SimulatedRfidReader(
             triggerMode = mode
             if (mode == RfidTriggerMode.INVENTORY) {
                 locateTargetEpc = null
+                locateArticuloCode = null
+                locatePrefix = null
             }
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -134,12 +170,18 @@ class SimulatedRfidReader(
     }
 
     override suspend fun armLocateTarget(epc: String) {
-        val normalized = epc.trim().uppercase()
-        require(normalized.isNotEmpty())
+        val normalized = LocateProximity.normalizeEpc(epc)
+            ?: throw IllegalArgumentException("EPC vacío")
+        val artCode = EpcScheme.decodeArticuloCode(normalized)
+            ?: throw IllegalArgumentException("EPC no es D1 del sistema")
+        val prefix = EpcScheme.articuloPrefixHex(normalized)
+            ?: throw IllegalArgumentException("Sin prefijo de artículo")
         stopInventoryInternal()
         stopLocateInternal()
         mutex.withLock {
             locateTargetEpc = normalized
+            locateArticuloCode = artCode
+            locatePrefix = prefix
             triggerMode = RfidTriggerMode.LOCATE
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -151,6 +193,8 @@ class SimulatedRfidReader(
         stopLocateInternal()
         mutex.withLock {
             locateTargetEpc = null
+            locateArticuloCode = null
+            locatePrefix = null
             triggerMode = RfidTriggerMode.INVENTORY
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -159,7 +203,7 @@ class SimulatedRfidReader(
     }
 
     override suspend fun startLocate() {
-        val epc = mutex.withLock {
+        val sample = mutex.withLock {
             when (state) {
                 RfidReaderState.DISCONNECTED, RfidReaderState.ERROR -> {
                     emitFailure(
@@ -175,11 +219,11 @@ class SimulatedRfidReader(
                 else -> Unit
             }
             val target = locateTargetEpc
-            if (target.isNullOrBlank()) {
+            if (target.isNullOrBlank() || locateArticuloCode == null) {
                 emitFailure(
                     AppError(
                         code = "RFID_LOCATE_NO_TARGET",
-                        title = "Sin etiqueta a localizar",
+                        title = "Sin artículo a localizar",
                         detail = "armLocateTarget() primero.",
                     ),
                 )
@@ -188,14 +232,25 @@ class SimulatedRfidReader(
             setState(RfidReaderState.LOCATE_RUNNING)
             target
         }
+        val artCode = locateArticuloCode
+        // Simula dos unidades del mismo SKU (mismo ART, distinto serial) y emite la más cercana.
+        val sibling = EpcScheme.articuloPrefixHex(sample)?.let { prefix ->
+            prefix + "00000000FF" + EpcScheme.SYSTEM_SUFFIX
+        } ?: sample
         locateJob = scope.launch {
             var proximity = 5
             while (isActive) {
                 proximity = min(100, proximity + 3 + random.nextInt(8))
                 val rssi = -70 + (proximity * 45 / 100)
+                val hitEpc = if (artCode != null && LocateProximity.articuloMatches(artCode, sibling)) {
+                    // Alterna muestra / hermana; UI recibe la más fuerte del burst
+                    if (proximity % 2 == 0) sibling else sample
+                } else {
+                    sample
+                }
                 eventsFlow.emit(
                     RfidEvent.LocateUpdate(
-                        epc = epc,
+                        epc = hitEpc,
                         relativeDistance = proximity,
                         rssi = rssi,
                     ),
@@ -226,8 +281,19 @@ class SimulatedRfidReader(
 
     private fun buildBurst(): List<RfidTag> {
         val now = System.currentTimeMillis()
+        val prefix = inventorySkuPrefix
+        val pool = if (!prefix.isNullOrBlank()) {
+            catalog.filter { LocateProximity.articuloMatchesPrefix(prefix, it) }.ifEmpty {
+                // Genera tags del SKU pedido si el catálogo no tiene.
+                (1..40).map { i ->
+                    prefix + "%010X".format(i.toLong()) + EpcScheme.SYSTEM_SUFFIX
+                }
+            }
+        } else {
+            catalog
+        }
         return List(tagsPerBurst) {
-            val epc = catalog[random.nextInt(catalog.size)]
+            val epc = pool[random.nextInt(pool.size)]
             RfidTag(
                 epc = epc,
                 rssi = -45 - random.nextInt(35),

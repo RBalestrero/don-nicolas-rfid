@@ -5,7 +5,11 @@ data class User(
     val email: String,
     val nombre: String,
     val rol: String,
-)
+    /** Códigos de permiso del rol (ej. `assets.write`). Vacío si el backend no los envió. */
+    val permisos: List<String> = emptyList(),
+) {
+    fun canWriteAssets(): Boolean = permisos.contains("assets.write")
+}
 
 /**
  * Error de aplicación con código estable y descripción accionable.

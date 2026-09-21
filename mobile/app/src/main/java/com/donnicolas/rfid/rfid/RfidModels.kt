@@ -23,7 +23,7 @@ enum class RfidReaderState {
 enum class RfidTriggerMode {
     /** Inventario masivo (comportamiento por defecto). */
     INVENTORY,
-    /** Localización de un EPC armado (TagLocationing). */
+    /** Localización de un tipo de artículo (prefijo D1+ART). */
     LOCATE,
 }
 
@@ -48,10 +48,19 @@ interface RfidReader {
     suspend fun startInventory()
     suspend fun stopInventory()
 
+    /**
+     * Arma PreFilter Gen2 por prefijo de artículo (`D1`+ART, 12 hex).
+     * El próximo [startInventory] (UI o gatillo) solo reporta ese SKU.
+     */
+    suspend fun armSkuInventoryFilter(articuloPrefix: String)
+
+    /** Quita el PreFilter de inventario por SKU (vuelve a inventario abierto). */
+    suspend fun clearSkuInventoryFilter()
+
     /** Cambia el comportamiento del gatillo. Al salir de LOCATE limpia el target. */
     suspend fun setTriggerMode(mode: RfidTriggerMode)
 
-    /** Arma el EPC a localizar (modo LOCATE). El gatillo inicia/detiene TagLocationing. */
+    /** Arma localización por tipo de artículo a partir de un EPC D1 de muestra. */
     suspend fun armLocateTarget(epc: String)
 
     suspend fun clearLocateTarget()

@@ -2,11 +2,13 @@ package com.donnicolas.rfid.data.repository
 
 import com.donnicolas.rfid.BuildConfig
 import com.donnicolas.rfid.data.api.ApiErrorMapper
+import com.donnicolas.rfid.data.api.NetworkErrors
 import com.donnicolas.rfid.data.api.DepositoDto
 import com.donnicolas.rfid.data.api.DetalleInventarioDto
 import com.donnicolas.rfid.data.api.InventarioCreateDto
 import com.donnicolas.rfid.data.api.InventarioDto
 import com.donnicolas.rfid.data.api.InventarioLecturasDto
+import com.donnicolas.rfid.data.api.InventarioListItemDto
 import com.donnicolas.rfid.data.api.InventarioReporteDto
 import com.donnicolas.rfid.data.api.InventarioResumenDto
 import com.donnicolas.rfid.data.api.InventoryApi
@@ -23,6 +25,7 @@ import com.donnicolas.rfid.data.sync.SyncManager
 import com.donnicolas.rfid.inventory.InventoryComparer
 import com.donnicolas.rfid.inventory.InventoryReport
 import com.donnicolas.rfid.inventory.InventoryReportBuilder
+import com.donnicolas.rfid.rfid.EpcScheme
 import java.util.UUID
 
 sealed class InventoryResult<out T> {
@@ -94,16 +97,28 @@ class InventoryRepository(
         }
     }
 
-    suspend fun startInventario(deposito: DepositoDto): InventoryResult<InventarioStartResult> {
+    suspend fun startInventario(
+        deposito: DepositoDto,
+        activoId: String? = null,
+        ubicacionId: String? = null,
+        sectorId: String? = null,
+    ): InventoryResult<InventarioStartResult> {
         return try {
-            val inv = inventoryApi.create(InventarioCreateDto(depositoId = deposito.id))
+            val inv = inventoryApi.create(
+                InventarioCreateDto(
+                    depositoId = deposito.id,
+                    sectorId = sectorId,
+                    ubicacionId = ubicacionId,
+                    activoId = activoId,
+                ),
+            )
             val expected = inv.detalles.mapNotNull { it.epc?.trim()?.uppercase() }.filter { it.isNotEmpty() }
-            cacheExpected(deposito.id, expected)
+            if (activoId.isNullOrBlank()) {
+                cacheExpected(deposito.id, expected)
+            }
             InventoryResult.Ok(InventarioStartResult(inventario = inv, offline = false))
         } catch (e: Exception) {
-            val cached = cachedStockDao.get(deposito.id)
-            val expected = cached?.let { SyncJson.epcsFromJson(it.expectedEpcsJson) }.orEmpty()
-            if (expected.isEmpty() && !isNetworkError(e)) {
+            if (!NetworkErrors.isNetworkError(e)) {
                 return InventoryResult.Error(
                     ApiErrorMapper.fromThrowable(
                         throwable = e,
@@ -113,9 +128,19 @@ class InventoryRepository(
                     ),
                 )
             }
+            if (!activoId.isNullOrBlank()) {
+                return InventoryResult.Error(
+                    AppError(
+                        code = "OFFLINE_SKU_UNSUPPORTED",
+                        title = "Inventario por artículo requiere conexión",
+                        detail = "El conteo de un SKU puntual no está disponible offline. Conectate e intentá de nuevo.",
+                        cause = e.message,
+                    ),
+                )
+            }
+            val cached = cachedStockDao.get(deposito.id)
+            val expected = cached?.let { SyncJson.epcsFromJson(it.expectedEpcsJson) }.orEmpty()
             if (expected.isEmpty()) {
-                // Intentar stock remoto una vez más no tiene sentido si falló create por red.
-                // Pedimos cache previo: usuario debió abrir inventario online antes.
                 return InventoryResult.Error(
                     AppError(
                         code = "OFFLINE_NO_CACHE",
@@ -132,6 +157,98 @@ class InventoryRepository(
                     inventario = local,
                     offline = true,
                     message = "Modo offline: usando stock cacheado (${expected.size} EPCs esperados).",
+                ),
+            )
+        }
+    }
+
+    suspend fun listOpenInventarios(depositoId: String): InventoryResult<List<InventarioListItemDto>> {
+        return try {
+            InventoryResult.Ok(
+                inventoryApi.list(depositoId = depositoId, estado = "en_curso", limit = 20),
+            )
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "listar inventarios abiertos",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios",
+                ),
+            )
+        }
+    }
+
+    /** Historial de inventarios cerrados (consulta operador APK). */
+    suspend fun listHistorial(
+        depositoId: String? = null,
+        limit: Int = 40,
+    ): InventoryResult<List<InventarioListItemDto>> {
+        return try {
+            InventoryResult.Ok(
+                inventoryApi.list(depositoId = depositoId, estado = "cerrado", limit = limit),
+            )
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "listar historial de inventarios",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios",
+                ),
+            )
+        }
+    }
+
+    /** Conteo de inventarios `en_curso` por depósito (para badges en la lista). */
+    suspend fun countOpenByDeposito(): InventoryResult<Map<String, Int>> {
+        return try {
+            val items = inventoryApi.list(estado = "en_curso", limit = 200)
+            InventoryResult.Ok(items.groupingBy { it.depositoId }.eachCount())
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "contar inventarios abiertos",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios",
+                ),
+            )
+        }
+    }
+
+    suspend fun resumeInventario(inventarioId: String): InventoryResult<InventarioStartResult> {
+        return try {
+            val inv = inventoryApi.get(inventarioId)
+            if (inv.estado != "en_curso") {
+                return InventoryResult.Error(
+                    AppError(
+                        code = "INVENTORY_NOT_OPEN",
+                        title = "El inventario ya no está abierto",
+                        detail = "Estado actual: ${inv.estado}. Elegí otro o iniciá uno nuevo.",
+                    ),
+                )
+            }
+            val expected = inv.detalles
+                .filter { it.estado.equals("esperado", true) || it.estado.equals("encontrado", true) }
+                .mapNotNull { it.epc?.trim()?.uppercase() }
+                .filter { it.isNotEmpty() }
+            cacheExpected(inv.depositoId, expected)
+            val encontrados = inv.totalEncontrado
+            InventoryResult.Ok(
+                InventarioStartResult(
+                    inventario = inv,
+                    offline = false,
+                    message = "Retomado · $encontrados leídos de ${inv.totalEsperado}",
+                ),
+            )
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "retomar inventario",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios/$inventarioId",
                 ),
             )
         }
@@ -168,7 +285,8 @@ class InventoryRepository(
                     InventarioCloseResult(inventario = closed, report = report, queuedForSync = false),
                 )
             } catch (e: Exception) {
-                if (!isNetworkError(e)) {
+                val canQueue = NetworkErrors.isNetworkError(e) || NetworkErrors.isUnauthorized(e)
+                if (!canQueue) {
                     return InventoryResult.Error(
                         ApiErrorMapper.fromThrowable(
                             throwable = e,
@@ -178,7 +296,7 @@ class InventoryRepository(
                         ),
                     )
                 }
-                // cae a cola offline
+                // Red caída o token vencido: encolar el cierre del inventario ya creado.
             }
         }
 
@@ -190,7 +308,12 @@ class InventoryRepository(
                     detail = "Falta el depósito seleccionado para sincronizar offline.",
                 ),
             )
-        val localId = if (inventario.id.startsWith("offline-")) inventario.id else "offline-${UUID.randomUUID()}"
+        val hasRemote = !offlineSession && !inventario.id.startsWith("offline-")
+        val localId = if (hasRemote || inventario.id.startsWith("offline-")) {
+            inventario.id
+        } else {
+            "offline-${UUID.randomUUID()}"
+        }
         syncManager.enqueueInventorySync(
             InventorySyncPayload(
                 depositoId = dep.id,
@@ -198,6 +321,7 @@ class InventoryRepository(
                 expectedEpcs = expectedEpcs.toList(),
                 readEpcs = normalizedReads,
                 localSessionId = localId,
+                remoteInventarioId = if (hasRemote) inventario.id else null,
             ),
         )
         val compare = InventoryComparer.compare(expectedEpcs, normalizedReads.toSet())
@@ -211,6 +335,30 @@ class InventoryRepository(
                 message = "Inventario guardado offline. Se sincronizará al recuperar red.",
             ),
         )
+    }
+
+    suspend fun resetLecturas(inventarioId: String): InventoryResult<InventarioDto> {
+        if (inventarioId.startsWith("offline-")) {
+            return InventoryResult.Ok(
+                InventarioDto(
+                    id = inventarioId,
+                    depositoId = "",
+                    estado = "en_curso",
+                ),
+            )
+        }
+        return try {
+            InventoryResult.Ok(inventoryApi.resetearLecturas(inventarioId))
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "borrar lecturas de inventario",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios/$inventarioId/lecturas/reset",
+                ),
+            )
+        }
     }
 
     suspend fun syncLecturas(inventarioId: String, epcs: List<String>): InventoryResult<InventarioDto> {
@@ -237,6 +385,30 @@ class InventoryRepository(
                     operation = "sincronizar lecturas de inventario",
                     baseUrl = baseUrl,
                     endpoint = "inventarios/$inventarioId/lecturas",
+                ),
+            )
+        }
+    }
+
+    suspend fun cancelar(inventarioId: String): InventoryResult<InventarioDto> {
+        if (inventarioId.startsWith("offline-")) {
+            return InventoryResult.Ok(
+                InventarioDto(
+                    id = inventarioId,
+                    depositoId = "",
+                    estado = "cancelado",
+                ),
+            )
+        }
+        return try {
+            InventoryResult.Ok(inventoryApi.cancelar(inventarioId))
+        } catch (e: Exception) {
+            InventoryResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "cancelar inventario",
+                    baseUrl = baseUrl,
+                    endpoint = "inventarios/$inventarioId/cancelar",
                 ),
             )
         }
@@ -276,7 +448,7 @@ class InventoryRepository(
             DetalleInventarioDto(
                 id = "local-$index-$epc",
                 epc = epc,
-                numeroPatrimonial = null,
+                numeroPatrimonial = EpcScheme.suggestPatrimonial(epc),
                 descripcion = "Esperado (cache offline)",
                 estado = "esperado",
             )
@@ -306,34 +478,13 @@ class InventoryRepository(
     ): InventarioDto {
         val detalles = buildList {
             compare.epcsEncontrados.forEachIndexed { i, epc ->
-                add(
-                    DetalleInventarioDto(
-                        id = "ok-$i-$epc",
-                        epc = epc,
-                        estado = "encontrado",
-                        descripcion = "Encontrado",
-                    ),
-                )
+                add(offlineDetalle("ok-$i-$epc", epc, "encontrado", "Encontrado"))
             }
             compare.epcsFaltantes.forEachIndexed { i, epc ->
-                add(
-                    DetalleInventarioDto(
-                        id = "miss-$i-$epc",
-                        epc = epc,
-                        estado = "faltante",
-                        descripcion = "Faltante",
-                    ),
-                )
+                add(offlineDetalle("miss-$i-$epc", epc, "faltante", "Faltante"))
             }
             compare.epcsSobrantes.forEachIndexed { i, epc ->
-                add(
-                    DetalleInventarioDto(
-                        id = "extra-$i-$epc",
-                        epc = epc,
-                        estado = "sobrante",
-                        descripcion = "Sobrante",
-                    ),
-                )
+                add(offlineDetalle("extra-$i-$epc", epc, "sobrante", "Sobrante"))
             }
         }
         return InventarioDto(
@@ -354,15 +505,17 @@ class InventoryRepository(
         )
     }
 
-    private fun isNetworkError(e: Exception): Boolean {
-        val name = e.javaClass.simpleName
-        val msg = (e.message ?: "").lowercase()
-        return name.contains("UnknownHost", ignoreCase = true) ||
-            name.contains("Connect", ignoreCase = true) ||
-            name.contains("SocketTimeout", ignoreCase = true) ||
-            name.contains("IOException", ignoreCase = true) ||
-            msg.contains("failed to connect") ||
-            msg.contains("timeout") ||
-            msg.contains("unable to resolve")
-    }
+    private fun offlineDetalle(
+        id: String,
+        epc: String,
+        estado: String,
+        descripcion: String,
+    ) = DetalleInventarioDto(
+        id = id,
+        epc = epc,
+        numeroPatrimonial = EpcScheme.suggestPatrimonial(epc),
+        estado = estado,
+        descripcion = descripcion,
+    )
+
 }
