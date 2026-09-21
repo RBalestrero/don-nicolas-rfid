@@ -16,7 +16,7 @@ from app.modules.transfers.schemas import (
 )
 from app.modules.transfers.service import TransferService
 
-router = APIRouter(tags=["Transferencias"])
+router = APIRouter(tags=["Movimientos"])
 
 
 @router.post(
@@ -37,16 +37,20 @@ def list_transferencias(
     estado: str | None = Query(
         None, description="pendiente | en_transito | completada | cancelada"
     ),
+    tipo: str | None = Query(None, description="deposito | persona"),
     deposito_origen_id: uuid.UUID | None = None,
     deposito_destino_id: uuid.UUID | None = None,
+    persona_destino_id: uuid.UUID | None = None,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _: Usuario = Depends(get_current_user),
 ):
     return TransferService(db).list_transferencias(
         estado=estado,
+        tipo=tipo,
         deposito_origen_id=deposito_origen_id,
         deposito_destino_id=deposito_destino_id,
+        persona_destino_id=persona_destino_id,
         limit=limit,
     )
 

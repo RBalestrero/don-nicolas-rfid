@@ -99,23 +99,155 @@ def test_sector_no_pertenece_a_deposito(client: TestClient, auth_headers):
     assert response.status_code == 404
 
 
-def test_delete_deposito_soft(client: TestClient, auth_headers):
+def test_delete_deposito_hard_y_bloquea_con_stock(client: TestClient, auth_headers):
     nombre = _unique("Dep Temporal")
-    create_response = client.post(
+    deposito = client.post(
+        "/api/v1/depositos",
+        json={"nombre": nombre},
+        headers=auth_headers,
+    ).json()
+    deposito_id = deposito["id"]
+    sector = client.post(
+        f"/api/v1/depositos/{deposito_id}/sectores",
+        json={"nombre": "Sector A"},
+        headers=auth_headers,
+    ).json()
+    ubic = client.post(
+        f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}/ubicaciones",
+        json={"codigo": "A-01"},
+        headers=auth_headers,
+    ).json()
+
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("Cat")},
+        headers=auth_headers,
+    ).json()
+    activo = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT"),
+            "descripcion": "Item",
+            "categoria_id": cat["id"],
+        },
+        headers=auth_headers,
+    ).json()
+    client.post(
+        f"/api/v1/activos/{activo['id']}/asignar-ubicacion",
+        json={"ubicacion_id": ubic["id"]},
+        headers=auth_headers,
+    )
+
+    blocked_ubic = client.delete(
+        f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}/ubicaciones/{ubic['id']}",
+        headers=auth_headers,
+    )
+    assert blocked_ubic.status_code == 409
+
+    blocked_dep = client.delete(f"/api/v1/depositos/{deposito_id}", headers=auth_headers)
+    assert blocked_dep.status_code == 409
+
+    client.delete(f"/api/v1/activos/{activo['id']}/ubicacion", headers=auth_headers)
+    client.delete(f"/api/v1/activos/{activo['id']}", headers=auth_headers)
+
+    ok_ubic = client.delete(
+        f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}/ubicaciones/{ubic['id']}",
+        headers=auth_headers,
+    )
+    assert ok_ubic.status_code == 204
+
+    # Recrear ubicación y borrar sector (sin stock)
+    ubic2 = client.post(
+        f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}/ubicaciones",
+        json={"codigo": "A-02"},
+        headers=auth_headers,
+    ).json()
+    assert (
+        client.delete(
+            f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}/ubicaciones/{ubic2['id']}",
+            headers=auth_headers,
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/api/v1/depositos/{deposito_id}/sectores/{sector['id']}",
+            headers=auth_headers,
+        ).status_code
+        == 204
+    )
+
+    delete_response = client.delete(f"/api/v1/depositos/{deposito_id}", headers=auth_headers)
+    assert delete_response.status_code == 204
+    assert client.get(f"/api/v1/depositos/{deposito_id}", headers=auth_headers).status_code == 404
+
+    recreate = client.post("/api/v1/depositos", json={"nombre": nombre}, headers=auth_headers)
+    assert recreate.status_code == 201
+
+
+def test_recrear_deposito_tras_eliminar(client: TestClient, auth_headers):
+    nombre = _unique("Dep Recycle")
+    created = client.post(
         "/api/v1/depositos",
         json={"nombre": nombre},
         headers=auth_headers,
     )
-    deposito_id = create_response.json()["id"]
+    assert created.status_code == 201
+    deposito_id = created.json()["id"]
 
-    delete_response = client.delete(
-        f"/api/v1/depositos/{deposito_id}", headers=auth_headers
+    deleted = client.delete(f"/api/v1/depositos/{deposito_id}", headers=auth_headers)
+    assert deleted.status_code == 204
+
+    recreate = client.post(
+        "/api/v1/depositos",
+        json={"nombre": nombre, "descripcion": "Nuevo"},
+        headers=auth_headers,
     )
-    assert delete_response.status_code == 204
+    assert recreate.status_code == 201
+    assert recreate.json()["nombre"] == nombre
+    assert recreate.json()["id"] != deposito_id
 
-    list_response = client.get("/api/v1/depositos", headers=auth_headers)
-    nombres = [d["nombre"] for d in list_response.json()]
-    assert nombre not in nombres
+
+def test_update_deposito_sector_ubicacion(client: TestClient, auth_headers):
+    deposito = client.post(
+        "/api/v1/depositos",
+        json={"nombre": _unique("Dep Edit")},
+        headers=auth_headers,
+    ).json()
+    sector = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores",
+        json={"nombre": "Original"},
+        headers=auth_headers,
+    ).json()
+    ubic = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}/ubicaciones",
+        json={"codigo": "X-01"},
+        headers=auth_headers,
+    ).json()
+
+    upd_dep = client.put(
+        f"/api/v1/depositos/{deposito['id']}",
+        json={"nombre": deposito["nombre"], "descripcion": "Actualizado"},
+        headers=auth_headers,
+    )
+    assert upd_dep.status_code == 200
+    assert upd_dep.json()["descripcion"] == "Actualizado"
+
+    upd_sec = client.put(
+        f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}",
+        json={"nombre": "Renombrado"},
+        headers=auth_headers,
+    )
+    assert upd_sec.status_code == 200
+    assert upd_sec.json()["nombre"] == "Renombrado"
+
+    upd_ubic = client.put(
+        f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}/ubicaciones/{ubic['id']}",
+        json={"codigo": "Y-02", "descripcion": "Pasillo"},
+        headers=auth_headers,
+    )
+    assert upd_ubic.status_code == 200
+    assert upd_ubic.json()["codigo"] == "Y-02"
 
 
 def test_duplicate_sector_name_in_deposito(client: TestClient, auth_headers):

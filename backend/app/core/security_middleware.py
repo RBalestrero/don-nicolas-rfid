@@ -10,13 +10,22 @@ from app.config import get_settings
 from app.core.rate_limit import api_rate_limiter, login_rate_limiter
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+def client_ip(request: Request, *, trust_forwarded: bool | None = None) -> str:
+    """IP del cliente. Solo usa X-Forwarded-For si trust_x_forwarded_for=True."""
+    settings = get_settings()
+    use_xff = settings.trust_x_forwarded_for if trust_forwarded is None else trust_forwarded
+    if use_xff:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            # Primer hop = cliente original cuando el proxy confiable reescribe la cadena.
+            return forwarded.split(",")[0].strip() or "unknown"
     if request.client:
         return request.client.host
     return "unknown"
+
+
+def _client_ip(request: Request) -> str:
+    return client_ip(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

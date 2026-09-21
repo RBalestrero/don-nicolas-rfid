@@ -104,6 +104,27 @@ def test_operador_alta_no_puede_crear_transferencia(client: TestClient, operador
     assert response.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
 
 
+def test_operador_alta_no_puede_descartar_ni_auditar_inventario(
+    client: TestClient, operador_alta_headers
+):
+    inv_id = str(uuid.uuid4())
+    descartar = client.post(
+        f"/api/v1/inventarios/{inv_id}/descartar",
+        json={"comentario": "No debería poder"},
+        headers=operador_alta_headers,
+    )
+    assert descartar.status_code == 403
+    assert descartar.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
+
+    auditar = client.post(
+        f"/api/v1/inventarios/{inv_id}/auditar",
+        json={"auditado": True},
+        headers=operador_alta_headers,
+    )
+    assert auditar.status_code == 403
+    assert auditar.json()["detail"]["code"] == "FORBIDDEN_PERMISSION"
+
+
 def test_supervisor_puede_leer_dashboard(client: TestClient, supervisor_headers):
     response = client.get("/api/v1/dashboard/resumen", headers=supervisor_headers)
     assert response.status_code == 200
@@ -142,6 +163,17 @@ def test_production_rejects_debug_true():
         postgres_password="super-secure-db-password-123",
     )
     with pytest.raises(RuntimeError, match="API_DEBUG"):
+        validate_security_settings(cfg)
+
+
+def test_production_rejects_example_secret_key():
+    cfg = Settings(
+        app_env="production",
+        api_debug=False,
+        secret_key="generar-clave-segura-aqui-con-al-menos-32c",
+        postgres_password="super-secure-db-password-123",
+    )
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
         validate_security_settings(cfg)
 
 

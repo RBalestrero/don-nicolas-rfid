@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -57,6 +58,8 @@ class ActivoBase(BaseModel):
     # Solo lectura en responses; en create/update se ignora/rechaza (fuente: etiquetas).
     epc: str | None = Field(None, max_length=96)
     datos_tecnicos: dict | None = None
+    # Cada unidad RFID pedirá número de serie de fábrica al imprimir/codificar.
+    serializado: bool = False
 
 
 class ActivoCreate(ActivoBase):
@@ -75,6 +78,7 @@ class ActivoUpdate(BaseModel):
     epc: str | None = Field(None, max_length=96)
     datos_tecnicos: dict | None = None
     activo: bool | None = None
+    serializado: bool | None = None
 
     _normalize_epc = field_validator("epc")(_validar_epc_del_sistema)
 
@@ -111,6 +115,24 @@ class ActivoLookupResponse(BaseModel):
     mensaje: str | None = None
 
 
+class ActivoLookupEpcsRequest(BaseModel):
+    epcs: list[str] = Field(default_factory=list, max_length=1000)
+
+    @field_validator("epcs")
+    @classmethod
+    def _cap_epcs(cls, value: list[str]) -> list[str]:
+        # Normalización/dedupe en el service; acá solo acotamos tamaño.
+        if len(value) > 1000:
+            raise ValueError("Máximo 1000 EPCs por consulta")
+        return value
+
+
+class ActivoLookupEpcsResponse(BaseModel):
+    consultados: int
+    encontrados: list[ActivoLookupResponse]
+    no_registrados: list[str] = Field(default_factory=list)
+
+
 class FotografiaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +158,31 @@ class HistorialResponse(BaseModel):
     creado_en: datetime
 
 
+class ObservacionCreate(BaseModel):
+    texto: str = Field(..., min_length=1, max_length=4000)
+
+    @field_validator("texto")
+    @classmethod
+    def texto_no_vacio(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("El texto de la observación no puede estar vacío")
+        if len(cleaned) > 4000:
+            raise ValueError("El texto no puede superar 4000 caracteres")
+        return cleaned
+
+
+class ObservacionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    activo_id: UUID
+    usuario_id: UUID | None
+    usuario_nombre: str | None = None
+    texto: str
+    creado_en: datetime
+
+
 class EpcDecodedInfo(BaseModel):
     epc: str
     scheme: str | None = None
@@ -156,6 +203,7 @@ class EtiquetaResponse(BaseModel):
     activo_id: UUID
     epc: str
     serial_hex: str | None = None
+    serie_fisica: str | None = None
     estado: str
     impresa: bool
     creado_en: datetime
@@ -166,16 +214,36 @@ class EtiquetaResponse(BaseModel):
 
 
 class EtiquetaLoteRequest(BaseModel):
-    """Alta de N unidades RFID para un artículo (SKU)."""
+    """Alta o reimpresión de N unidades RFID para un artículo (SKU)."""
 
     cantidad: int = Field(1, ge=1, le=50)
+    modo: Literal["nueva", "reposicion"] = Field(
+        "nueva",
+        description="nueva: crea EPCs y suma stock. reposicion: reimprime existentes sin sumar stock.",
+    )
+    # Obligatorio si el artículo está serializado y modo=nueva (1 por unidad).
+    series_fisicas: list[str] | None = Field(
+        None,
+        description="Números de serie de fábrica, uno por etiqueta nueva.",
+    )
 
 
 class EtiquetaLoteItem(BaseModel):
     id: UUID
     epc: str
     serial_hex: str | None = None
+    serie_fisica: str | None = None
     decodificado: EpcDecodedInfo
+
+
+class ActivoLookupSerieResponse(BaseModel):
+    encontrado: bool
+    serie_consultada: str
+    activo: ActivoResponse | None = None
+    etiqueta_id: UUID | None = None
+    epc: str | None = None
+    ubicacion: ActivoUbicacionResumen | None = None
+    mensaje: str | None = None
 
 
 class EtiquetaLoteResponse(BaseModel):

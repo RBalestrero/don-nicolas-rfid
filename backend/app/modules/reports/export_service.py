@@ -237,9 +237,12 @@ class ExportService:
         )
         headers = [
             "id",
+            "tipo",
             "estado",
             "deposito_origen_id",
             "deposito_destino_id",
+            "persona_destino_id",
+            "persona_destino_nombre",
             "total_activos",
             "confirmados_origen",
             "confirmados_destino",
@@ -250,9 +253,12 @@ class ExportService:
         rows = [
             [
                 str(t.id),
+                t.tipo,
                 t.estado,
                 str(t.deposito_origen_id),
-                str(t.deposito_destino_id),
+                str(t.deposito_destino_id) if t.deposito_destino_id else "",
+                str(t.persona_destino_id) if t.persona_destino_id else "",
+                t.persona_destino_nombre or "",
                 t.total_activos,
                 t.confirmados_origen,
                 t.confirmados_destino,
@@ -264,17 +270,20 @@ class ExportService:
         ]
         stamp = datetime.now().strftime("%Y%m%d")
         if fmt == "csv":
-            return csv_response(headers, rows, f"transferencias_{stamp}.csv")
-        return xlsx_response({"Transferencias": (headers, rows)}, f"transferencias_{stamp}.xlsx")
+            return csv_response(headers, rows, f"movimientos_{stamp}.csv")
+        return xlsx_response({"Movimientos": (headers, rows)}, f"movimientos_{stamp}.xlsx")
 
     def export_transferencia_detalle(self, transferencia_id: uuid.UUID, *, formato: str) -> Response:
         fmt = parse_formato(formato)
         xfer = self.transfers.get(transferencia_id)
         cab_headers = [
             "id",
+            "tipo",
             "estado",
             "deposito_origen_id",
             "deposito_destino_id",
+            "persona_destino_id",
+            "persona_destino_nombre",
             "ubicacion_destino_id",
             "notas",
             "creado_en",
@@ -284,9 +293,12 @@ class ExportService:
         cab_rows = [
             [
                 str(xfer.id),
+                xfer.tipo,
                 xfer.estado,
                 str(xfer.deposito_origen_id),
-                str(xfer.deposito_destino_id),
+                str(xfer.deposito_destino_id) if xfer.deposito_destino_id else "",
+                str(xfer.persona_destino_id) if xfer.persona_destino_id else "",
+                xfer.persona_destino_nombre or "",
                 str(xfer.ubicacion_destino_id) if xfer.ubicacion_destino_id else "",
                 xfer.notas,
                 xfer.creado_en,

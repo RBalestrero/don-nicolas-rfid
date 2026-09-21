@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core.rate_limit import login_lockout
 from app.core.security import create_access_token
+from app.core.security_middleware import client_ip
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.modules.auth.models import Usuario
@@ -17,15 +18,6 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 logger = logging.getLogger("don_nicolas.auth")
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
-
-
 @router.post("/login", response_model=TokenResponse)
 def login(
     credentials: LoginRequest,
@@ -33,7 +25,7 @@ def login(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     settings = get_settings()
-    ip = _client_ip(request)
+    ip = client_ip(request)
     lock_key = f"{ip}:{credentials.email.lower()}"
 
     locked, retry = login_lockout.is_locked(
@@ -63,11 +55,12 @@ def login(
 
         if isinstance(exc, SQLAlchemyError):
             raise
+        logger.exception("Falla inesperada durante authenticate(): %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "code": "AUTH_LOGIN_UNEXPECTED",
-                "message": f"Falla inesperada durante authenticate(): {exc}",
+                "message": "Falla inesperada durante el login. Reintentá más tarde.",
             },
         ) from exc
 

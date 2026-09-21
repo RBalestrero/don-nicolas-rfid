@@ -29,6 +29,8 @@ class Inventario(Base):
     total_encontrado: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_faltante: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_sobrante: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Sobrantes del mismo artículo esperado en el depósito (más unidades de las debidas).
+    total_exceso: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     iniciado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     cerrado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     auditado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
@@ -37,6 +39,8 @@ class Inventario(Base):
         ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
     )
     comentario_auditoria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # True cuando se aplicó el ajuste de stock por faltantes (al confirmar auditoría).
+    ajuste_aplicado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     detalles: Mapped[list["DetalleInventario"]] = relationship(
         back_populates="inventario",

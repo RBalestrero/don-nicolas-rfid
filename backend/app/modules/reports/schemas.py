@@ -57,10 +57,13 @@ class StockDepositoResumen(BaseModel):
 
 class TransferenciaResumen(BaseModel):
     id: UUID
+    tipo: str = "deposito"
     deposito_origen_id: UUID
     deposito_origen_nombre: str | None = None
-    deposito_destino_id: UUID
+    deposito_destino_id: UUID | None = None
     deposito_destino_nombre: str | None = None
+    persona_destino_id: UUID | None = None
+    persona_destino_nombre: str | None = None
     estado: str
     total_activos: int
     confirmados_origen: int
@@ -77,8 +80,26 @@ class InventarioResumenItem(BaseModel):
     total_encontrado: int
     total_faltante: int
     total_sobrante: int
+    total_exceso: int = 0
+    auditado: bool = False
     iniciado_en: datetime
     cerrado_en: datetime | None = None
+
+
+class DispositivoMovilDashItem(BaseModel):
+    id: UUID
+    modelo: str
+    fabricante: str | None = None
+    numero_serie: str | None = None
+    app_version: str | None = None
+    android_version: str | None = None
+    usuario_id: UUID | None = None
+    usuario_nombre: str | None = None
+    ultimo_visto_en: datetime
+    registrado_en: datetime
+    sesion_activa: bool
+    en_linea: bool
+    estado: str
 
 
 class DashboardResumen(BaseModel):
@@ -87,5 +108,6 @@ class DashboardResumen(BaseModel):
     movimientos_recientes: list[MovimientoItem]
     transferencias_recientes: list[TransferenciaResumen]
     inventarios_recientes: list[InventarioResumenItem]
+    dispositivos_moviles: list[DispositivoMovilDashItem] = Field(default_factory=list)
     movimientos_limit: int = Field(ge=1)
     ops_limit: int = Field(ge=1)

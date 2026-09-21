@@ -7,7 +7,10 @@ from app.config import get_settings
 from app.database import Base
 from app.modules.assets import models as assets_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
+from app.modules.devices import models as devices_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
+from app.modules.personas import models as personas_models  # noqa: F401
+from app.modules.settings import models as settings_models  # noqa: F401
 from app.modules.transfers import models as transfers_models  # noqa: F401
 from app.modules.warehouses import models as warehouses_models  # noqa: F401
 

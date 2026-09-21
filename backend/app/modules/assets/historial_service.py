@@ -26,9 +26,14 @@ class HistorialService:
     ACCION_FOTO_AGREGADA = "foto_agregada"
     ACCION_FOTO_ELIMINADA = "foto_eliminada"
     ACCION_ETIQUETA_IMPRESA = "etiqueta_impresa"
+    ACCION_ETIQUETA_CODIFICADA = "etiqueta_codificada"
+    ACCION_ETIQUETA_REPOSICION = "etiqueta_reposicion"
+    ACCION_ETIQUETA_BAJA = "etiqueta_baja"
     ACCION_ASIGNACION_UBICACION = "asignacion_ubicacion"
     ACCION_DESASIGNACION_UBICACION = "desasignacion_ubicacion"
     ACCION_TRANSFERENCIA = "transferencia"
+    ACCION_ENTREGA_PERSONA = "entrega_persona"
+    ACCION_AJUSTE_INVENTARIO = "ajuste_inventario"
 
     def __init__(self, db: Session):
         self.db = db
@@ -39,6 +44,8 @@ class HistorialService:
         accion: str,
         usuario: Usuario | None = None,
         cambios: dict | None = None,
+        *,
+        commit: bool = True,
     ) -> HistorialActivo:
         registro = HistorialActivo(
             activo_id=activo_id,
@@ -47,8 +54,11 @@ class HistorialService:
             cambios=_serialize(cambios) if cambios else None,
         )
         self.db.add(registro)
-        self.db.commit()
-        self.db.refresh(registro)
+        if commit:
+            self.db.commit()
+            self.db.refresh(registro)
+        else:
+            self.db.flush()
         return registro
 
     def list_by_activo(self, activo_id: uuid.UUID) -> list[HistorialActivo]:

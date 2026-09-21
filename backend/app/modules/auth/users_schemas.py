@@ -52,7 +52,7 @@ class UsuarioAdminResponse(BaseModel):
 class UsuarioCreate(BaseModel):
     email: EmailStr = Field(..., max_length=254)
     nombre: str = Field(..., min_length=1, max_length=100)
-    password: str = Field(..., min_length=6, max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
     rol: str = Field(..., min_length=1, max_length=50)
     activo: bool = True
 
@@ -60,6 +60,6 @@ class UsuarioCreate(BaseModel):
 class UsuarioUpdate(BaseModel):
     email: EmailStr | None = Field(default=None, max_length=254)
     nombre: str | None = Field(default=None, min_length=1, max_length=100)
-    password: str | None = Field(default=None, min_length=6, max_length=128)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     rol: str | None = Field(default=None, min_length=1, max_length=50)
     activo: bool | None = None

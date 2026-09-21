@@ -40,7 +40,7 @@ class DepositoRepository:
         return deposito
 
     def delete(self, deposito: Deposito) -> None:
-        deposito.activo = False
+        self.db.delete(deposito)
         self.db.commit()
 
 
@@ -76,7 +76,7 @@ class SectorRepository:
         return sector
 
     def delete(self, sector: Sector) -> None:
-        sector.activo = False
+        self.db.delete(sector)
         self.db.commit()
 
 
@@ -114,5 +114,5 @@ class UbicacionRepository:
         return ubicacion
 
     def delete(self, ubicacion: Ubicacion) -> None:
-        ubicacion.activo = False
+        self.db.delete(ubicacion)
         self.db.commit()

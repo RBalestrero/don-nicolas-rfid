@@ -1,4 +1,72 @@
+"""Fixtures pytest — usan BD de test aislada para no contaminar desarrollo."""
+
+from __future__ import annotations
+
+import os
 import uuid
+
+# ---------------------------------------------------------------------------
+# IMPORTANTE: forzar BD de test ANTES de importar la app / settings.
+# En CI el Postgres del workflow es efímero; en local evitamos don_nicolas_rfid.
+# ---------------------------------------------------------------------------
+_IN_CI = bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+if not _IN_CI:
+    os.environ["POSTGRES_DB"] = os.environ.get(
+        "POSTGRES_TEST_DB", "don_nicolas_rfid_test"
+    )
+
+
+def _ensure_test_database() -> None:
+    """Crea la BD de test si no existe (solo local)."""
+    if _IN_CI:
+        return
+
+    import sqlalchemy as sa
+
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    user = os.environ.get("POSTGRES_USER", "rfid_admin")
+    password = os.environ.get("POSTGRES_PASSWORD", "changeme")
+    dbname = os.environ["POSTGRES_DB"]
+
+    admin_url = f"postgresql://{user}:{password}@{host}:{port}/postgres"
+    engine = sa.create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    with engine.connect() as conn:
+        exists = conn.execute(
+            sa.text("SELECT 1 FROM pg_database WHERE datname = :n"),
+            {"n": dbname},
+        ).scalar()
+        if not exists:
+            conn.execute(sa.text(f'CREATE DATABASE "{dbname}"'))
+    engine.dispose()
+
+
+def _reset_settings_and_engine() -> None:
+    """Recarga settings/engine tras cambiar POSTGRES_DB."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.config import get_settings
+    from app import database as dbmod
+
+    get_settings.cache_clear()
+    settings = get_settings()
+    dbmod.engine.dispose()
+    dbmod.engine = create_engine(settings.database_url, pool_pre_ping=True)
+    dbmod.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=dbmod.engine)
+
+
+def _run_migrations() -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    command.upgrade(cfg, "head")
+
+
+_ensure_test_database()
+_reset_settings_and_engine()
+_run_migrations()
 
 import pytest
 from fastapi.testclient import TestClient

@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.modules.assets.historial_service import HistorialService
 from app.modules.assets.models import Activo, HistorialActivo
+from app.modules.devices.service import DevicesService
 from app.modules.inventory.models import Inventario
 from app.modules.reports.schemas import (
     DashboardKpis,
     DashboardResumen,
     DiscrepanciasKpi,
+    DispositivoMovilDashItem,
     InventarioResumenItem,
     MovimientoItem,
     MovimientosPage,
@@ -85,11 +87,11 @@ class ReportsService:
         disc_rows = self.db.execute(
             select(
                 func.coalesce(func.sum(Inventario.total_faltante), 0),
-                func.coalesce(func.sum(Inventario.total_sobrante), 0),
+                func.coalesce(func.sum(Inventario.total_exceso), 0),
                 func.count(),
             ).where(
                 Inventario.estado == "cerrado",
-                or_(Inventario.total_faltante > 0, Inventario.total_sobrante > 0),
+                or_(Inventario.total_faltante > 0, Inventario.total_exceso > 0),
             )
         ).one()
         discrepancias = DiscrepanciasKpi(
@@ -116,7 +118,7 @@ class ReportsService:
             for inv in inventario_rows
             if inv.estado == "cerrado"
             and not inv.auditado
-            and (inv.total_faltante > 0 or inv.total_sobrante > 0)
+            and (inv.total_faltante > 0 or inv.total_exceso > 0)
         )
         inventarios_activos_pendientes = sum(
             max(0, (inv.total_esperado or 0) - (inv.total_encontrado or 0))
@@ -160,6 +162,7 @@ class ReportsService:
         movimientos, _ = self.historial.list_global(limit=movimientos_limit, offset=0)
         transferencias = self._transferencias_recientes(ops_limit)
         inventarios = self._inventarios_recientes(ops_limit)
+        dispositivos = DevicesService(self.db).list_for_dashboard(limit=ops_limit)
 
         return DashboardResumen(
             kpis=DashboardKpis(
@@ -183,6 +186,24 @@ class ReportsService:
             movimientos_recientes=[self._to_movimiento(r) for r in movimientos],
             transferencias_recientes=transferencias,
             inventarios_recientes=inventarios,
+            dispositivos_moviles=[
+                DispositivoMovilDashItem(
+                    id=d.id,
+                    modelo=d.modelo,
+                    fabricante=d.fabricante,
+                    numero_serie=d.numero_serie,
+                    app_version=d.app_version,
+                    android_version=d.android_version,
+                    usuario_id=d.usuario_id,
+                    usuario_nombre=d.usuario_nombre,
+                    ultimo_visto_en=d.ultimo_visto_en,
+                    registrado_en=d.registrado_en,
+                    sesion_activa=d.sesion_activa,
+                    en_linea=d.en_linea,
+                    estado=d.estado,
+                )
+                for d in dispositivos
+            ],
             movimientos_limit=movimientos_limit,
             ops_limit=ops_limit,
         )
@@ -227,17 +248,37 @@ class ReportsService:
                 .limit(limit)
             ).all()
         )
-        deposito_ids = {r.deposito_origen_id for r in rows} | {r.deposito_destino_id for r in rows}
+        deposito_ids = {r.deposito_origen_id for r in rows} | {
+            r.deposito_destino_id for r in rows if r.deposito_destino_id
+        }
         nombres = self._deposito_nombres(deposito_ids)
+        persona_ids = {r.persona_destino_id for r in rows if r.persona_destino_id}
+        persona_nombres: dict = {}
+        if persona_ids:
+            from app.modules.personas.models import Persona
+
+            persona_nombres = {
+                p.id: p.nombre
+                for p in self.db.scalars(select(Persona).where(Persona.id.in_(persona_ids))).all()
+            }
         result: list[TransferenciaResumen] = []
         for t in rows:
             result.append(
                 TransferenciaResumen(
                     id=t.id,
+                    tipo=getattr(t, "tipo", None) or "deposito",
                     deposito_origen_id=t.deposito_origen_id,
                     deposito_origen_nombre=nombres.get(t.deposito_origen_id),
                     deposito_destino_id=t.deposito_destino_id,
-                    deposito_destino_nombre=nombres.get(t.deposito_destino_id),
+                    deposito_destino_nombre=(
+                        nombres.get(t.deposito_destino_id) if t.deposito_destino_id else None
+                    ),
+                    persona_destino_id=t.persona_destino_id,
+                    persona_destino_nombre=(
+                        persona_nombres.get(t.persona_destino_id)
+                        if t.persona_destino_id
+                        else None
+                    ),
                     estado=t.estado,
                     total_activos=len(t.detalles),
                     confirmados_origen=sum(1 for d in t.detalles if d.confirmado_origen),
@@ -264,6 +305,8 @@ class ReportsService:
                 total_encontrado=inv.total_encontrado,
                 total_faltante=inv.total_faltante,
                 total_sobrante=inv.total_sobrante,
+                total_exceso=inv.total_exceso or 0,
+                auditado=bool(inv.auditado),
                 iniciado_en=inv.iniciado_en,
                 cerrado_en=inv.cerrado_en,
             )

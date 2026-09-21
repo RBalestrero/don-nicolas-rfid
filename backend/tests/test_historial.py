@@ -67,16 +67,14 @@ def test_historial_registra_actualizacion(client: TestClient, auth_headers, acti
     assert actualizacion["cambios"]["descripcion"]["nuevo"] == "Descripción actualizada"
 
 
-def test_historial_registra_desactivacion(client: TestClient, auth_headers, activo_setup):
+def test_historial_desaparece_al_eliminar_activo(client: TestClient, auth_headers, activo_setup):
     client.delete(f"/api/v1/activos/{activo_setup['id']}", headers=auth_headers)
 
     response = client.get(
         f"/api/v1/activos/{activo_setup['id']}/historial",
         headers=auth_headers,
     )
-    historial = response.json()
-    acciones = [h["accion"] for h in historial]
-    assert "desactivacion" in acciones
+    assert response.status_code == 404
 
 
 def test_historial_registra_fotografia(client: TestClient, auth_headers, activo_setup):

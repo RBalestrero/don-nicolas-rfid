@@ -23,6 +23,8 @@ class InventarioCreate(BaseModel):
     deposito_id: UUID
     sector_id: UUID | None = None
     ubicacion_id: UUID | None = None
+    # Inventario de un solo SKU: solo unidades de este activo en el depósito.
+    activo_id: UUID | None = None
 
 
 class InventarioLecturasRequest(BaseModel):
@@ -44,7 +46,7 @@ class InventarioCerrarRequest(BaseModel):
 
 
 class InventarioAuditarRequest(BaseModel):
-    """Marca un inventario cerrado como auditado (web)."""
+    """Confirma o actualiza la auditoría de un inventario cerrado (web)."""
 
     comentario: str | None = Field(None, max_length=2000)
     auditado: bool = True
@@ -56,6 +58,20 @@ class InventarioAuditarRequest(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+
+class InventarioDescartarRequest(BaseModel):
+    """Rechaza un inventario cerrado inválido sin aplicar ajuste de stock."""
+
+    comentario: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("comentario")
+    @classmethod
+    def normalize_comentario(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("El comentario es obligatorio para descartar")
+        return cleaned
 
 
 class DetalleInventarioResponse(BaseModel):
@@ -75,6 +91,7 @@ class InventarioResumen(BaseModel):
     total_encontrado: int
     total_faltante: int
     total_sobrante: int
+    total_exceso: int = 0
     sin_epc: int = 0
 
 
@@ -90,12 +107,14 @@ class InventarioListItem(BaseModel):
     total_encontrado: int
     total_faltante: int
     total_sobrante: int
+    total_exceso: int = 0
     iniciado_en: datetime
     cerrado_en: datetime | None
     auditado: bool = False
     auditado_en: datetime | None = None
     auditado_por_id: UUID | None = None
     comentario_auditoria: str | None = None
+    ajuste_aplicado: bool = False
 
 
 class InventarioResponse(BaseModel):
@@ -111,12 +130,14 @@ class InventarioResponse(BaseModel):
     total_encontrado: int
     total_faltante: int
     total_sobrante: int
+    total_exceso: int = 0
     iniciado_en: datetime
     cerrado_en: datetime | None
     auditado: bool = False
     auditado_en: datetime | None = None
     auditado_por_id: UUID | None = None
     comentario_auditoria: str | None = None
+    ajuste_aplicado: bool = False
     resumen: InventarioResumen
     detalles: list[DetalleInventarioResponse] = []
 
@@ -131,10 +152,13 @@ class InventarioReporteResponse(BaseModel):
     auditado_en: datetime | None = None
     auditado_por_id: UUID | None = None
     comentario_auditoria: str | None = None
+    ajuste_aplicado: bool = False
     resumen: InventarioResumen
     coincidencia_pct: float
     tiene_discrepancias: bool
     encontrados: list[DetalleInventarioResponse]
     faltantes: list[DetalleInventarioResponse]
+    excesos: list[DetalleInventarioResponse] = []
+    ajenos: list[DetalleInventarioResponse] = []
     sobrantes: list[DetalleInventarioResponse]
     sin_epc: list[DetalleInventarioResponse] = []

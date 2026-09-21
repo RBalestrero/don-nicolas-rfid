@@ -38,11 +38,19 @@ class Settings(BaseSettings):
 
     # Clientes móviles autorizados a operar inventarios (header X-Client)
     inventory_mobile_clients: str = "mc33,mc33-apk"
+    # Si no está vacío, exige header X-Inventory-Client-Secret en writes de inventario.
+    # Endurece el canal MC33 frente a spoofing de X-Client con un token de APK.
+    inventory_client_secret: str = ""
+    # Si true, confiar en X-Forwarded-For (solo detrás de proxy/nginx que lo sanee).
+    trust_x_forwarded_for: bool = False
 
-    zebra_printer_host: str = "192.168.1.100"
+    zebra_printer_host: str = "192.168.1.20"
     zebra_printer_port: int = 9100
     zebra_printer_simulate: bool = True
     zebra_printer_timeout: int = 5
+
+    # Presencia MC33: online si sesion_activa y último heartbeat dentro del timeout.
+    device_online_timeout_seconds: int = 180
 
     @property
     def max_upload_size_bytes(self) -> int:
@@ -81,10 +89,27 @@ class Settings(BaseSettings):
 WEAK_SECRETS = {
     "dev-secret-key-change-in-production",
     "generar-clave-segura-aqui",
+    "generar-clave-segura-aqui-con-al-menos-32c",
     "changeme",
     "secret",
     "password",
 }
+
+WEAK_SECRET_PREFIXES = (
+    "generar-clave-segura",
+    "dev-secret",
+    "dev-only",
+    "changeme",
+    "example",
+    "placeholder",
+)
+
+
+def _is_weak_secret(value: str) -> bool:
+    lowered = value.strip().lower()
+    if not lowered or lowered in WEAK_SECRETS:
+        return True
+    return any(lowered.startswith(prefix) for prefix in WEAK_SECRET_PREFIXES)
 
 
 def validate_security_settings(settings: Settings | None = None) -> None:
@@ -94,13 +119,13 @@ def validate_security_settings(settings: Settings | None = None) -> None:
         return
 
     secret = cfg.secret_key.strip()
-    if len(secret) < 32 or secret.lower() in WEAK_SECRETS:
+    if len(secret) < 32 or _is_weak_secret(secret):
         raise RuntimeError(
             "SECRET_KEY insegura o corta (<32). Definí una clave fuerte en producción."
         )
     if cfg.api_debug:
         raise RuntimeError("API_DEBUG debe ser false en producción (APP_ENV=production).")
-    if cfg.postgres_password.strip().lower() in WEAK_SECRETS or not cfg.postgres_password.strip():
+    if _is_weak_secret(cfg.postgres_password) or not cfg.postgres_password.strip():
         raise RuntimeError("POSTGRES_PASSWORD débil o vacío en producción.")
 
 

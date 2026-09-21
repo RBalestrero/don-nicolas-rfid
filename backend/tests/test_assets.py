@@ -153,11 +153,82 @@ def test_create_activo_con_ubicacion(client: TestClient, auth_headers):
         headers=auth_headers,
     )
     assert created.status_code == 201
-    activo_id = created.json()["id"]
+    body = created.json()
+    activo_id = body["id"]
+    assert body["ubicacion"] is not None
+    assert body["ubicacion"]["ubicacion_id"] == ubi["id"]
+
+    listed = client.get("/api/v1/activos", headers=auth_headers).json()
+    row = next(a for a in listed if a["id"] == activo_id)
+    assert row["ubicacion"]["ubicacion_codigo"] == "U-01"
 
     ubic = client.get(f"/api/v1/activos/{activo_id}/ubicacion", headers=auth_headers)
     assert ubic.status_code == 200
     assert ubic.json()["ubicacion_id"] == ubi["id"]
+
+
+def test_list_activos_ubicacion_desde_etiquetas(client: TestClient, auth_headers):
+    """El listado muestra depósito/ubicación aunque solo esté en las unidades RFID."""
+    from sqlalchemy import select
+
+    from app.database import SessionLocal
+    from app.modules.assets.models import Activo, Etiqueta
+
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("CatEtiqUbi")},
+        headers=auth_headers,
+    ).json()
+    dep = client.post(
+        "/api/v1/depositos",
+        json={"nombre": _unique("DepEtiqUbi")},
+        headers=auth_headers,
+    ).json()
+    sec = client.post(
+        f"/api/v1/depositos/{dep['id']}/sectores",
+        json={"nombre": "S1"},
+        headers=auth_headers,
+    ).json()
+    ubi = client.post(
+        f"/api/v1/depositos/{dep['id']}/sectores/{sec['id']}/ubicaciones",
+        json={"codigo": "E2"},
+        headers=auth_headers,
+    ).json()
+    activo = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("SKU"),
+            "descripcion": "Impresora",
+            "categoria_id": cat["id"],
+        },
+        headers=auth_headers,
+    ).json()
+    lote = client.post(
+        f"/api/v1/activos/{activo['id']}/etiquetas",
+        json={"cantidad": 2},
+        headers=auth_headers,
+    )
+    assert lote.status_code == 201, lote.text
+
+    db = SessionLocal()
+    try:
+        row = db.get(Activo, uuid.UUID(activo["id"]))
+        assert row is not None
+        row.ubicacion_id = None
+        for et in db.scalars(
+            select(Etiqueta).where(Etiqueta.activo_id == row.id, Etiqueta.estado == "activa")
+        ).all():
+            et.ubicacion_id = uuid.UUID(ubi["id"])
+        db.commit()
+    finally:
+        db.close()
+
+    listed = client.get("/api/v1/activos", headers=auth_headers).json()
+    row = next(a for a in listed if a["id"] == activo["id"])
+    assert row["ubicacion"] is not None
+    assert row["ubicacion"]["ubicacion_codigo"] == "E2"
+    assert row["ubicacion"]["deposito_nombre"] == dep["nombre"]
+    assert row["stock_etiquetas"] == 2
 
 
 def test_update_activo(client: TestClient, auth_headers):
@@ -261,6 +332,46 @@ def test_list_activos_with_search(client: TestClient, auth_headers):
     assert any("Monitor" in a["descripcion"] for a in response.json())
 
 
+def test_list_activos_search_by_etiqueta_epc(client: TestClient, auth_headers):
+    """Localizar por EPC pegado debe encontrar el artículo vía etiquetas.epc."""
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("Localizar")},
+        headers=auth_headers,
+    )
+    categoria_id = cat.json()["id"]
+    patrimonial = _unique("PAT-61423012")
+    create = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": patrimonial,
+            "descripcion": "Impresora térmica ZD220",
+            "categoria_id": categoria_id,
+        },
+        headers=auth_headers,
+    )
+    assert create.status_code == 201
+    activo_id = create.json()["id"]
+
+    lote = client.post(
+        f"/api/v1/activos/{activo_id}/etiquetas",
+        json={"cantidad": 1},
+        headers=auth_headers,
+    )
+    assert lote.status_code == 201
+    epc = lote.json()["etiquetas"][0]["epc"]
+    assert epc.startswith("D1")
+
+    by_epc = client.get(f"/api/v1/activos?search={epc}", headers=auth_headers)
+    assert by_epc.status_code == 200
+    ids = [a["id"] for a in by_epc.json()]
+    assert activo_id in ids
+
+    by_prefix = client.get(f"/api/v1/activos?search={epc[:12]}", headers=auth_headers)
+    assert by_prefix.status_code == 200
+    assert activo_id in [a["id"] for a in by_prefix.json()]
+
+
 def test_activo_rechaza_epc_ajeno_al_esquema(client: TestClient, auth_headers):
     """El MC33 solo lee EPCs D1: aceptar otros haría que el inventario los dé
     por faltantes y el cierre les quite la ubicación al activo."""
@@ -346,3 +457,47 @@ def test_lookup_activo_by_epc(client: TestClient, auth_headers):
     missing = client.get("/api/v1/activos/by-epc/EPCNOEXISTE999", headers=auth_headers)
     assert missing.status_code == 200
     assert missing.json()["encontrado"] is False
+
+
+def test_lookup_activos_by_epcs_batch(client: TestClient, auth_headers):
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("BatchCat")},
+        headers=auth_headers,
+    ).json()
+    epc_a = epc_de_prueba()
+    epc_b = epc_de_prueba()
+    a = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT-BA"),
+            "descripcion": "Batch A",
+            "categoria_id": cat["id"],
+            "epc": epc_a,
+        },
+        headers=auth_headers,
+    ).json()
+    client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT-BB"),
+            "descripcion": "Batch B",
+            "categoria_id": cat["id"],
+            "epc": epc_b,
+        },
+        headers=auth_headers,
+    ).json()
+
+    res = client.post(
+        "/api/v1/activos/lookup-epcs",
+        json={"epcs": [epc_a, epc_b, "D1DEADBEEF000000000001A1", epc_a]},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["consultados"] == 3
+    assert len(data["encontrados"]) == 2
+    assert len(data["no_registrados"]) == 1
+    ids = {row["activo"]["id"] for row in data["encontrados"]}
+    assert a["id"] in ids
+    assert all(row["encontrado"] is True for row in data["encontrados"])

@@ -13,8 +13,11 @@ from app.database import check_database_connection
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.users_router import router as users_router
+from app.modules.devices.router import router as devices_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.personas.router import router as personas_router
 from app.modules.reports.router import router as reports_router
+from app.modules.settings.router import router as settings_router
 from app.modules.transfers.router import router as transfers_router
 from app.modules.warehouses.router import router as warehouses_router
 
@@ -52,19 +55,24 @@ app.include_router(assets_router, prefix="/api/v1")
 app.include_router(warehouses_router, prefix="/api/v1")
 app.include_router(inventory_router, prefix="/api/v1")
 app.include_router(transfers_router, prefix="/api/v1")
+app.include_router(personas_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
+app.include_router(devices_router, prefix="/api/v1")
 
 
 @app.exception_handler(OperationalError)
 async def handle_db_operational_error(_request: Request, exc: OperationalError) -> JSONResponse:
+    import logging
+
+    logging.getLogger("uvicorn.error").error("DB operational error: %s", exc)
     return JSONResponse(
         status_code=503,
         content={
             "code": "DB_CONNECTION_FAILED",
             "detail": (
                 "No se pudo conectar a PostgreSQL. "
-                "Levantá el contenedor con: cd infra && docker compose up -d postgres. "
-                f"Causa técnica: {exc.orig if getattr(exc, 'orig', None) else exc}"
+                "Levantá el contenedor con: cd infra && docker compose up -d postgres."
             ),
         },
     )
@@ -72,11 +80,14 @@ async def handle_db_operational_error(_request: Request, exc: OperationalError) 
 
 @app.exception_handler(SQLAlchemyError)
 async def handle_sqlalchemy_error(_request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    import logging
+
+    logging.getLogger("uvicorn.error").error("DB error: %s", exc)
     return JSONResponse(
         status_code=503,
         content={
             "code": "DB_ERROR",
-            "detail": f"Error de base de datos durante la operación. Causa técnica: {exc}",
+            "detail": "Error de base de datos durante la operación.",
         },
     )
 
@@ -86,6 +97,27 @@ def log_registered_routes() -> None:
     import logging
 
     validate_security_settings(get_settings())
+    try:
+        from app.database import SessionLocal
+        from app.modules.settings.service import load_printer_config
+
+        db = SessionLocal()
+        try:
+            cfg = load_printer_config(db)
+            logging.getLogger("uvicorn.error").info(
+                "Impresora Zebra: %s:%s (simulate=%s, fuente=%s)",
+                cfg.host,
+                cfg.port,
+                cfg.simulate,
+                cfg.fuente,
+            )
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001 — no bloquear arranque
+        logging.getLogger("uvicorn.error").warning(
+            "No se pudo cargar config de impresora: %s", exc
+        )
+
     if not settings.docs_enabled:
         logging.getLogger("uvicorn.error").info("OpenAPI docs deshabilitadas (APP_ENV=%s)", settings.app_env)
         return

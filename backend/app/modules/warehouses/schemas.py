@@ -143,3 +143,15 @@ class StockDepositoResponse(BaseModel):
     filtros: dict
     por_sector: list[StockResumenSector]
     activos: list[StockActivoDetalle]
+
+
+class ActivoUbicacionStockItem(BaseModel):
+    """Ubicación donde un artículo tiene unidades en stock."""
+
+    deposito_id: UUID
+    deposito_nombre: str
+    sector_id: UUID
+    sector_nombre: str
+    ubicacion_id: UUID
+    ubicacion_codigo: str
+    cantidad: int
