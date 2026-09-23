@@ -6,21 +6,25 @@ import com.donnicolas.rfid.data.api.ActivoDto
 import com.donnicolas.rfid.data.api.ActivoLookupDto
 import com.donnicolas.rfid.data.api.ActivoLookupEpcsDto
 import com.donnicolas.rfid.data.api.ActivoLookupEpcsRequest
+import com.donnicolas.rfid.data.api.ActivoLookupSerieDto
 import com.donnicolas.rfid.data.api.ActivoUbicacionStockDto
 import com.donnicolas.rfid.data.api.ApiErrorMapper
 import com.donnicolas.rfid.data.api.AssetsApi
 import com.donnicolas.rfid.data.api.CategoriaDto
 import com.donnicolas.rfid.data.api.DepositoDto
 import com.donnicolas.rfid.data.api.DepositoTreeDto
+import com.donnicolas.rfid.data.api.EtiquetaDto
 import com.donnicolas.rfid.data.api.EtiquetaLoteDto
 import com.donnicolas.rfid.data.api.EtiquetaLoteRequestDto
+import com.donnicolas.rfid.data.api.LocateMode
 import com.donnicolas.rfid.data.api.LocateTargetDto
 import com.donnicolas.rfid.data.api.WarehouseApi
 import com.donnicolas.rfid.data.local.db.CachedActivoDao
 import com.donnicolas.rfid.data.local.db.CachedActivoEntity
 import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.rfid.EpcScheme
-
+import com.donnicolas.rfid.rfid.LocateMatchMode
+import com.donnicolas.rfid.rfid.LocateProximity
 sealed class AssetResult<out T> {
     data class Ok<T>(val value: T) : AssetResult<T>()
     data class Error(val error: AppError) : AssetResult<Nothing>()
@@ -45,7 +49,7 @@ class AssetsRepository(
             )
             val targets = remote
                 .filter { it.activo }
-                .mapNotNull { it.toLocateTarget() }
+                .mapNotNull { it.toLocateTarget(mode = LocateMode.ARTICULO) }
             val now = System.currentTimeMillis()
             cachedActivoDao.upsertAll(
                 targets.map {
@@ -129,6 +133,77 @@ class AssetsRepository(
             )
         }
     }
+
+    /** Busca una unidad por número de serie de fábrica → target SERIAL. */
+    suspend fun lookupLocateBySerieFisica(serie: String): AssetResult<LocateTargetDto?> {
+        val q = serie.trim()
+        if (q.isEmpty()) return AssetResult.Ok(null)
+        return try {
+            val lookup = assetsApi.lookupBySerieFisica(q)
+            AssetResult.Ok(lookup.toLocateTargetOrNull())
+        } catch (e: Exception) {
+            AssetResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "buscar por serie de fábrica",
+                    baseUrl = baseUrl,
+                    endpoint = "activos/by-serie-fisica/$q",
+                ),
+            )
+        }
+    }
+
+    /** Artículos serializados (para elegir y luego listar sus series). */
+    suspend fun searchSerializedActivos(query: String): AssetResult<List<ActivoDto>> {
+        return try {
+            val remote = assetsApi.listActivos(
+                search = query.trim().takeIf { it.isNotEmpty() },
+                includeInactive = false,
+            )
+            AssetResult.Ok(remote.filter { it.activo && it.serializado })
+        } catch (e: Exception) {
+            AssetResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "listar artículos serializados",
+                    baseUrl = baseUrl,
+                    endpoint = "activos",
+                ),
+            )
+        }
+    }
+
+    suspend fun listEtiquetas(activoId: String): AssetResult<List<EtiquetaDto>> {
+        return try {
+            AssetResult.Ok(assetsApi.listEtiquetas(activoId = activoId))
+        } catch (e: Exception) {
+            AssetResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "listar series del artículo",
+                    baseUrl = baseUrl,
+                    endpoint = "etiquetas?activo_id=$activoId",
+                ),
+            )
+        }
+    }
+
+    fun toLocateTargetFromEtiqueta(
+        activo: ActivoDto,
+        etiqueta: EtiquetaDto,
+    ): LocateTargetDto? {
+        return activo.toLocateTarget(
+            preferredEpc = etiqueta.epc,
+            mode = LocateMode.SERIAL,
+            serieFisica = etiqueta.serieFisica,
+        )
+    }
+
+    fun locateMatchModeOf(target: LocateTargetDto): LocateMatchMode =
+        when (target.locateMode) {
+            LocateMode.SERIAL -> LocateMatchMode.SERIAL
+            LocateMode.ARTICULO -> LocateMatchMode.SKU
+        }
 
     suspend fun listDepositos(): AssetResult<List<DepositoDto>> {
         return try {
@@ -280,10 +355,26 @@ class AssetsRepository(
 
     fun toLocateTarget(lookup: ActivoLookupDto, readEpc: String): LocateTargetDto? {
         val activo = lookup.activo ?: return null
-        return activo.toLocateTarget(preferredEpc = readEpc)
+        return activo.toLocateTarget(preferredEpc = readEpc, mode = LocateMode.ARTICULO)
     }
 
-    private fun ActivoDto.toLocateTarget(preferredEpc: String? = null): LocateTargetDto? {
+    private fun ActivoLookupSerieDto.toLocateTargetOrNull(): LocateTargetDto? {
+        if (!encontrado) return null
+        val activoDto = activo ?: return null
+        val unitEpc = LocateProximity.normalizeEpc(this.epc)?.takeIf { it.isNotEmpty() }
+            ?: return null
+        return activoDto.toLocateTarget(
+            preferredEpc = unitEpc,
+            mode = LocateMode.SERIAL,
+            serieFisica = serieConsultada,
+        )
+    }
+
+    private fun ActivoDto.toLocateTarget(
+        preferredEpc: String? = null,
+        mode: LocateMode = LocateMode.ARTICULO,
+        serieFisica: String? = null,
+    ): LocateTargetDto? {
         val fromList = epcs.map { EpcScheme.normalize(it) }.filter { it.isNotEmpty() }.distinct()
         val legacy = epc?.let { EpcScheme.normalize(it) }?.takeIf { it.isNotEmpty() }
         val preferred = preferredEpc?.let { EpcScheme.normalize(it) }?.takeIf { it.isNotEmpty() }
@@ -311,10 +402,13 @@ class AssetsRepository(
             articuloCode = code,
             locatePrefix = prefix,
             stockEtiquetas = stock,
+            locateMode = mode,
+            serieFisica = serieFisica,
         )
     }
 
-    private fun ActivoDto.toLocateTarget(): LocateTargetDto? = toLocateTarget(preferredEpc = null)
+    private fun ActivoDto.toLocateTarget(): LocateTargetDto? =
+        toLocateTarget(preferredEpc = null, mode = LocateMode.ARTICULO)
 
     private fun CachedActivoEntity.toLocateTargetOrNull(): LocateTargetDto? {
         val sample = epc?.let { EpcScheme.normalize(it) }?.takeIf { it.isNotEmpty() } ?: return null
@@ -332,6 +426,7 @@ class AssetsRepository(
             articuloCode = code,
             locatePrefix = prefix,
             stockEtiquetas = 1,
+            locateMode = LocateMode.ARTICULO,
         )
     }
 }

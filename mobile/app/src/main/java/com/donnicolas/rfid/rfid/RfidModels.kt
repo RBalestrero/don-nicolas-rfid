@@ -27,6 +27,16 @@ enum class RfidTriggerMode {
     LOCATE,
 }
 
+/**
+ * Modo de match de localización.
+ * [SKU]: cualquier unidad del artículo (prefijo D1+ART).
+ * [SERIAL]: EPC exacto de la unidad elegida.
+ */
+enum class LocateMatchMode {
+    SKU,
+    SERIAL,
+}
+
 sealed class RfidEvent {
     data class StateChanged(val state: RfidReaderState) : RfidEvent()
     data class TagRead(val tag: RfidTag) : RfidEvent()
@@ -60,8 +70,12 @@ interface RfidReader {
     /** Cambia el comportamiento del gatillo. Al salir de LOCATE limpia el target. */
     suspend fun setTriggerMode(mode: RfidTriggerMode)
 
-    /** Arma localización por tipo de artículo a partir de un EPC D1 de muestra. */
-    suspend fun armLocateTarget(epc: String)
+    /**
+     * Arma localización.
+     * [LocateMatchMode.SKU]: prefijo D1+ART (cualquier serial del artículo).
+     * [LocateMatchMode.SERIAL]: EPC completo (unidad exacta).
+     */
+    suspend fun armLocateTarget(epc: String, mode: LocateMatchMode = LocateMatchMode.SKU)
 
     suspend fun clearLocateTarget()
 

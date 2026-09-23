@@ -40,6 +40,7 @@ class SimulatedRfidReader(
     private var locateTargetEpc: String? = null
     private var locateArticuloCode: Long? = null
     private var locatePrefix: String? = null
+    private var locateMatchMode: LocateMatchMode = LocateMatchMode.SKU
     private var inventorySkuPrefix: String? = null
     private val catalog: List<String> = (1..uniqueTagTarget).map { index ->
         // D1 + art(10) + ser(10) + A1 — incluye algunos ajenos para probar el filtro
@@ -75,6 +76,7 @@ class SimulatedRfidReader(
             locateTargetEpc = null
             locateArticuloCode = null
             locatePrefix = null
+            locateMatchMode = LocateMatchMode.SKU
             inventorySkuPrefix = null
             triggerMode = RfidTriggerMode.INVENTORY
             setState(RfidReaderState.DISCONNECTED)
@@ -162,6 +164,7 @@ class SimulatedRfidReader(
                 locateTargetEpc = null
                 locateArticuloCode = null
                 locatePrefix = null
+                locateMatchMode = LocateMatchMode.SKU
             }
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -169,9 +172,14 @@ class SimulatedRfidReader(
         }
     }
 
-    override suspend fun armLocateTarget(epc: String) {
+    override suspend fun armLocateTarget(epc: String, mode: LocateMatchMode) {
         val normalized = LocateProximity.normalizeEpc(epc)
             ?: throw IllegalArgumentException("EPC vacío")
+        if (mode == LocateMatchMode.SERIAL &&
+            (!EpcScheme.belongsToSystem(normalized) || normalized.length != EpcScheme.EPC_HEX_LEN)
+        ) {
+            throw IllegalArgumentException("EPC no es D1 completo del sistema")
+        }
         val artCode = EpcScheme.decodeArticuloCode(normalized)
             ?: throw IllegalArgumentException("EPC no es D1 del sistema")
         val prefix = EpcScheme.articuloPrefixHex(normalized)
@@ -182,6 +190,7 @@ class SimulatedRfidReader(
             locateTargetEpc = normalized
             locateArticuloCode = artCode
             locatePrefix = prefix
+            locateMatchMode = mode
             triggerMode = RfidTriggerMode.LOCATE
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -195,6 +204,7 @@ class SimulatedRfidReader(
             locateTargetEpc = null
             locateArticuloCode = null
             locatePrefix = null
+            locateMatchMode = LocateMatchMode.SKU
             triggerMode = RfidTriggerMode.INVENTORY
             if (state != RfidReaderState.DISCONNECTED && state != RfidReaderState.ERROR) {
                 setState(RfidReaderState.READY)
@@ -219,7 +229,11 @@ class SimulatedRfidReader(
                 else -> Unit
             }
             val target = locateTargetEpc
-            if (target.isNullOrBlank() || locateArticuloCode == null) {
+            val ready = when (locateMatchMode) {
+                LocateMatchMode.SERIAL -> !target.isNullOrBlank()
+                LocateMatchMode.SKU -> !target.isNullOrBlank() && locateArticuloCode != null
+            }
+            if (!ready) {
                 emitFailure(
                     AppError(
                         code = "RFID_LOCATE_NO_TARGET",
@@ -230,10 +244,11 @@ class SimulatedRfidReader(
                 return
             }
             setState(RfidReaderState.LOCATE_RUNNING)
-            target
+            target!!
         }
         val artCode = locateArticuloCode
-        // Simula dos unidades del mismo SKU (mismo ART, distinto serial) y emite la más cercana.
+        val mode = locateMatchMode
+        // SKU: simula dos unidades del mismo ART. SERIAL: solo el EPC armado.
         val sibling = EpcScheme.articuloPrefixHex(sample)?.let { prefix ->
             prefix + "00000000FF" + EpcScheme.SYSTEM_SUFFIX
         } ?: sample
@@ -242,11 +257,15 @@ class SimulatedRfidReader(
             while (isActive) {
                 proximity = min(100, proximity + 3 + random.nextInt(8))
                 val rssi = -70 + (proximity * 45 / 100)
-                val hitEpc = if (artCode != null && LocateProximity.articuloMatches(artCode, sibling)) {
-                    // Alterna muestra / hermana; UI recibe la más fuerte del burst
-                    if (proximity % 2 == 0) sibling else sample
-                } else {
-                    sample
+                val hitEpc = when (mode) {
+                    LocateMatchMode.SERIAL -> sample
+                    LocateMatchMode.SKU -> if (
+                        artCode != null && LocateProximity.articuloMatches(artCode, sibling)
+                    ) {
+                        if (proximity % 2 == 0) sibling else sample
+                    } else {
+                        sample
+                    }
                 }
                 eventsFlow.emit(
                     RfidEvent.LocateUpdate(

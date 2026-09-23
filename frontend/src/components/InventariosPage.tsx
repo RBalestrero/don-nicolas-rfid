@@ -51,6 +51,15 @@ function DetalleList({
               <span className="mono">{row.articulo}</span>
               {row.descripcion && <span className="muted"> — {row.descripcion}</span>}
               <span className="muted"> · cant. {row.cantidad}</span>
+              {row.series.length > 0 && (
+                <ul className="simple-list" style={{ marginTop: 4, marginBottom: 0 }}>
+                  {row.series.map((sn) => (
+                    <li key={sn} className="muted" style={{ fontSize: "0.85em" }}>
+                      S/N {sn}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -62,21 +71,30 @@ function DetalleList({
 function aggregateByArticulo(items: DetalleInventario[]) {
   const map = new Map<
     string,
-    { key: string; articulo: string; descripcion: string | null; cantidad: number }
+    {
+      key: string;
+      articulo: string;
+      descripcion: string | null;
+      cantidad: number;
+      series: string[];
+    }
   >();
   for (const d of items) {
     const articulo = d.numero_patrimonial?.trim() || d.epc || "(sin id)";
     const key = d.activo_id ? `A:${d.activo_id}` : `P:${articulo.toUpperCase()}`;
+    const sn = d.serie_fisica?.trim();
     const prev = map.get(key);
     if (prev) {
       prev.cantidad += 1;
       if (!prev.descripcion && d.descripcion) prev.descripcion = d.descripcion;
+      if (sn) prev.series.push(sn);
     } else {
       map.set(key, {
         key,
         articulo: d.numero_patrimonial?.trim() || articulo,
         descripcion: d.descripcion ?? null,
         cantidad: 1,
+        series: sn ? [sn] : [],
       });
     }
   }

@@ -84,6 +84,9 @@ class DetalleInventarioResponse(BaseModel):
     descripcion: str | None
     estado: str
     leido_en: datetime | None
+    # Enriquecidos desde Etiqueta/Activo al serializar (no columnas de detalle).
+    serie_fisica: str | None = None
+    serializado: bool | None = None
 
 
 class InventarioResumen(BaseModel):

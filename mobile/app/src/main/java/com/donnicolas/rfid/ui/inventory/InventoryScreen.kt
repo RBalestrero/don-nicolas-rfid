@@ -1007,28 +1007,52 @@ private fun ArticleCountRow(row: ArticleCount) {
         ArticleStatus.EXCESO -> WmsExcess
         ArticleStatus.SOBRA -> WmsExcess
     }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = row.descripcion?.takeIf { it.isNotBlank() } ?: row.articulo,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp),
-        )
-        Text(
-            text = row.cantidadLabel,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = countColor,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = row.descripcion?.takeIf { it.isNotBlank() } ?: row.articulo,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+            )
+            Text(
+                text = row.cantidadLabel,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = countColor,
+            )
+        }
+        if (row.serializado && row.units.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            row.units.forEach { unit ->
+                val label = unit.serieFisica?.takeIf { it.isNotBlank() }?.let { "S/N $it" }
+                    ?: unit.epc.takeIf { it.isNotBlank() }?.let { epc ->
+                        "EPC ${epc.takeLast(8)}"
+                    }
+                    ?: "—"
+                val mark = if (unit.encontrado) "✓" else "✗"
+                Text(
+                    text = "$mark $label",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (unit.encontrado) {
+                        WmsOk
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+            }
+        }
     }
 }

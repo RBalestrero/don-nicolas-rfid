@@ -750,3 +750,83 @@ def test_inventario_por_activo_id(client: TestClient, mobile_auth_headers):
         headers=mobile_auth_headers,
     )
     assert empty.status_code == 400
+
+
+def test_reporte_incluye_serie_fisica_de_articulos_serializados(
+    client: TestClient, mobile_auth_headers
+):
+    """Los detalles del reporte traen serie_fisica/serializado vía join a Etiqueta."""
+    deposito = client.post(
+        "/api/v1/depositos",
+        json={"nombre": _unique("Dep Ser")},
+        headers=mobile_auth_headers,
+    ).json()
+    sector = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores",
+        json={"nombre": "Sector Ser"},
+        headers=mobile_auth_headers,
+    ).json()
+    ubic = client.post(
+        f"/api/v1/depositos/{deposito['id']}/sectores/{sector['id']}/ubicaciones",
+        json={"codigo": "SER-01"},
+        headers=mobile_auth_headers,
+    ).json()
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("CatSer")},
+        headers=mobile_auth_headers,
+    ).json()
+    activo = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": _unique("PAT-SER"),
+            "descripcion": "Equipo serializado",
+            "categoria_id": cat["id"],
+            "serializado": True,
+        },
+        headers=mobile_auth_headers,
+    ).json()
+    lote = client.post(
+        f"/api/v1/activos/{activo['id']}/etiquetas",
+        json={"cantidad": 2, "series_fisicas": ["sn-inv-a", "sn-inv-b"]},
+        headers=mobile_auth_headers,
+    )
+    assert lote.status_code == 201, lote.text
+    etiquetas = lote.json()["etiquetas"]
+    epc_a = etiquetas[0]["epc"]
+    epc_b = etiquetas[1]["epc"]
+    serie_a = etiquetas[0]["serie_fisica"]
+    serie_b = etiquetas[1]["serie_fisica"]
+    assert serie_a and serie_b
+    client.post(
+        f"/api/v1/activos/{activo['id']}/asignar-ubicacion",
+        json={"ubicacion_id": ubic["id"]},
+        headers=mobile_auth_headers,
+    )
+
+    inv = client.post(
+        "/api/v1/inventarios",
+        json={"deposito_id": deposito["id"]},
+        headers=mobile_auth_headers,
+    ).json()
+    assert len(inv["detalles"]) == 2
+    by_epc_create = {d["epc"]: d for d in inv["detalles"]}
+    assert by_epc_create[epc_a]["serie_fisica"] == serie_a
+    assert by_epc_create[epc_b]["serie_fisica"] == serie_b
+    assert by_epc_create[epc_a]["serializado"] is True
+
+    client.post(
+        f"/api/v1/inventarios/{inv['id']}/cerrar",
+        json={"epcs": [epc_a]},
+        headers=mobile_auth_headers,
+    )
+    reporte = client.get(
+        f"/api/v1/inventarios/{inv['id']}/reporte",
+        headers=mobile_auth_headers,
+    ).json()
+    assert len(reporte["encontrados"]) == 1
+    assert reporte["encontrados"][0]["serie_fisica"] == serie_a
+    assert reporte["encontrados"][0]["serializado"] is True
+    assert len(reporte["faltantes"]) == 1
+    assert reporte["faltantes"][0]["serie_fisica"] == serie_b
+    assert reporte["faltantes"][0]["serializado"] is True

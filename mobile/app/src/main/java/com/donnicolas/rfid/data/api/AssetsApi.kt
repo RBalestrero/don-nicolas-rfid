@@ -25,8 +25,17 @@ interface AssetsApi {
     @GET("activos/by-epc/{epc}")
     suspend fun lookupByEpc(@Path("epc") epc: String): ActivoLookupDto
 
+    @GET("activos/by-serie-fisica/{serie}")
+    suspend fun lookupBySerieFisica(@Path("serie") serie: String): ActivoLookupSerieDto
+
     @POST("activos/lookup-epcs")
     suspend fun lookupByEpcs(@Body body: ActivoLookupEpcsRequest): ActivoLookupEpcsDto
+
+    @GET("etiquetas")
+    suspend fun listEtiquetas(
+        @Query("activo_id") activoId: String? = null,
+        @Query("search") search: String? = null,
+    ): List<EtiquetaDto>
 
     @POST("activos/{activo_id}/etiquetas")
     suspend fun crearEtiquetas(
@@ -62,6 +71,28 @@ data class ActivoLookupDto(
     val activo: ActivoDto? = null,
     val ubicacion: ActivoUbicacionDto? = null,
     val mensaje: String? = null,
+)
+
+data class ActivoLookupSerieDto(
+    val encontrado: Boolean,
+    @Json(name = "serie_consultada") val serieConsultada: String,
+    val activo: ActivoDto? = null,
+    @Json(name = "etiqueta_id") val etiquetaId: String? = null,
+    val epc: String? = null,
+    val ubicacion: ActivoUbicacionDto? = null,
+    val mensaje: String? = null,
+)
+
+data class EtiquetaDto(
+    val id: String,
+    @Json(name = "activo_id") val activoId: String,
+    val epc: String,
+    @Json(name = "serial_hex") val serialHex: String? = null,
+    @Json(name = "serie_fisica") val serieFisica: String? = null,
+    val estado: String = "activa",
+    val impresa: Boolean = false,
+    @Json(name = "numero_patrimonial") val numeroPatrimonial: String? = null,
+    val descripcion: String? = null,
 )
 
 data class ActivoDto(
@@ -136,9 +167,16 @@ data class ActivoUbicacionStockDto(
 )
 
 /**
- * Tipo de artículo a localizar (SKU).
- * `epc` es una muestra D1… para derivar el código de artículo; el match RF
- * acepta cualquier unidad con el mismo ART embebido (serial distinto).
+ * Modo de localización: artículo (cualquier unidad) o serial (EPC exacto).
+ */
+enum class LocateMode {
+    ARTICULO,
+    SERIAL,
+}
+
+/**
+ * Target a localizar.
+ * `epc` es la muestra D1…: en ARTICULO deriva el prefijo; en SERIAL es el EPC exacto.
  */
 data class LocateTargetDto(
     val activoId: String,
@@ -148,14 +186,28 @@ data class LocateTargetDto(
     val articuloCode: Long,
     val locatePrefix: String,
     val stockEtiquetas: Int = 1,
+    val locateMode: LocateMode = LocateMode.ARTICULO,
+    val serieFisica: String? = null,
 ) {
     val title: String
-        get() = if (stockEtiquetas > 1) {
-            "$numeroPatrimonial · $stockEtiquetas u."
-        } else {
-            numeroPatrimonial
+        get() = when (locateMode) {
+            LocateMode.SERIAL -> {
+                val sn = serieFisica?.takeIf { it.isNotBlank() }
+                if (sn != null) "S/N $sn" else numeroPatrimonial
+            }
+            LocateMode.ARTICULO -> if (stockEtiquetas > 1) {
+                "$numeroPatrimonial · $stockEtiquetas u."
+            } else {
+                numeroPatrimonial
+            }
         }
 
     val subtitle: String
-        get() = descripcion
+        get() = when (locateMode) {
+            LocateMode.SERIAL -> {
+                val sn = serieFisica?.takeIf { it.isNotBlank() }
+                if (sn != null) "$numeroPatrimonial · $descripcion" else descripcion
+            }
+            LocateMode.ARTICULO -> descripcion
+        }
 }

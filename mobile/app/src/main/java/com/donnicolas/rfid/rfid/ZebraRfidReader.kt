@@ -64,6 +64,8 @@ class ZebraRfidReader(
     @Volatile private var locateArticuloCode: Long? = null
     /** Prefijo D1+ART (12 hex / 48 bits) para PreFilter Gen2. */
     @Volatile private var locatePrefix: String? = null
+    /** SKU (cualquier serial) vs SERIAL (EPC exacto). */
+    @Volatile private var locateMatchMode: LocateMatchMode = LocateMatchMode.SKU
     /** Prefijo SKU armado para inventario filtrado (conteo libre). */
     @Volatile private var inventorySkuPrefix: String? = null
     /** multi / single / filter (PreFilter+Inventory+RSSI) */
@@ -282,7 +284,7 @@ class ZebraRfidReader(
         }
     }
 
-    override suspend fun armLocateTarget(epc: String) {
+    override suspend fun armLocateTarget(epc: String, mode: LocateMatchMode) {
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 val normalized = LocateProximity.normalizeEpc(epc)
@@ -291,11 +293,20 @@ class ZebraRfidReader(
                         title = "EPC vacío para localizar",
                         detail = "armLocateTarget() requiere un EPC válido.",
                     )
+                if (mode == LocateMatchMode.SERIAL &&
+                    (!EpcScheme.belongsToSystem(normalized) || normalized.length != EpcScheme.EPC_HEX_LEN)
+                ) {
+                    throw failure(
+                        code = "RFID_LOCATE_EPC_INVALID",
+                        title = "EPC no es del sistema",
+                        detail = "Localizar por serial requiere un EPC D1 completo (24 hex).",
+                    )
+                }
                 val artCode = EpcScheme.decodeArticuloCode(normalized)
                     ?: throw failure(
                         code = "RFID_LOCATE_EPC_INVALID",
                         title = "EPC no es del sistema",
-                        detail = "Se necesita un EPC D1… para localizar por tipo de artículo.",
+                        detail = "Se necesita un EPC D1… para localizar.",
                     )
                 val prefix = EpcScheme.articuloPrefixHex(normalized)
                     ?: throw failure(
@@ -303,16 +314,22 @@ class ZebraRfidReader(
                         title = "EPC no es del sistema",
                         detail = "No se pudo derivar el prefijo de artículo del EPC.",
                     )
-                stopInventoryInternal(force = true)
-                stopLocateInternal(force = true)
+                // Armar target + gatillo ANTES de stopInventory para que un trigger
+                // durante el handoff no arranque inventario masivo.
                 locateTargetEpc = normalized
                 locateArticuloCode = artCode
                 locatePrefix = prefix
+                locateMatchMode = mode
                 triggerMode = RfidTriggerMode.LOCATE
+                stopInventoryInternal(force = true)
+                stopLocateInternal(force = true)
                 if (reader?.isConnected == true) {
                     emitState(RfidReaderState.READY)
                 }
-                Log.i(TAG, "Locate SKU armado art=$artCode prefix=$prefix sample=$normalized")
+                Log.i(
+                    TAG,
+                    "Locate armado mode=$mode art=$artCode prefix=$prefix sample=$normalized",
+                )
             }
         }
     }
@@ -342,21 +359,31 @@ class ZebraRfidReader(
             }
             val prefix = locatePrefix
             val sample = locateTargetEpc
-            if (prefix.isNullOrBlank() || sample.isNullOrBlank() || locateArticuloCode == null) {
+            val mode = locateMatchMode
+            val ready = when (mode) {
+                LocateMatchMode.SERIAL -> !sample.isNullOrBlank()
+                LocateMatchMode.SKU ->
+                    !prefix.isNullOrBlank() && !sample.isNullOrBlank() && locateArticuloCode != null
+            }
+            if (!ready) {
                 throw failure(
                     code = "RFID_LOCATE_NO_TARGET",
                     title = "Sin artículo a localizar",
-                    detail = "Seleccioná un tipo de artículo con etiqueta RFID antes de localizar.",
+                    detail = "Seleccioná un artículo o serial con etiqueta RFID antes de localizar.",
                 )
             }
             try {
                 stopInventoryInternal(force = true)
-                startLocateInternal(rfidReader, sample, prefix)
+                startLocateInternal(rfidReader, sample!!, prefix.orEmpty(), mode)
             } catch (e: OperationFailureException) {
                 throw failure(
                     code = "RFID_LOCATE_START_FAILED",
                     title = "No se pudo iniciar la localización",
-                    detail = "PreFilter por artículo falló.",
+                    detail = if (mode == LocateMatchMode.SERIAL) {
+                        "TagLocationing / PreFilter por EPC falló."
+                    } else {
+                        "PreFilter por artículo falló."
+                    },
                     cause = formatOpFailure(e),
                 )
             } catch (e: InvalidUsageException) {
@@ -374,6 +401,7 @@ class ZebraRfidReader(
         locateTargetEpc = null
         locateArticuloCode = null
         locatePrefix = null
+        locateMatchMode = LocateMatchMode.SKU
     }
 
     override suspend fun stopLocate() = withContext(Dispatchers.IO) {
@@ -431,12 +459,16 @@ class ZebraRfidReader(
     }
 
     /**
-     * Localización por tipo de artículo (SKU): PreFilter Gen2 sobre
-     * `D1` + ART (48 bits) + inventario; geiger por RSSI.
-     * TagLocationing/MultiTagLocate exigen EPC completo (serial) y no sirven
-     * para “cualquier unidad de este artículo”.
+     * Localización:
+     * - SKU: PreFilter Gen2 sobre `D1`+ART (48 bits) + inventario; geiger por RSSI.
+     * - SERIAL: PreFilter EPC completo (96 bits) + inventario; TagLocationing solo como fallback.
      */
-    private fun startLocateInternal(rfidReader: RFIDReader, sampleEpc: String, prefix: String) {
+    private fun startLocateInternal(
+        rfidReader: RFIDReader,
+        sampleEpc: String,
+        prefix: String,
+        mode: LocateMatchMode,
+    ) {
         inventoryLock.withLock {
             if (locateRunning.get()) return
             // El gatillo HANDHELD de 123RFID puede haber arrancado inventario
@@ -452,29 +484,62 @@ class ZebraRfidReader(
 
             locateEngine = LOCATE_NONE
             var lastError: Exception? = null
-            val artPrefix = LocateProximity.normalizeEpc(prefix)
-                ?: EpcScheme.articuloPrefixHex(sampleEpc)
-                ?: prefix
 
-            try {
-                applyArticuloPreFilter(rfidReader, artPrefix)
-                applyLocateSingulation(rfidReader)
-                rfidReader.Actions.Inventory.perform()
-                inventoryRunning.set(true)
-                locateEngine = LOCATE_FILTER
-                Log.i(
-                    TAG,
-                    "Locate SKU PreFilter+Inventory OK prefix=$artPrefix " +
-                        "art=${locateArticuloCode} sample=$sampleEpc",
-                )
-            } catch (e: Exception) {
-                lastError = e
-                Log.w(TAG, "PreFilter SKU locate falló: ${e.javaClass.simpleName}: ${e.message}")
-                runCatching { rfidReader.Actions.PreFilters.deleteAll() }
-                restoreSingulation(rfidReader)
+            if (mode == LocateMatchMode.SERIAL) {
+                // Preferir PreFilter-96 + Inventory (mismo geiger RSSI que SKU).
+                // TagLocationing.Perform a menudo "ok" sin LocationInfo útil en MC33.
+                try {
+                    applyExactEpcPreFilter(rfidReader, sampleEpc)
+                    applyLocateSingulation(rfidReader)
+                    rfidReader.Actions.Inventory.perform()
+                    inventoryRunning.set(true)
+                    locateEngine = LOCATE_FILTER
+                    Log.i(TAG, "Locate SERIAL PreFilter-96+Inventory OK epc=$sampleEpc")
+                } catch (e: Exception) {
+                    lastError = e
+                    Log.w(
+                        TAG,
+                        "PreFilter SERIAL falló: ${e.javaClass.simpleName}: ${e.message}",
+                    )
+                    runCatching { rfidReader.Actions.PreFilters.deleteAll() }
+                    restoreSingulation(rfidReader)
+                    try {
+                        rfidReader.Actions.TagLocationing.Perform(sampleEpc, null, null)
+                        locateEngine = LOCATE_SINGLE
+                        Log.i(TAG, "Locate SERIAL TagLocationing fallback OK epc=$sampleEpc")
+                    } catch (e2: Exception) {
+                        lastError = e2
+                        Log.w(
+                            TAG,
+                            "TagLocationing SERIAL falló: ${e2.javaClass.simpleName}: ${e2.message}",
+                        )
+                        runCatching { rfidReader.Actions.TagLocationing.Stop() }
+                    }
+                }
+            } else {
+                val artPrefix = LocateProximity.normalizeEpc(prefix)
+                    ?: EpcScheme.articuloPrefixHex(sampleEpc)
+                    ?: prefix
+                try {
+                    applyArticuloPreFilter(rfidReader, artPrefix)
+                    applyLocateSingulation(rfidReader)
+                    rfidReader.Actions.Inventory.perform()
+                    inventoryRunning.set(true)
+                    locateEngine = LOCATE_FILTER
+                    Log.i(
+                        TAG,
+                        "Locate SKU PreFilter+Inventory OK prefix=$artPrefix " +
+                            "art=${locateArticuloCode} sample=$sampleEpc",
+                    )
+                } catch (e: Exception) {
+                    lastError = e
+                    Log.w(TAG, "PreFilter SKU locate falló: ${e.javaClass.simpleName}: ${e.message}")
+                    runCatching { rfidReader.Actions.PreFilters.deleteAll() }
+                    restoreSingulation(rfidReader)
+                }
             }
 
-            // Fallback: inventario abierto + filtro soft por código de artículo
+            // Fallback soft: inventario abierto + filtro soft
             if (locateEngine == LOCATE_NONE) {
                 try {
                     runCatching { rfidReader.Actions.PreFilters.deleteAll() }
@@ -482,7 +547,10 @@ class ZebraRfidReader(
                     rfidReader.Actions.Inventory.perform()
                     inventoryRunning.set(true)
                     locateEngine = LOCATE_FILTER
-                    Log.i(TAG, "Locate SKU soft-filter Inventory OK art=${locateArticuloCode}")
+                    Log.i(
+                        TAG,
+                        "Locate soft-filter Inventory OK mode=$mode art=${locateArticuloCode}",
+                    )
                 } catch (e: Exception) {
                     lastError = e
                     Log.w(TAG, "Locate soft inventory falló: ${e.message}")
@@ -603,6 +671,32 @@ class ZebraRfidReader(
     }
 
     /**
+     * PreFilter Gen2 por EPC completo (24 hex = 96 bits) para localización SERIAL.
+     */
+    private fun applyExactEpcPreFilter(rfidReader: RFIDReader, fullEpc: String) {
+        val pattern = LocateProximity.normalizeEpc(fullEpc)
+            ?: throw IllegalArgumentException("EPC vacío")
+        require(pattern.length == EpcScheme.EPC_HEX_LEN) {
+            "EPC debe tener ${EpcScheme.EPC_HEX_LEN} hex para PreFilter SERIAL"
+        }
+        val filters = PreFilters()
+        val filter = filters.PreFilter()
+        filter.setAntennaID(1.toShort())
+        filter.setTagPattern(pattern)
+        filter.setTagPatternBitCount(pattern.length * 4)
+        filter.setBitOffset(32)
+        filter.setMemoryBank(MEMORY_BANK.MEMORY_BANK_EPC)
+        filter.setFilterAction(FILTER_ACTION.FILTER_ACTION_STATE_AWARE)
+        filter.StateAwareAction.setTarget(TARGET.TARGET_SL)
+        filter.StateAwareAction.setStateAwareAction(
+            STATE_AWARE_ACTION.STATE_AWARE_ACTION_ASRT_SL_NOT_DSRT_SL,
+        )
+        filter.setTruncateAction(TRUNCATE_ACTION.TRUNCATE_ACTION_DO_NOT_TRUNCATE)
+        rfidReader.Actions.PreFilters.add(filter)
+        Log.i(TAG, "PreFilter SERIAL epc=$pattern bitCount=${pattern.length * 4} offset=32")
+    }
+
+    /**
      * PreFilter por sufijo de sistema — NO usar en inventario masivo por ahora:
      * requiere singulación SL alineada y el offset es sensible al modelo.
      * Se conserva para pruebas futuras.
@@ -701,8 +795,9 @@ class ZebraRfidReader(
                 val rfidReader = reader ?: return@execute
                 if (!rfidReader.isConnected) return@execute
                 val sample = locateTargetEpc ?: return@execute
-                val prefix = locatePrefix ?: return@execute
-                startLocateInternal(rfidReader, sample, prefix)
+                val mode = locateMatchMode
+                if (mode == LocateMatchMode.SKU && locatePrefix.isNullOrBlank()) return@execute
+                startLocateInternal(rfidReader, sample, locatePrefix.orEmpty(), mode)
             } catch (e: Exception) {
                 Log.e(TAG, "queueStartLocate: ${e.message}", e)
                 eventBus.emit(
@@ -1037,17 +1132,21 @@ class ZebraRfidReader(
         val artCode = locateArticuloCode
         val prefix = locatePrefix
         val sample = locateTargetEpc
+        val mode = locateMatchMode
         val seen = LinkedHashMap<String, Pair<Int, Int>>() // epc -> (distance, rssi)
 
         fun consider(epcRaw: String?, distance: Int?, rssi: Int?, source: String) {
             val epc = LocateProximity.normalizeEpc(epcRaw) ?: return
-            val matches = when {
-                artCode != null -> LocateProximity.articuloMatches(artCode, epc)
-                !prefix.isNullOrBlank() -> LocateProximity.articuloMatchesPrefix(prefix, epc)
-                else -> LocateProximity.locateMatches(sample, epc)
+            val matches = when (mode) {
+                LocateMatchMode.SERIAL -> LocateProximity.epcMatches(sample, epc)
+                LocateMatchMode.SKU -> when {
+                    artCode != null -> LocateProximity.articuloMatches(artCode, epc)
+                    !prefix.isNullOrBlank() -> LocateProximity.articuloMatchesPrefix(prefix, epc)
+                    else -> false
+                }
             }
             if (!matches) {
-                Log.d(TAG, "Locate ignore $epc (art=$artCode prefix=$prefix) via $source")
+                Log.d(TAG, "Locate ignore $epc (mode=$mode art=$artCode) via $source")
                 return
             }
             val dist = LocateProximity.resolve(distance, rssi)

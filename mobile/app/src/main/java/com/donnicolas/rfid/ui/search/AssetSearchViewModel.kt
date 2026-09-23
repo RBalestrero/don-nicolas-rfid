@@ -4,6 +4,9 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.donnicolas.rfid.data.api.ActivoDto
+import com.donnicolas.rfid.data.api.EtiquetaDto
+import com.donnicolas.rfid.data.api.LocateMode
 import com.donnicolas.rfid.data.api.LocateTargetDto
 import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.data.repository.AssetResult
@@ -26,15 +29,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 enum class AssetSearchStep {
+    SELECT_MODE,
     SELECT_ACTIVO,
+    SELECT_SERIAL,
+    SELECT_SERIAL_UNITS,
     LOCATE,
 }
 
 data class AssetSearchUiState(
-    val step: AssetSearchStep = AssetSearchStep.SELECT_ACTIVO,
+    val step: AssetSearchStep = AssetSearchStep.SELECT_MODE,
     val query: String = "",
     val loadingList: Boolean = false,
     val targets: List<LocateTargetDto> = emptyList(),
+    /** Artículos serializados al buscar por tipo (antes de listar series). */
+    val serialActivos: List<ActivoDto> = emptyList(),
+    val serialUnits: List<EtiquetaDto> = emptyList(),
+    val serialActivo: ActivoDto? = null,
     val selected: LocateTargetDto? = null,
     val readerState: RfidReaderState = RfidReaderState.DISCONNECTED,
     val locating: Boolean = false,
@@ -64,7 +74,36 @@ class AssetSearchViewModel(
     init {
         observeReader()
         connectReader()
+    }
+
+    fun chooseModeArticulo() {
+        _state.update {
+            it.copy(
+                step = AssetSearchStep.SELECT_ACTIVO,
+                query = "",
+                targets = emptyList(),
+                serialActivos = emptyList(),
+                serialUnits = emptyList(),
+                serialActivo = null,
+                error = null,
+            )
+        }
         search("")
+    }
+
+    fun chooseModeSerial() {
+        _state.update {
+            it.copy(
+                step = AssetSearchStep.SELECT_SERIAL,
+                query = "",
+                targets = emptyList(),
+                serialActivos = emptyList(),
+                serialUnits = emptyList(),
+                serialActivo = null,
+                error = null,
+            )
+        }
+        searchSerial("")
     }
 
     fun onQueryChange(value: String) {
@@ -85,15 +124,104 @@ class AssetSearchViewModel(
         }
     }
 
+    fun searchSerial(query: String = _state.value.query) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    loadingList = true,
+                    error = null,
+                    query = query,
+                    targets = emptyList(),
+                    serialActivos = emptyList(),
+                )
+            }
+            val q = query.trim()
+            val targets = mutableListOf<LocateTargetDto>()
+            if (q.isNotEmpty()) {
+                when (val bySerie = assetsRepository.lookupLocateBySerieFisica(q)) {
+                    is AssetResult.Ok -> bySerie.value?.let { targets.add(it) }
+                    is AssetResult.Error -> {
+                        _state.update { it.copy(loadingList = false, error = bySerie.error) }
+                        return@launch
+                    }
+                }
+            }
+            when (val arts = assetsRepository.searchSerializedActivos(q)) {
+                is AssetResult.Ok -> _state.update {
+                    it.copy(
+                        loadingList = false,
+                        targets = targets,
+                        serialActivos = arts.value,
+                    )
+                }
+                is AssetResult.Error -> _state.update {
+                    it.copy(
+                        loadingList = false,
+                        targets = targets,
+                        error = if (targets.isEmpty()) arts.error else null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectSerializedActivo(activo: ActivoDto) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    loadingList = true,
+                    error = null,
+                    serialActivo = activo,
+                    serialUnits = emptyList(),
+                )
+            }
+            when (val result = assetsRepository.listEtiquetas(activo.id)) {
+                is AssetResult.Ok -> {
+                    val units = result.value.filter {
+                        it.estado.equals("activa", ignoreCase = true)
+                    }
+                    _state.update {
+                        it.copy(
+                            loadingList = false,
+                            step = AssetSearchStep.SELECT_SERIAL_UNITS,
+                            serialUnits = units,
+                        )
+                    }
+                }
+                is AssetResult.Error -> _state.update {
+                    it.copy(loadingList = false, error = result.error)
+                }
+            }
+        }
+    }
+
+    fun selectSerialUnit(etiqueta: EtiquetaDto) {
+        val activo = _state.value.serialActivo ?: return
+        val target = assetsRepository.toLocateTargetFromEtiqueta(activo, etiqueta)
+        if (target == null) {
+            _state.update {
+                it.copy(
+                    error = AppError(
+                        code = "LOCATE_NO_EPC",
+                        title = "Serie sin EPC válido",
+                        detail = "Esta unidad no tiene un EPC D1 para localizar.",
+                    ),
+                )
+            }
+            return
+        }
+        beginLocateHandoff(target)
+    }
+
     fun selectTarget(target: LocateTargetDto) {
         beginLocateHandoff(target)
     }
 
     /**
-     * Entra a Proximidad de inmediato (sin pasar por la lista) y arma el lector.
-     * Se puede llamar antes de navegar a esta pantalla para evitar un frame de “Localizar”.
+     * Entra a Proximidad y arma el lector (suspende hasta que triggerMode=LOCATE).
+     * Usar desde zona antes de navegar para evitar que el gatillo dispare inventario.
      */
-    fun beginLocateHandoff(target: LocateTargetDto) {
+    suspend fun armLocateHandoff(target: LocateTargetDto): Boolean {
         val epc = LocateProximity.normalizeEpc(target.epc).orEmpty()
         if (epc.isEmpty() || EpcScheme.decodeArticuloCode(epc) == null) {
             _state.update {
@@ -105,9 +233,8 @@ class AssetSearchViewModel(
                     ),
                 )
             }
-            return
+            return false
         }
-        // UI primero: el usuario ve Proximidad sin pasar por la búsqueda.
         _state.update {
             it.copy(
                 step = AssetSearchStep.LOCATE,
@@ -120,24 +247,47 @@ class AssetSearchViewModel(
                 error = null,
             )
         }
+        return try {
+            reader.armLocateTarget(epc, assetsRepository.locateMatchModeOf(target))
+            beeper.stop()
+            resetPeakHold()
+            true
+        } catch (e: RfidException) {
+            _state.update { it.copy(error = e.error) }
+            false
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(
+                    error = AppError(
+                        code = "LOCATE_ARM_FAILED",
+                        title = "No se pudo preparar la localización",
+                        detail = "Reintentá o reconectá el lector.",
+                        cause = e.message,
+                    ),
+                )
+            }
+            false
+        }
+    }
+
+    /**
+     * Entra a Proximidad de inmediato (sin pasar por la lista) y arma el lector.
+     * Se puede llamar antes de navegar a esta pantalla para evitar un frame de “Localizar”.
+     */
+    fun beginLocateHandoff(target: LocateTargetDto) {
         viewModelScope.launch {
-            try {
-                reader.armLocateTarget(epc)
-                beeper.stop()
-                resetPeakHold()
-            } catch (e: RfidException) {
-                _state.update { it.copy(error = e.error) }
-            } catch (e: Exception) {
-                _state.update {
-                    it.copy(
-                        error = AppError(
-                            code = "LOCATE_ARM_FAILED",
-                            title = "No se pudo preparar la localización",
-                            detail = "Reintentá o reconectá el lector.",
-                            cause = e.message,
-                        ),
-                    )
-                }
+            armLocateHandoff(target)
+        }
+    }
+
+    fun backToMode() {
+        viewModelScope.launch {
+            releaseLocateSession()
+            _state.update {
+                AssetSearchUiState(
+                    step = AssetSearchStep.SELECT_MODE,
+                    readerState = it.readerState,
+                )
             }
         }
     }
@@ -145,18 +295,51 @@ class AssetSearchViewModel(
     fun backToSelect() {
         viewModelScope.launch {
             releaseLocateSession()
-            _state.update {
-                it.copy(
-                    step = AssetSearchStep.SELECT_ACTIVO,
-                    selected = null,
-                    locating = false,
-                    proximity = 0,
-                    rssi = null,
-                    hitEpc = null,
-                    proximityLabel = LocateProximity.label(0),
-                    error = null,
-                )
+            val mode = _state.value.selected?.locateMode ?: LocateMode.ARTICULO
+            when (mode) {
+                LocateMode.SERIAL -> {
+                    val hasUnits = _state.value.serialActivo != null
+                    _state.update {
+                        it.copy(
+                            step = if (hasUnits) {
+                                AssetSearchStep.SELECT_SERIAL_UNITS
+                            } else {
+                                AssetSearchStep.SELECT_SERIAL
+                            },
+                            selected = null,
+                            locating = false,
+                            proximity = 0,
+                            rssi = null,
+                            hitEpc = null,
+                            proximityLabel = LocateProximity.label(0),
+                            error = null,
+                        )
+                    }
+                }
+                LocateMode.ARTICULO -> _state.update {
+                    it.copy(
+                        step = AssetSearchStep.SELECT_ACTIVO,
+                        selected = null,
+                        locating = false,
+                        proximity = 0,
+                        rssi = null,
+                        hitEpc = null,
+                        proximityLabel = LocateProximity.label(0),
+                        error = null,
+                    )
+                }
             }
+        }
+    }
+
+    fun backFromSerialUnits() {
+        _state.update {
+            it.copy(
+                step = AssetSearchStep.SELECT_SERIAL,
+                serialUnits = emptyList(),
+                serialActivo = null,
+                error = null,
+            )
         }
     }
 
@@ -165,15 +348,9 @@ class AssetSearchViewModel(
         viewModelScope.launch {
             releaseLocateSession()
             _state.update {
-                it.copy(
-                    step = AssetSearchStep.SELECT_ACTIVO,
-                    selected = null,
-                    locating = false,
-                    proximity = 0,
-                    rssi = null,
-                    hitEpc = null,
-                    proximityLabel = LocateProximity.label(0),
-                    error = null,
+                AssetSearchUiState(
+                    step = AssetSearchStep.SELECT_MODE,
+                    readerState = it.readerState,
                 )
             }
             onDone()

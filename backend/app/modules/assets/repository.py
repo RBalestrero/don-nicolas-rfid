@@ -200,14 +200,17 @@ class EtiquetaRepository:
         ).first()
 
     def get_by_serie_fisica(self, serie: str) -> Etiqueta | None:
-        """Busca etiqueta por serie de fábrica (exacta, case-insensitive)."""
+        """Busca etiqueta activa por serie de fábrica (exacta, case-insensitive)."""
         normalized = (serie or "").strip().upper()
         if not normalized:
             return None
         return self.db.scalars(
             select(Etiqueta)
             .options(joinedload(Etiqueta.activo).joinedload(Activo.categoria))
-            .where(Etiqueta.serie_fisica == normalized)
+            .where(
+                Etiqueta.serie_fisica == normalized,
+                Etiqueta.estado == "activa",
+            )
             .order_by(Etiqueta.creado_en.desc())
         ).first()
 

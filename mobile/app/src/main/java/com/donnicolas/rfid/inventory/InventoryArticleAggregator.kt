@@ -12,6 +12,13 @@ enum class ArticleStatus {
     SOBRA,
 }
 
+data class SerialUnitStatus(
+    val epc: String,
+    val serieFisica: String?,
+    val encontrado: Boolean,
+    val estado: String = if (encontrado) "encontrado" else "faltante",
+)
+
 /**
  * Una fila de inventario agrupada por artículo (no por EPC).
  *
@@ -27,6 +34,8 @@ data class ArticleCount(
     val esperados: Int,
     val sobrantes: Int = 0,
     val status: ArticleStatus,
+    val serializado: Boolean = false,
+    val units: List<SerialUnitStatus> = emptyList(),
 ) {
     /** Total de unidades leídas de este artículo (esperadas halladas + exceso). */
     val leidos: Int get() = encontrados + sobrantes
@@ -76,10 +85,12 @@ object InventoryArticleAggregator {
             }
             bucket.keys.addAll(keys)
             bucket.esperados += 1
-            if (epc in read) bucket.encontrados += 1
+            val found = epc in read
+            if (found) bucket.encontrados += 1
             if (bucket.descripcion.isNullOrBlank() && !detalle.descripcion.isNullOrBlank()) {
                 bucket.descripcion = detalle.descripcion
             }
+            bucket.collectSerialUnit(detalle, epc, encontrado = found)
         }
 
         // Exceso del mismo artículo: EPC leído que no estaba en el snapshot pero matchea un bucket.
@@ -142,16 +153,26 @@ object InventoryArticleAggregator {
                 )
             }
             bucket.keys.addAll(keys)
-            when (detalle.estado.lowercase()) {
+            val found = when (detalle.estado.lowercase()) {
                 "encontrado" -> {
                     bucket.esperados += 1
                     bucket.encontrados += 1
+                    true
                 }
-                "faltante", "esperado" -> bucket.esperados += 1
-                else -> bucket.esperados += 1
+                "faltante", "esperado" -> {
+                    bucket.esperados += 1
+                    false
+                }
+                else -> {
+                    bucket.esperados += 1
+                    false
+                }
             }
             if (bucket.descripcion.isNullOrBlank() && !detalle.descripcion.isNullOrBlank()) {
                 bucket.descripcion = detalle.descripcion
+            }
+            if (epc.isNotEmpty()) {
+                bucket.collectSerialUnit(detalle, epc, encontrado = found)
             }
         }
         return buckets.values.map { it.toArticleCount() }
@@ -179,6 +200,23 @@ object InventoryArticleAggregator {
         }
     }
 
+    private fun MutableBucket.collectSerialUnit(
+        detalle: DetalleInventarioDto,
+        epc: String,
+        encontrado: Boolean,
+    ) {
+        val isSerial = detalle.serializado == true || !detalle.serieFisica.isNullOrBlank()
+        if (!isSerial) return
+        serializado = true
+        units.add(
+            SerialUnitStatus(
+                epc = epc,
+                serieFisica = detalle.serieFisica?.takeIf { it.isNotBlank() },
+                encontrado = encontrado,
+            ),
+        )
+    }
+
     private data class MutableBucket(
         val key: String,
         var articulo: String,
@@ -187,6 +225,8 @@ object InventoryArticleAggregator {
         var encontrados: Int = 0,
         var esperados: Int = 0,
         var sobrantes: Int = 0,
+        var serializado: Boolean = false,
+        val units: MutableList<SerialUnitStatus> = mutableListOf(),
     ) {
         fun toArticleCount(): ArticleCount {
             val leidos = encontrados + sobrantes
@@ -205,6 +245,8 @@ object InventoryArticleAggregator {
                 esperados = esperados,
                 sobrantes = sobrantes,
                 status = status,
+                serializado = serializado,
+                units = units.toList(),
             )
         }
     }

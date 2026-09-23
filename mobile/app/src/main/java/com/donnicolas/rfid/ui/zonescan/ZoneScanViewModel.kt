@@ -3,13 +3,16 @@ package com.donnicolas.rfid.ui.zonescan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.donnicolas.rfid.data.api.ActivoDto
 import com.donnicolas.rfid.data.api.ActivoLookupDto
 import com.donnicolas.rfid.data.api.ActivoUbicacionDto
+import com.donnicolas.rfid.data.api.EtiquetaDto
 import com.donnicolas.rfid.data.api.LocateTargetDto
 import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.data.repository.AssetResult
 import com.donnicolas.rfid.data.repository.AssetsRepository
 import com.donnicolas.rfid.rfid.EpcScheme
+import com.donnicolas.rfid.rfid.LocateProximity
 import com.donnicolas.rfid.rfid.MatchBeeper
 import com.donnicolas.rfid.rfid.RfidEvent
 import com.donnicolas.rfid.rfid.RfidException
@@ -26,6 +29,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+enum class ZoneScanStep {
+    LIST,
+    DETAIL,
+}
+
 /**
  * Fila de escaneo agrupada por artículo (SKU / patrimonial).
  * [cantidad] = etiquetas distintas leídas de ese artículo.
@@ -38,9 +46,14 @@ data class ZoneHit(
     val cantidad: Int,
     val sampleEpc: String,
     val locateTarget: LocateTargetDto?,
+    val activoId: String,
+    val serializado: Boolean,
+    val scannedEpcs: List<String> = emptyList(),
+    val activo: ActivoDto? = null,
 )
 
 data class ZoneScanUiState(
+    val step: ZoneScanStep = ZoneScanStep.LIST,
     val readerState: RfidReaderState = RfidReaderState.DISCONNECTED,
     val scanning: Boolean = false,
     val resolving: Boolean = false,
@@ -48,6 +61,8 @@ data class ZoneScanUiState(
     val registered: List<ZoneHit> = emptyList(),
     val unknownCount: Int = 0,
     val selected: ZoneHit? = null,
+    val detailEtiquetas: List<EtiquetaDto> = emptyList(),
+    val detailLoading: Boolean = false,
     val error: AppError? = null,
 )
 
@@ -98,10 +113,37 @@ class ZoneScanViewModel(
             runCatching { reader.stopLocate() }
             runCatching { reader.clearLocateTarget() }
             runCatching { reader.setTriggerMode(RfidTriggerMode.INVENTORY) }
-            _state.update { it.copy(scanning = false, selected = null, error = null) }
+            if (eventsJob?.isActive != true) {
+                observeEvents()
+            }
+            _state.update {
+                it.copy(
+                    scanning = false,
+                    step = ZoneScanStep.LIST,
+                    selected = null,
+                    detailEtiquetas = emptyList(),
+                    detailLoading = false,
+                    error = null,
+                )
+            }
             if (session.epcSet().isNotEmpty()) {
                 resolveNow()
             }
+        }
+    }
+
+    /** Pausa ingestión de lecturas mientras se localiza desde esta pantalla. */
+    fun pauseForLocate() {
+        eventsJob?.cancel()
+        eventsJob = null
+        resolveJob?.cancel()
+        pendingResolve = false
+    }
+
+    /** Reactiva el bus de eventos sin limpiar el estado de localización del lector. */
+    fun resumeObservers() {
+        if (eventsJob?.isActive != true) {
+            observeEvents()
         }
     }
 
@@ -159,7 +201,10 @@ class ZoneScanViewModel(
                 uniqueReads = 0,
                 registered = emptyList(),
                 unknownCount = 0,
+                step = ZoneScanStep.LIST,
                 selected = null,
+                detailEtiquetas = emptyList(),
+                detailLoading = false,
                 error = null,
                 scanning = false,
             )
@@ -167,23 +212,57 @@ class ZoneScanViewModel(
     }
 
     fun select(hit: ZoneHit) {
-        _state.update { it.copy(selected = hit) }
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    step = ZoneScanStep.DETAIL,
+                    selected = hit,
+                    detailEtiquetas = emptyList(),
+                    detailLoading = hit.serializado,
+                    error = null,
+                )
+            }
+            if (!hit.serializado) return@launch
+            when (val result = assetsRepository.listEtiquetas(hit.activoId)) {
+                is AssetResult.Ok -> {
+                    val units = result.value.filter {
+                        it.estado.equals("activa", ignoreCase = true)
+                    }
+                    _state.update {
+                        it.copy(detailLoading = false, detailEtiquetas = units)
+                    }
+                }
+                is AssetResult.Error -> _state.update {
+                    it.copy(detailLoading = false, error = result.error)
+                }
+            }
+        }
     }
 
-    fun clearSelection() {
-        _state.update { it.copy(selected = null) }
+    fun backToList() {
+        _state.update {
+            it.copy(
+                step = ZoneScanStep.LIST,
+                selected = null,
+                detailEtiquetas = emptyList(),
+                detailLoading = false,
+            )
+        }
     }
 
-    fun prepareLocate(onReady: (LocateTargetDto) -> Unit) {
-        val target = _state.value.selected?.locateTarget ?: return
+    fun clearSelection() = backToList()
+
+    fun prepareLocate(target: LocateTargetDto, onReady: (LocateTargetDto) -> Unit) {
         viewModelScope.launch {
             try {
                 if (_state.value.scanning) {
                     runCatching { reader.stopInventory() }
                     _state.update { it.copy(scanning = false) }
                 }
+                pauseForLocate()
                 onReady(target)
             } catch (e: Exception) {
+                resumeObservers()
                 _state.update {
                     it.copy(
                         error = AppError(
@@ -196,6 +275,53 @@ class ZoneScanViewModel(
                 }
             }
         }
+    }
+
+    /** Localiza cualquier unidad del artículo (modo ARTICULO). */
+    fun locateArticulo(onReady: (LocateTargetDto) -> Unit) {
+        val target = _state.value.selected?.locateTarget ?: return
+        prepareLocate(target, onReady)
+    }
+
+    /** Localiza una serie concreta (modo SERIAL). */
+    fun locateSerial(etiqueta: EtiquetaDto, onReady: (LocateTargetDto) -> Unit) {
+        val hit = _state.value.selected ?: return
+        val activo = hit.activo
+        if (activo == null) {
+            _state.update {
+                it.copy(
+                    error = AppError(
+                        code = "ZONE_LOCATE_NO_ACTIVO",
+                        title = "Sin datos del artículo",
+                        detail = "Volvé a escanear e intentá de nuevo.",
+                    ),
+                )
+            }
+            return
+        }
+        // Preferir el EPC tal cual se leyó en zona (misma unidad) si coincide.
+        val scannedMatch = hit.scannedEpcs.firstOrNull {
+            LocateProximity.epcMatches(it, etiqueta.epc)
+        }
+        val etiquetaForLocate = if (scannedMatch != null) {
+            etiqueta.copy(epc = scannedMatch)
+        } else {
+            etiqueta
+        }
+        val target = assetsRepository.toLocateTargetFromEtiqueta(activo, etiquetaForLocate)
+        if (target == null) {
+            _state.update {
+                it.copy(
+                    error = AppError(
+                        code = "LOCATE_NO_EPC",
+                        title = "Serie sin EPC válido",
+                        detail = "Esta unidad no tiene un EPC D1 para localizar.",
+                    ),
+                )
+            }
+            return
+        }
+        prepareLocate(target, onReady)
     }
 
     fun leave(onDone: () -> Unit) {
@@ -275,19 +401,41 @@ class ZoneScanViewModel(
     private suspend fun resolveNow() {
         val allEpcs = session.epcSet()
         if (allEpcs.isEmpty()) {
-            _state.update { it.copy(registered = emptyList(), unknownCount = 0, resolving = false) }
+            _state.update {
+                it.copy(
+                    registered = emptyList(),
+                    unknownCount = 0,
+                    resolving = false,
+                    selected = null,
+                    step = ZoneScanStep.LIST,
+                    detailEtiquetas = emptyList(),
+                    detailLoading = false,
+                )
+            }
             return
         }
         _state.update { it.copy(resolving = true, error = null) }
         when (val result = assetsRepository.lookupByEpcs(allEpcs)) {
             is AssetResult.Ok -> {
                 val hits = groupByArticulo(result.value.encontrados)
-                _state.update {
-                    it.copy(
+                _state.update { prev ->
+                    val refreshed = prev.selected?.let { sel ->
+                        hits.find { h -> h.key == sel.key }
+                    }
+                    prev.copy(
                         resolving = false,
                         registered = hits,
                         unknownCount = result.value.noRegistrados.size,
-                        selected = it.selected?.takeIf { sel -> hits.any { h -> h.key == sel.key } },
+                        selected = refreshed,
+                        step = if (refreshed != null && prev.step == ZoneScanStep.DETAIL) {
+                            ZoneScanStep.DETAIL
+                        } else if (refreshed == null) {
+                            ZoneScanStep.LIST
+                        } else {
+                            prev.step
+                        },
+                        detailEtiquetas = if (refreshed == null) emptyList() else prev.detailEtiquetas,
+                        detailLoading = if (refreshed == null) false else prev.detailLoading,
                     )
                 }
             }
@@ -299,8 +447,7 @@ class ZoneScanViewModel(
 
     private fun groupByArticulo(rows: List<ActivoLookupDto>): List<ZoneHit> {
         data class Acc(
-            val patrimonial: String,
-            val descripcion: String,
+            val activo: ActivoDto,
             val ubicacion: String,
             val epcs: MutableList<String>,
             val locate: LocateTargetDto?,
@@ -315,8 +462,7 @@ class ZoneScanViewModel(
             val existing = buckets[key]
             if (existing == null) {
                 buckets[key] = Acc(
-                    patrimonial = activo.numeroPatrimonial,
-                    descripcion = activo.descripcion,
+                    activo = activo,
                     ubicacion = formatUbicacion(row.ubicacion),
                     epcs = mutableListOf(epc),
                     locate = assetsRepository.toLocateTarget(row, epc),
@@ -328,12 +474,16 @@ class ZoneScanViewModel(
         return buckets.map { (key, acc) ->
             ZoneHit(
                 key = key,
-                numeroPatrimonial = acc.patrimonial,
-                descripcion = acc.descripcion,
+                numeroPatrimonial = acc.activo.numeroPatrimonial,
+                descripcion = acc.activo.descripcion,
                 ubicacionLabel = acc.ubicacion,
                 cantidad = acc.epcs.size,
                 sampleEpc = acc.epcs.first(),
                 locateTarget = acc.locate,
+                activoId = acc.activo.id,
+                serializado = acc.activo.serializado,
+                scannedEpcs = acc.epcs.toList(),
+                activo = acc.activo,
             )
         }.sortedBy { it.numeroPatrimonial }
     }

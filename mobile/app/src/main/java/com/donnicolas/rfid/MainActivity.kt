@@ -22,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -48,6 +49,8 @@ import com.donnicolas.rfid.ui.search.AssetSearchViewModel
 import com.donnicolas.rfid.ui.theme.DonNicolasTheme
 import com.donnicolas.rfid.ui.zonescan.ZoneScanScreen
 import com.donnicolas.rfid.ui.zonescan.ZoneScanViewModel
+import kotlinx.coroutines.launch
+
 private enum class AppDestination {
     HOME,
     RFID_SCAN,
@@ -119,6 +122,7 @@ class MainActivity : ComponentActivity() {
                     var navLoadingMessage by remember { mutableStateOf("Cargando…") }
                     /** Destino que debe componerse antes de ocultar el spinner. */
                     var navPendingDest by remember { mutableStateOf<AppDestination?>(null) }
+                    val navScope = rememberCoroutineScope()
 
                     fun beginNavLoading(dest: AppDestination, message: String) {
                         navLoadingMessage = message
@@ -260,7 +264,9 @@ class MainActivity : ComponentActivity() {
                                             onStop = zoneViewModel::stopScan,
                                             onClear = zoneViewModel::clear,
                                             onSelect = zoneViewModel::select,
-                                            onClearSelection = zoneViewModel::clearSelection,
+                                            onBackToList = zoneViewModel::backToList,
+                                            onLocateArticulo = zoneViewModel::locateArticulo,
+                                            onLocateSerial = zoneViewModel::locateSerial,
                                             onLocate = { target ->
                                                 beginNavLoading(AppDestination.SEARCH, "Preparando localización…")
                                                 val searchVm = ViewModelProvider(
@@ -270,11 +276,19 @@ class MainActivity : ComponentActivity() {
                                                         app.rfidReader,
                                                     ),
                                                 )[AssetSearchViewModel::class.java]
-                                                searchVm.beginLocateHandoff(target)
-                                                locateReturnToZone = true
-                                                destination = AppDestination.SEARCH
+                                                navScope.launch {
+                                                    // Esperar armado (triggerMode=LOCATE) antes de navegar.
+                                                    val armed = searchVm.armLocateHandoff(target)
+                                                    if (armed) {
+                                                        locateReturnToZone = true
+                                                        destination = AppDestination.SEARCH
+                                                    } else {
+                                                        zoneViewModel.resumeObservers()
+                                                        navPendingDest = null
+                                                        navLoading = false
+                                                    }
+                                                }
                                             },
-                                            onPrepareLocate = zoneViewModel::prepareLocate,
                                             onReconnect = zoneViewModel::connect,
                                             onBack = {
                                                 beginNavLoading(AppDestination.HOME, "Cargando…")
@@ -296,11 +310,18 @@ class MainActivity : ComponentActivity() {
                                         val returnToZone = locateReturnToZone
                                         AssetSearchScreen(
                                             state = searchState,
+                                            onChooseArticulo = searchViewModel::chooseModeArticulo,
+                                            onChooseSerial = searchViewModel::chooseModeSerial,
                                             onQueryChange = searchViewModel::onQueryChange,
                                             onSearch = { searchViewModel.search() },
+                                            onSearchSerial = { searchViewModel.searchSerial() },
                                             onSelect = searchViewModel::selectTarget,
+                                            onSelectSerializedActivo = searchViewModel::selectSerializedActivo,
+                                            onSelectSerialUnit = searchViewModel::selectSerialUnit,
                                             onStartLocate = searchViewModel::startLocate,
                                             onStopLocate = searchViewModel::stopLocate,
+                                            onBackToMode = searchViewModel::backToMode,
+                                            onBackFromSerialUnits = searchViewModel::backFromSerialUnits,
                                             onBackToSelect = searchViewModel::backToSelect,
                                             onBackFromLocate = if (returnToZone) {
                                                 {

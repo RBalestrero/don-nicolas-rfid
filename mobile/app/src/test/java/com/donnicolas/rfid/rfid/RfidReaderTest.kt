@@ -1,8 +1,10 @@
 package com.donnicolas.rfid.rfid
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -166,6 +168,35 @@ class SimulatedLocateTest {
         delay(20)
         reader.startLocate()
         collector.join()
+    }
+
+    @Test
+    fun `SERIAL mode emite solo el EPC armado`() = runBlocking {
+        val reader = SimulatedRfidReader()
+        reader.connect()
+        val armed = "D100000000010000000001A1"
+        reader.armLocateTarget(armed, LocateMatchMode.SERIAL)
+
+        val epcs = mutableListOf<String>()
+        val collector = launch {
+            withTimeout(3_000) {
+                reader.events()
+                    .filterIsInstance<RfidEvent.LocateUpdate>()
+                    .take(6)
+                    .collect { epcs.add(it.epc) }
+            }
+        }
+        delay(20)
+        reader.startLocate()
+        collector.join()
+        reader.stopLocate()
+        reader.clearLocateTarget()
+
+        assertTrue(epcs.isNotEmpty())
+        assertTrue(
+            "Se esperaba solo $armed, hubo $epcs",
+            epcs.all { it.equals(armed, ignoreCase = true) },
+        )
     }
 }
 

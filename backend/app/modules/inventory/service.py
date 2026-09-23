@@ -686,5 +686,55 @@ class InventoryService:
                 total_exceso=inventario.total_exceso,
                 sin_epc=sin_epc,
             ),
-            detalles=[DetalleInventarioResponse.model_validate(d) for d in detalles],
+            detalles=self._detalle_responses(detalles),
         )
+
+    def _detalle_responses(
+        self, detalles: list[DetalleInventario]
+    ) -> list[DetalleInventarioResponse]:
+        """Serializa detalles enriqueciendo serie_fisica / serializado desde Etiqueta/Activo."""
+        epcs = [d.epc for d in detalles if d.epc]
+        serie_by_epc: dict[str, str | None] = {}
+        activo_by_epc: dict[str, uuid.UUID] = {}
+        if epcs:
+            for epc, serie, activo_id in self.db.execute(
+                select(Etiqueta.epc, Etiqueta.serie_fisica, Etiqueta.activo_id).where(
+                    Etiqueta.epc.in_(epcs)
+                )
+            ).all():
+                serie_by_epc[epc] = serie
+                if activo_id is not None:
+                    activo_by_epc[epc] = activo_id
+
+        activo_ids = {
+            *(d.activo_id for d in detalles if d.activo_id),
+            *activo_by_epc.values(),
+        }
+        serializado_by_activo: dict[uuid.UUID, bool] = {}
+        if activo_ids:
+            for activo_id, serializado in self.db.execute(
+                select(Activo.id, Activo.serializado).where(Activo.id.in_(activo_ids))
+            ).all():
+                serializado_by_activo[activo_id] = bool(serializado)
+
+        responses: list[DetalleInventarioResponse] = []
+        for detalle in detalles:
+            base = DetalleInventarioResponse.model_validate(detalle)
+            activo_id = detalle.activo_id or (
+                activo_by_epc.get(detalle.epc) if detalle.epc else None
+            )
+            responses.append(
+                base.model_copy(
+                    update={
+                        "serie_fisica": (
+                            serie_by_epc.get(detalle.epc) if detalle.epc else None
+                        ),
+                        "serializado": (
+                            serializado_by_activo.get(activo_id)
+                            if activo_id is not None
+                            else None
+                        ),
+                    }
+                )
+            )
+        return responses

@@ -494,6 +494,8 @@ export interface DetalleInventario {
   descripcion: string | null;
   estado: string;
   leido_en: string | null;
+  serie_fisica?: string | null;
+  serializado?: boolean | null;
 }
 
 export interface InventarioListItem {

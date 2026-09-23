@@ -174,6 +174,8 @@ data class DetalleInventarioDto(
     @Json(name = "numero_patrimonial") val numeroPatrimonial: String? = null,
     val descripcion: String? = null,
     val estado: String,
+    @Json(name = "serie_fisica") val serieFisica: String? = null,
+    val serializado: Boolean? = null,
 )
 
 data class InventarioReporteDto(

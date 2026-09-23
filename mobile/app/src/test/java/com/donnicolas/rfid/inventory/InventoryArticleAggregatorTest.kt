@@ -105,6 +105,43 @@ class InventoryArticleAggregatorTest {
         assertTrue(falt.all { it.status == ArticleStatus.PARCIAL })
     }
 
+    @Test
+    fun serialUnitsMarkFoundAndMissing() {
+        val expected = listOf(
+            detalle(
+                id = "1",
+                activoId = "act-a",
+                epc = "EPC001",
+                patrimonial = "PAT-1001",
+                descripcion = "Notebook",
+                estado = "esperado",
+                serieFisica = "SN-AAA",
+                serializado = true,
+            ),
+            detalle(
+                id = "2",
+                activoId = "act-a",
+                epc = "EPC002",
+                patrimonial = "PAT-1001",
+                descripcion = "Notebook",
+                estado = "esperado",
+                serieFisica = "SN-BBB",
+                serializado = true,
+            ),
+        )
+        val rows = InventoryArticleAggregator.fromLiveScan(expected, setOf("EPC001"))
+        assertEquals(1, rows.size)
+        val notebook = rows.first()
+        assertTrue(notebook.serializado)
+        assertEquals(2, notebook.units.size)
+        val found = notebook.units.first { it.serieFisica == "SN-AAA" }
+        val missing = notebook.units.first { it.serieFisica == "SN-BBB" }
+        assertTrue(found.encontrado)
+        assertEquals("encontrado", found.estado)
+        assertTrue(!missing.encontrado)
+        assertEquals("faltante", missing.estado)
+    }
+
     private fun detalle(
         id: String,
         activoId: String?,
@@ -112,6 +149,8 @@ class InventoryArticleAggregatorTest {
         patrimonial: String?,
         descripcion: String?,
         estado: String,
+        serieFisica: String? = null,
+        serializado: Boolean? = null,
     ) = DetalleInventarioDto(
         id = id,
         activoId = activoId,
@@ -119,5 +158,7 @@ class InventoryArticleAggregatorTest {
         numeroPatrimonial = patrimonial,
         descripcion = descripcion,
         estado = estado,
+        serieFisica = serieFisica,
+        serializado = serializado,
     )
 }
