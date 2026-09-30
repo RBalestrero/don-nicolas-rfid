@@ -307,7 +307,7 @@ function mockApi(opts?: { multiDepositPat1?: boolean; multiUbicacionPat1?: boole
 
 async function openCreateWizard(user: ReturnType<typeof userEvent.setup>) {
   expect(
-    await screen.findByRole("heading", { name: /^historial de movimientos$/i }),
+    await screen.findByRole("heading", { name: /^movimientos$/i }),
   ).toBeInTheDocument();
   await user.click(screen.getAllByRole("button", { name: /\+ nuevo movimiento/i })[0]);
   expect(await screen.findByLabelText(/pasos del movimiento/i)).toHaveTextContent(/artículos/i);
@@ -470,7 +470,7 @@ describe("TransferenciasPage", () => {
     expect(screen.queryByRole("heading", { name: /movimiento a depósito/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/progreso del movimiento/i)).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: /^historial de movimientos$/i }),
+      await screen.findByRole("heading", { name: /^movimientos$/i }),
     ).toBeInTheDocument();
   });
 

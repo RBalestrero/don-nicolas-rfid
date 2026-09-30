@@ -5,8 +5,9 @@ package com.donnicolas.rfid.rfid
  *
  *   D1 | ARTÍCULO (10 hex) | SERIAL (10 hex) | A1
  *
- * El serial hace única cada etiqueta; el código de artículo (SKU) es compartido
- * entre unidades del mismo tipo. Localizar filtra por prefijo D1+ART (48 bits).
+ * El campo ARTÍCULO es `activos.codigo_epc` (código interno 40-bit).
+ * El serial hace única cada etiqueta; el mismo codigo_epc se comparte
+ * entre unidades del mismo SKU. Localizar filtra por prefijo D1+ART (48 bits).
  */
 object EpcScheme {
     const val PREFIX = "D1"

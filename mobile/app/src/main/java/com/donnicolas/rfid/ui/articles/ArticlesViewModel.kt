@@ -205,6 +205,7 @@ class ArticlesViewModel(
                 )
             ) {
                 is AssetResult.Ok -> {
+                    runCatching { assetsRepository.syncEpcMap(force = true) }
                     _state.update {
                         it.copy(
                             loading = false,

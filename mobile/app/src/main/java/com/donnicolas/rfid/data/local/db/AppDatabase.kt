@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
         CachedActivoEntity::class,
         SyncQueueEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

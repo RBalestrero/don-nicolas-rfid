@@ -184,6 +184,7 @@ class ActivoService:
             {
                 "id": activo.id,
                 "numero_patrimonial": activo.numero_patrimonial,
+                "codigo_epc": int(activo.codigo_epc),
                 "descripcion": activo.descripcion,
                 "categoria_id": activo.categoria_id,
                 "epc": activo.epc,
@@ -261,6 +262,33 @@ class ActivoService:
 
     def get_activo_response(self, activo_id: uuid.UUID) -> ActivoResponse:
         return self._to_response(self.get_activo(activo_id))
+
+    def list_epc_map(
+        self,
+        *,
+        since=None,
+        include_inactive: bool = False,
+    ):
+        from datetime import UTC, datetime
+
+        from app.modules.assets.schemas import EpcMapItem, EpcMapResponse
+
+        rows = self.repository.list_epc_map(
+            since=since, include_inactive=include_inactive
+        )
+        return EpcMapResponse(
+            generated_at=datetime.now(UTC),
+            items=[
+                EpcMapItem(
+                    id=a.id,
+                    numero_patrimonial=a.numero_patrimonial,
+                    codigo_epc=int(a.codigo_epc),
+                    activo=a.activo,
+                    actualizado_en=a.actualizado_en,
+                )
+                for a in rows
+            ],
+        )
 
     def lookup_by_epc(self, epc: str):
         from app.modules.assets.schemas import ActivoLookupResponse
@@ -391,8 +419,17 @@ class ActivoService:
                     )
                 self._purge_ghost_activo(epc_owner)
 
+        preferred: int | None = None
+        try:
+            from app.integrations.zebra.epc_generator import articulo_code_from_patrimonial
+
+            preferred = articulo_code_from_patrimonial(data.numero_patrimonial)
+        except ValueError:
+            preferred = None
+
         activo = Activo(
             numero_patrimonial=data.numero_patrimonial,
+            codigo_epc=self.repository.allocate_codigo_epc(preferred),
             descripcion=data.descripcion,
             categoria_id=data.categoria_id,
             epc=None,  # identidad RFID solo en `etiquetas`

@@ -143,7 +143,26 @@ const resumen: DashboardResumen = {
 
 const movimientosPage: MovimientosPage = {
   total: 1,
-  limit: 50,
+  limit: 8,
+  offset: 0,
+  items: [
+    {
+      id: "m-1",
+      activo_id: "act-1",
+      numero_patrimonial: "PAT-100",
+      descripcion: "Notebook",
+      usuario_id: "u-1",
+      usuario_nombre: "Operador",
+      accion: "creacion",
+      cambios: null,
+      creado_en: "2024-06-01T12:00:00Z",
+    },
+  ],
+};
+
+const movimientosFiltrados: MovimientosPage = {
+  total: 1,
+  limit: 8,
   offset: 0,
   items: [
     {
@@ -163,9 +182,19 @@ const movimientosPage: MovimientosPage = {
 describe("DashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     apiFetchMock.mockImplementation(async (path: string) => {
       if (path.startsWith("/dashboard/resumen")) return resumen;
-      if (path.startsWith("/movimientos")) return movimientosPage;
+      if (path.startsWith("/movimientos")) {
+        if (String(path).includes("accion=transferencia")) return movimientosFiltrados;
+        return movimientosPage;
+      }
+      if (path.startsWith("/inventarios")) return [];
+      if (path.startsWith("/transferencias")) return [];
+      if (path.startsWith("/depositos")) return [];
+      if (path.startsWith("/activos")) return [];
+      if (path.startsWith("/personas")) return [];
+      if (path.startsWith("/categorias")) return [];
       throw new Error(`Unexpected path: ${path}`);
     });
   });
@@ -180,10 +209,9 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Auditoría pendiente")).toBeInTheDocument();
     expect(screen.getByText("Cobertura de ubicación")).toBeInTheDocument();
     expect(screen.queryByText(/hay discrepancias para revisar/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Requiere atención")).toBeInTheDocument();
-    expect(screen.getByText(/Inventario · Sur/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 activos sin ubicación/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Inventario · Norte/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^historial$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^inventarios$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^movimientos$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ejecución de movimientos/i })).toHaveTextContent("0%");
     expect(screen.getByRole("button", { name: /^cobertura de ubicación/i })).toHaveTextContent("83%");
     expect(screen.getByText("2 sin ubicar")).toBeInTheDocument();
@@ -193,8 +221,8 @@ describe("DashboardPage", () => {
     expect(screen.getByText(/Central → Sur/)).toBeInTheDocument();
     expect(screen.getByText(/Confirmados en destino 0\/2/)).toBeInTheDocument();
     expect(screen.getByText(/Leídos 3\/10 esperados/)).toBeInTheDocument();
-    expect(screen.getByText(/PAT-100/)).toBeInTheDocument();
-    expect(screen.getByText("Dispositivos MC33")).toBeInTheDocument();
+    expect(await screen.findByText(/PAT-100/)).toBeInTheDocument();
+    expect(screen.getByText("Dispositivos")).toBeInTheDocument();
     expect(screen.getByText(/MC3300x · S\/N SN998877/)).toBeInTheDocument();
     expect(screen.getByText("En línea")).toBeInTheDocument();
 
@@ -205,33 +233,97 @@ describe("DashboardPage", () => {
     sessionStorage.removeItem("dn_act_focus");
     sessionStorage.removeItem("dn_act_search");
 
-    await user.click(screen.getByRole("button", { name: /Inventario · Sur/i }));
-    expect(onNavigate).toHaveBeenCalledWith("inventarios");
-    expect(sessionStorage.getItem("dn_inv_filter")).toBe("discrepancias");
-    sessionStorage.removeItem("dn_inv_filter");
-
     await user.click(screen.getByRole("button", { name: /ejecución de movimientos/i }));
-    expect(onNavigate).toHaveBeenCalledWith("transferencias");
-    expect(sessionStorage.getItem("dn_xfer_filter")).toBe("abiertas");
-    sessionStorage.removeItem("dn_xfer_filter");
+    expect(sessionStorage.getItem("dn_ops_tab")).toBe("movimientos");
+    expect(screen.getByRole("tab", { name: /^movimientos$/i })).toHaveAttribute("aria-selected", "true");
 
+    await user.click(screen.getByRole("tab", { name: /^historial$/i }));
     await user.click(screen.getByRole("button", { name: /auditoría pendiente/i }));
-    expect(sessionStorage.getItem("dn_inv_filter")).toBe("pendiente_auditoria");
-    sessionStorage.removeItem("dn_inv_filter");
+    expect(sessionStorage.getItem("dn_ops_tab")).toBe("inventarios");
+    expect(screen.getByRole("tab", { name: /^inventarios$/i })).toHaveAttribute("aria-selected", "true");
 
+    await user.click(screen.getByRole("tab", { name: /^historial$/i }));
     await user.click(screen.getByRole("button", { name: /avance de inventarios/i }));
-    expect(sessionStorage.getItem("dn_inv_filter")).toBe("en_curso");
-    sessionStorage.removeItem("dn_inv_filter");
+    expect(sessionStorage.getItem("dn_ops_tab")).toBe("inventarios");
 
-    await user.selectOptions(screen.getByLabelText(/^acción$/i), "transferencia");
-    await user.click(screen.getByRole("button", { name: /^filtrar$/i }));
+    await user.click(screen.getByRole("tab", { name: /^historial$/i }));
+    expect(await screen.findByText(/PAT-100/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^acción$/i }));
+    await user.click(screen.getByRole("option", { name: /^transferencia$/i }));
 
     await waitFor(() => {
-      expect(apiFetchMock).toHaveBeenCalledWith(expect.stringContaining("/movimientos?"));
+      expect(
+        apiFetchMock.mock.calls.some(
+          ([path]) =>
+            String(path).includes("/movimientos?") &&
+            String(path).includes("accion=transferencia"),
+        ),
+      ).toBe(true);
     });
 
     expect(await screen.findByText(/PAT-200/)).toBeInTheDocument();
-    expect(screen.getByText(/1 resultado/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 resultado/)).not.toBeInTheDocument();
+  });
+
+  it("pagina el historial con Anterior y Siguiente", async () => {
+    const user = userEvent.setup();
+    const page1: MovimientosPage = {
+      total: 30,
+      limit: 25,
+      offset: 0,
+      items: Array.from({ length: 25 }, (_, i) => ({
+        id: `m-p1-${i}`,
+        activo_id: `act-${i}`,
+        numero_patrimonial: `PAT-P1-${i}`,
+        descripcion: "Item",
+        usuario_id: null,
+        usuario_nombre: null,
+        accion: "creacion",
+        cambios: null,
+        creado_en: "2024-06-01T12:00:00Z",
+      })),
+    };
+    const page2: MovimientosPage = {
+      total: 30,
+      limit: 25,
+      offset: 25,
+      items: Array.from({ length: 5 }, (_, i) => ({
+        id: `m-p2-${i}`,
+        activo_id: `act-${25 + i}`,
+        numero_patrimonial: `PAT-P2-${i}`,
+        descripcion: "Item",
+        usuario_id: null,
+        usuario_nombre: null,
+        accion: "creacion",
+        cambios: null,
+        creado_en: "2024-06-02T12:00:00Z",
+      })),
+    };
+
+    apiFetchMock.mockImplementation(async (path: string) => {
+      if (path.startsWith("/dashboard/resumen")) return resumen;
+      if (path.startsWith("/movimientos")) {
+        return String(path).includes("offset=25") ? page2 : page1;
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    render(<DashboardPage />);
+    expect(await screen.findByText("PAT-P1-0")).toBeInTheDocument();
+    expect(screen.getByText(/1–25 de 30/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^anterior$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /registros por página/i })).toHaveTextContent(
+      /25 \/ pág\./,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^siguiente$/i }));
+    expect(await screen.findByText("PAT-P2-0")).toBeInTheDocument();
+    expect(screen.getByText(/26–30 de 30/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^siguiente$/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^anterior$/i }));
+    expect(await screen.findByText("PAT-P1-0")).toBeInTheDocument();
   });
 
   it("muestra Inactivo y Sesión cerrada en dispositivos MC33", async () => {
@@ -273,6 +365,7 @@ describe("DashboardPage", () => {
           ],
         };
       }
+      if (path.startsWith("/movimientos")) return movimientosPage;
       throw new Error(`Unexpected path: ${path}`);
     });
 
@@ -286,7 +379,7 @@ describe("DashboardPage", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       render(<DashboardPage />);
-      expect(await screen.findByText("Dispositivos MC33")).toBeInTheDocument();
+      expect(await screen.findByText("Dispositivos")).toBeInTheDocument();
 
       const resumenCalls = () =>
         apiFetchMock.mock.calls.filter(([path]) =>
@@ -336,6 +429,9 @@ describe("DashboardPage", () => {
           transferencias_recientes: [],
           inventarios_recientes: [],
         };
+      }
+      if (path.startsWith("/movimientos")) {
+        return { total: 0, limit: 8, offset: 0, items: [] };
       }
       throw new Error(`Unexpected path: ${path}`);
     });

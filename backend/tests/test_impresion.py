@@ -20,7 +20,7 @@ def _unique(prefix: str) -> str:
 
 def test_generar_epc_formato_d1_con_sufijo():
     activo_id = uuid.uuid4()
-    epc = generar_epc(activo_id, "PAT-1001")
+    epc = generar_epc(str(activo_id), codigo_epc=1001)
     assert epc.startswith("D1")
     assert epc.endswith("A1")
     assert len(epc) == 24
@@ -34,11 +34,16 @@ def test_generar_epc_formato_d1_con_sufijo():
 
 
 def test_generar_epc_serial_unico_mismo_articulo():
-    a = generar_epc("x", "PAT-42")
-    b = generar_epc("y", "PAT-42")
+    a = generar_epc("x", codigo_epc=42)
+    b = generar_epc("y", codigo_epc=42)
     assert decode_epc(a).articulo_code == decode_epc(b).articulo_code == 42
     assert a != b
-    assert a.endswith("A1") and b.endswith("A1")
+
+
+def test_generar_epc_acepta_patrimonial_legado():
+    epc = generar_epc("z", numero_patrimonial="PAT-1001")
+    assert decode_epc(epc).articulo_code == 1001
+    assert epc.endswith("A1")
 
 
 def test_encode_decode_roundtrip():

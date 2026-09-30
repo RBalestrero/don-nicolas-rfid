@@ -1,5 +1,7 @@
 import uuid
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ from app.modules.assets.schemas import (
     CategoriaResponse,
     CategoriaUpdate,
     EpcDecodedInfo,
+    EpcMapResponse,
     EtiquetaCodificacionRequest,
     EtiquetaCodificacionResponse,
     EtiquetaImpresionRequest,
@@ -111,6 +114,22 @@ def list_activos(
         categoria_id=categoria_id,
         search=search,
         include_inactive=include_inactive,
+    )
+
+
+@router.get("/activos/epc-map", response_model=EpcMapResponse)
+def list_epc_map(
+    since: datetime | None = Query(
+        None,
+        description="Solo filas con actualizado_en posterior (sync incremental MC33)",
+    ),
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    """Mapa codigo_epc ↔ patrimonial para caché offline del MC33."""
+    return ActivoService(db).list_epc_map(
+        since=since, include_inactive=include_inactive
     )
 
 
@@ -403,17 +422,23 @@ def list_etiquetas(
 @router.get("/epc/decode", response_model=EpcDecodedInfo)
 def decode_epc_endpoint(
     epc: str,
+    db: Session = Depends(get_db),
     _current_user: Usuario = Depends(get_current_user),
 ):
     """Decodifica un EPC (esquema D1 → artículo + serial)."""
     from app.integrations.zebra.epc_generator import decode_epc
 
     decoded = decode_epc(epc)
+    sugerido = decoded.articulo_sugerido
+    if decoded.articulo_code is not None:
+        activo = ActivoService(db).repository.get_by_codigo_epc(decoded.articulo_code)
+        if activo is not None:
+            sugerido = activo.numero_patrimonial
     return EpcDecodedInfo(
         epc=decoded.epc,
         scheme=decoded.scheme,
         articulo_code=decoded.articulo_code,
-        articulo_sugerido=decoded.articulo_sugerido,
+        articulo_sugerido=sugerido,
         serial=decoded.serial,
         serial_hex=decoded.serial_hex,
         system_suffix=decoded.system_suffix,

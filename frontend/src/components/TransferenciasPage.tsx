@@ -1,4 +1,4 @@
-import { Fragment, KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiFetch } from "../lib/api";
 import type {
   Activo,
@@ -12,9 +12,11 @@ import type {
   TransferenciaListItem,
 } from "../types";
 import ExportButtons from "./ExportButtons";
+import type { ActionsMenuItem } from "./ActionsMenu";
+import ActionsMenu from "./ActionsMenu";
 import EmptyState from "./EmptyState";
+import FilterSelect from "./FilterSelect";
 import Modal from "./Modal";
-import PageHeader from "./PageHeader";
 import { useToast } from "../context/ToastContext";
 import { usePermissions } from "../lib/usePermissions";
 import {
@@ -22,6 +24,8 @@ import {
   hasActiveTransferenciasFilters,
 } from "../lib/filterTransferencias";
 import { groupTransferDetalles } from "../lib/groupStockBySku";
+import { useTablePaging } from "../lib/useTablePaging";
+import TablePager from "./TablePager";
 
 type XferDetalleTab = "detalle" | "articulos";
 type XferCreateStep = "articulos" | "datos" | "resumen";
@@ -150,7 +154,13 @@ function estadoBadgeClass(estado: string): string {
   return "warn";
 }
 
-export default function TransferenciasPage() {
+export default function TransferenciasPage({
+  embedded = false,
+  chromeLeading,
+}: {
+  embedded?: boolean;
+  chromeLeading?: ReactNode;
+} = {}) {
   const toast = useToast();
   const perms = usePermissions();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
@@ -201,11 +211,16 @@ export default function TransferenciasPage() {
   const [comboHighlight, setComboHighlight] = useState(0);
 
   useEffect(() => {
-    const flag = sessionStorage.getItem("dn_xfer_filter");
-    if (flag === "abiertas") {
-      setEstadoFilter("abiertas");
-      sessionStorage.removeItem("dn_xfer_filter");
-    }
+    const applyXferFilter = () => {
+      const flag = sessionStorage.getItem("dn_xfer_filter");
+      if (flag === "abiertas") {
+        setEstadoFilter("abiertas");
+        sessionStorage.removeItem("dn_xfer_filter");
+      }
+    };
+    applyXferFilter();
+    window.addEventListener("dn-session-nav", applyXferFilter);
+    return () => window.removeEventListener("dn-session-nav", applyXferFilter);
   }, []);
 
   useEffect(() => {
@@ -260,6 +275,8 @@ export default function TransferenciasPage() {
     () => filterTransferencias(lista, filterOpts, nombreDeposito),
     [lista, filterOpts, nombreDeposito],
   );
+  const filterKey = `${search}|${estadoFilter}`;
+  const paging = useTablePaging(listaFiltrada, filterKey);
 
   const disponibleEnDeposito = useCallback(
     (
@@ -1049,59 +1066,29 @@ export default function TransferenciasPage() {
     }
   };
 
-  return (
-    <div className="page">
-      <PageHeader
-        title="Movimientos"
-        subtitle="Registrá traslados entre depósitos, ubicaciones o entregas a personas"
-        leading={
-          !loading && lista.length > 0 ? (
-            <span>
-              {listaFiltrada.length}
-              {filtersActive ? ` / ${lista.length}` : ""}{" "}
-              {listaFiltrada.length === 1 ? "movimiento" : "movimientos"}
-            </span>
-          ) : null
-        }
-      >
-        <button
-          type="button"
-          className="btn secondary btn-sm"
-          disabled={loading || busy}
-          onClick={() => void loadBase()}
-        >
-          {loading ? "Cargando…" : "Actualizar"}
-        </button>
-        {perms.canWriteTransfer && (
-          <button
-            type="button"
-            className="btn primary btn-sm"
-            onClick={() => {
-              setActiva(null);
-              setError(null);
-              setStockSearch("");
-              setComboOpen(false);
-              setSelectedQty({});
-              setRowOrigen({});
-              setRowOrigenUbicacion({});
-              setOrigenId("");
-              setSectorDestinoId("");
-              setUbicacionDestinoId("");
-              setCreateStep("articulos");
-              setShowCreate(true);
-            }}
-          >
-            + Nuevo movimiento
-          </button>
-        )}
-      </PageHeader>
+  const abrirNuevoMovimiento = () => {
+    setActiva(null);
+    setError(null);
+    setStockSearch("");
+    setComboOpen(false);
+    setSelectedQty({});
+    setRowOrigen({});
+    setRowOrigenUbicacion({});
+    setOrigenId("");
+    setSectorDestinoId("");
+    setUbicacionDestinoId("");
+    setCreateStep("articulos");
+    setShowCreate(true);
+  };
 
+  return (
+    <div className={embedded ? "ops-embed" : "page"}>
       {error && !showCreate && !activa && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      {loading && (
+      {loading && !embedded && (
         <p className="muted" aria-busy="true">
           Cargando…
         </p>
@@ -1460,7 +1447,7 @@ export default function TransferenciasPage() {
                         </thead>
                         <tbody>
                           {articulosSeleccionados.map(
-                            ({ activo: a, cantidad, deposits, origenRow }) => {
+                            ({ activo: a, cantidad, deposits: _deposits, origenRow }) => {
                               const slotsAll = slotsForActivo(a.id);
                               const slots = origenId
                                 ? slotsForActivo(a.id, origenId)
@@ -1844,6 +1831,7 @@ export default function TransferenciasPage() {
               )}
               <div className="xfer-detalle-footer-tools">
                 <ExportButtons
+                  variant="menu"
                   basePath={`/reportes/transferencias/${activa.id}`}
                   filenameBase={`movimiento_${activa.id.slice(0, 8)}`}
                 />
@@ -1993,54 +1981,88 @@ export default function TransferenciasPage() {
         )}
       </Modal>
 
-      <section className="card">
-        <div className="section-header">
-          <h3>Historial de movimientos</h3>
-          <div className="section-header-right">
-            <ExportButtons
-              basePath="/reportes/transferencias"
-              filenameBase="movimientos"
-              disabled={lista.length === 0}
-            />
+      <section className={embedded ? "ops-embed-body" : "card"}>
+        <div className="table-chrome" role="search" aria-label="Filtrar movimientos">
+          {(!embedded || chromeLeading) && (
+            <div className="table-chrome-leading">
+              {chromeLeading !== undefined ? chromeLeading : <h2>Movimientos</h2>}
+              {!embedded && !loading && lista.length > 0 ? (
+                <span className="section-count">
+                  {listaFiltrada.length}
+                  {filtersActive ? ` / ${lista.length}` : ""}{" "}
+                  {listaFiltrada.length === 1 ? "movimiento" : "movimientos"}
+                </span>
+              ) : null}
+            </div>
+          )}
+          <div className="table-chrome-controls">
+            {(lista.length > 0 || (embedded && !loading)) && (
+              <>
+                <label className="field toolbar-field grow">
+                  <span className="sr-only">Buscar</span>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar origen, destino, persona…"
+                  />
+                </label>
+                <FilterSelect
+                  placeholder="Estado"
+                  aria-label="Estado"
+                  value={estadoFilter}
+                  onChange={setEstadoFilter}
+                  options={[
+                    { value: "abiertas", label: "Abiertas" },
+                    { value: "pendiente", label: "Pendiente" },
+                    { value: "en_transito", label: "En tránsito" },
+                    { value: "completada", label: "Completada" },
+                    { value: "cancelada", label: "Cancelada" },
+                  ]}
+                />
+                {filtersActive && (
+                  <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                    Limpiar
+                  </button>
+                )}
+              </>
+            )}
+            <ActionsMenu
+              disabled={loading || busy}
+              items={
+                [
+                  {
+                    id: "refresh",
+                    label: loading ? "Cargando…" : "Actualizar",
+                    disabled: loading || busy,
+                    onClick: () => void loadBase(),
+                  },
+                  ...(perms.canWriteTransfer
+                    ? [
+                        {
+                          id: "nuevo",
+                          label: "+ Nuevo movimiento",
+                          onClick: abrirNuevoMovimiento,
+                        } satisfies ActionsMenuItem,
+                      ]
+                    : []),
+                ] satisfies ActionsMenuItem[]
+              }
+            >
+              <ExportButtons
+                variant="items"
+                basePath="/reportes/transferencias"
+                filenameBase="movimientos"
+                disabled={lista.length === 0}
+              />
+            </ActionsMenu>
           </div>
         </div>
 
-        {lista.length > 0 && (
-          <div className="toolbar toolbar-compact" role="search" aria-label="Filtrar movimientos">
-            <label className="field toolbar-field grow">
-              <span className="sr-only">Buscar</span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar origen, destino, persona…"
-              />
-            </label>
-            <label className="field toolbar-field">
-              <span className="sr-only">Estado</span>
-              <select
-                value={estadoFilter}
-                onChange={(e) => setEstadoFilter(e.target.value)}
-                aria-label="Estado"
-              >
-                <option value="">Estado</option>
-                <option value="abiertas">Abiertas</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="en_transito">En tránsito</option>
-                <option value="completada">Completada</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </label>
-            {filtersActive && (
-              <div className="toolbar-actions">
-                <button type="button" className="btn secondary" onClick={clearFilters}>
-                  Limpiar
-                </button>
-              </div>
-            )}
+        {loading && embedded ? (
+          <div className="table-wrap table-panel list-table-wrap" aria-busy="true">
+            <span className="sr-only">Cargando movimientos…</span>
           </div>
-        )}
-
-        {loading ? null : lista.length === 0 ? (
+        ) : loading ? null : lista.length === 0 ? (
           <EmptyState
             title="Sin movimientos"
             description="Registrá traslados entre depósitos o entregas a personas. Cada movimiento se guarda completo al crear: qué se movió, cuándo, quién y hacia dónde."
@@ -2054,19 +2076,7 @@ export default function TransferenciasPage() {
                 <button
                   type="button"
                   className="btn primary btn-sm"
-                  onClick={() => {
-                    setActiva(null);
-                    setStockSearch("");
-                    setComboOpen(false);
-                    setSelectedQty({});
-                    setRowOrigen({});
-                    setRowOrigenUbicacion({});
-                    setOrigenId("");
-                    setSectorDestinoId("");
-                    setUbicacionDestinoId("");
-                    setCreateStep("articulos");
-                    setShowCreate(true);
-                  }}
+                  onClick={abrirNuevoMovimiento}
                 >
                   + Nuevo movimiento
                 </button>
@@ -2084,71 +2094,93 @@ export default function TransferenciasPage() {
             }
           />
         ) : (
-          <div className="table-wrap table-panel">
-            <table className="data-table dense sticky-head">
-              <thead>
-                <tr>
-                  <th>Estado</th>
-                  <th>Tipo</th>
-                  <th>Origen</th>
-                  <th>Destino</th>
-                  <th className="num">Activos</th>
-                  <th>Creada</th>
-                  <th>Quién</th>
-                  <th className="col-actions">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {listaFiltrada.map((t) => (
-                  <tr
-                    key={t.id}
-                    className={[
-                      "row-clickable",
-                      activa?.id === t.id ? "row-active" : "",
-                      t.estado === "pendiente" || t.estado === "en_transito" ? "row-warn" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => {
-                      if (!busy) void abrir(t.id);
-                    }}
-                    title="Abrir movimiento"
-                  >
-                    <td>
-                      <span className={`badge ${estadoBadgeClass(t.estado)}`}>
-                        {estadoLabel(t.estado)}
-                      </span>
-                    </td>
-                    <td>{t.tipo === "persona" ? "Persona" : "Depósito"}</td>
-                    <td>{nombreDeposito(t.deposito_origen_id)}</td>
-                    <td>{etiquetaDestino(t)}</td>
-                    <td className="num">{t.total_activos}</td>
-                    <td className="muted">
-                      {new Date(t.creado_en).toLocaleString("es-AR")}
-                    </td>
-                    <td className="muted">{t.usuario_nombre ?? "—"}</td>
-                    <td className="col-actions">
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="btn secondary btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void abrir(t.id);
-                          }}
-                          disabled={busy}
-                        >
-                          Abrir
-                        </button>
-                      </div>
-                    </td>
+          <>
+            <div
+              ref={paging.viewportRef}
+              className="table-wrap table-panel list-table-wrap"
+            >
+              <table className="data-table dense sticky-head audit-table">
+                <thead>
+                  <tr>
+                    <th>Estado</th>
+                    <th>Tipo</th>
+                    <th>Origen</th>
+                    <th>Destino</th>
+                    <th className="num">Activos</th>
+                    <th>Creada</th>
+                    <th>Quién</th>
+                    <th className="col-actions">
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody key={`p-${paging.pageIndex}-s-${paging.pageSize}`} className="ui-enter">
+                  {paging.pageItems.map((t) => (
+                    <tr
+                      key={t.id}
+                      className={[
+                        "row-clickable",
+                        activa?.id === t.id ? "row-active" : "",
+                        t.estado === "pendiente" || t.estado === "en_transito" ? "row-warn" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => {
+                        if (!busy) void abrir(t.id);
+                      }}
+                      title="Abrir movimiento"
+                    >
+                      <td>
+                        <span className={`badge ${estadoBadgeClass(t.estado)}`}>
+                          {estadoLabel(t.estado)}
+                        </span>
+                      </td>
+                      <td>{t.tipo === "persona" ? "Persona" : "Depósito"}</td>
+                      <td>{nombreDeposito(t.deposito_origen_id)}</td>
+                      <td>{etiquetaDestino(t)}</td>
+                      <td className="num">{t.total_activos}</td>
+                      <td className="audit-when muted">
+                        {new Date(t.creado_en).toLocaleString("es-AR")}
+                      </td>
+                      <td className="muted">{t.usuario_nombre ?? "—"}</td>
+                      <td className="col-actions">
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn secondary btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void abrir(t.id);
+                            }}
+                            disabled={busy}
+                          >
+                            Abrir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {paging.total > 0 && (
+              <TablePager
+                from={paging.from}
+                to={paging.to}
+                total={paging.total}
+                page={paging.pageIndex + 1}
+                pages={paging.pages}
+                pageSize={paging.pageSize}
+                canPrev={paging.canPrev}
+                canNext={paging.canNext}
+                busy={busy}
+                onPrev={paging.goPrev}
+                onNext={paging.goNext}
+                onPageSizeChange={paging.setPageSize}
+                label="Paginación de movimientos"
+              />
+            )}
+          </>
         )}
       </section>
     </div>

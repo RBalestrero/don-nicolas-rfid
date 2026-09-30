@@ -79,7 +79,7 @@ class ImpresionService:
 
     def _generar_epc_unico(self, activo) -> tuple[str, EpcDecodedInfo]:
         for _ in range(16):
-            epc = generar_epc(str(activo.id), activo.numero_patrimonial)
+            epc = generar_epc(str(activo.id), codigo_epc=int(activo.codigo_epc))
             if not self.etiqueta_repository.epc_exists(epc):
                 return epc, _to_epc_info(epc)
         raise HTTPException(

@@ -102,6 +102,43 @@ class ActivoRepository:
             select(Activo).where(Activo.numero_patrimonial == numero)
         ).first()
 
+    def get_by_codigo_epc(self, codigo: int) -> Activo | None:
+        return self.db.scalars(select(Activo).where(Activo.codigo_epc == codigo)).first()
+
+    def list_codigo_epc_ocupados(self) -> set[int]:
+        return set(self.db.scalars(select(Activo.codigo_epc)).all())
+
+    def allocate_codigo_epc(self, preferred: int | None = None) -> int:
+        """Asigna un codigo_epc libre (0..2^40-1). Preferí `preferred` si está libre."""
+        from app.integrations.zebra.epc_generator import MAX_ARTICULO_CODE
+
+        occupied = self.list_codigo_epc_ocupados()
+        if (
+            preferred is not None
+            and 0 <= preferred <= MAX_ARTICULO_CODE
+            and preferred not in occupied
+        ):
+            return preferred
+        n = 1
+        while n in occupied:
+            n += 1
+            if n > MAX_ARTICULO_CODE:
+                raise RuntimeError("Agotado el espacio de codigo_epc (2^40)")
+        return n
+
+    def list_epc_map(
+        self,
+        *,
+        since=None,
+        include_inactive: bool = False,
+    ) -> list[Activo]:
+        stmt = select(Activo).order_by(Activo.codigo_epc)
+        if not include_inactive:
+            stmt = stmt.where(Activo.activo.is_(True))
+        if since is not None:
+            stmt = stmt.where(Activo.actualizado_en > since)
+        return list(self.db.scalars(stmt).all())
+
     def get_by_epc(self, epc: str) -> Activo | None:
         """Resuelve artículo por EPC de etiqueta (o legado en activos.epc)."""
         normalized = (epc or "").strip().upper()

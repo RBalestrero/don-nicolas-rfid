@@ -1,4 +1,13 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { apiFetch } from "../lib/api";
 import { useToast } from "../context/ToastContext";
 import { roleLabel } from "../lib/permissions";
@@ -12,22 +21,91 @@ import type {
   UsuarioCreatePayload,
   UsuarioUpdatePayload,
 } from "../types";
+import ActionsMenu, { type ActionsMenuItem } from "./ActionsMenu";
 import ConfirmDialog from "./ConfirmDialog";
 import EmptyState from "./EmptyState";
+import FilterSelect from "./FilterSelect";
+import FilterToggle from "./FilterToggle";
 import Modal from "./Modal";
-import PageHeader from "./PageHeader";
 
 type Section = "usuarios" | "roles";
 
-interface UsuariosPageProps {
-  section?: Section;
+const USERS_TAB_STORAGE_KEY = "dn_users_tab";
+
+export function readUsersTab(): Section | null {
+  try {
+    const v = sessionStorage.getItem(USERS_TAB_STORAGE_KEY);
+    if (v === "usuarios" || v === "roles") return v;
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
-export default function UsuariosPage({ section }: UsuariosPageProps) {
+export function writeUsersTab(tab: Section): void {
+  try {
+    sessionStorage.setItem(USERS_TAB_STORAGE_KEY, tab);
+  } catch {
+    /* ignore */
+  }
+}
+
+interface UsuariosPageProps {
+  /** Tab inicial (p. ej. al redirigir desde /roles). */
+  initialTab?: Section;
+}
+
+export default function UsuariosPage({ initialTab }: UsuariosPageProps) {
   const toast = useToast();
   const perms = usePermissions();
-  const activeSection: Section =
-    section ?? (perms.canManageUsers ? "usuarios" : "roles");
+  const tabsId = useId();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const availableTabs = useMemo(() => {
+    const tabs: { id: Section; label: string }[] = [];
+    if (perms.canManageUsers) tabs.push({ id: "usuarios", label: "Usuarios" });
+    if (perms.canManageRoles) tabs.push({ id: "roles", label: "Roles" });
+    return tabs;
+  }, [perms.canManageUsers, perms.canManageRoles]);
+
+  const [tab, setTab] = useState<Section>(() => {
+    const preferred = initialTab ?? readUsersTab();
+    if (preferred === "usuarios" && perms.canManageUsers) return "usuarios";
+    if (preferred === "roles" && perms.canManageRoles) return "roles";
+    if (perms.canManageUsers) return "usuarios";
+    return "roles";
+  });
+
+  useEffect(() => {
+    if (availableTabs.some((t) => t.id === tab)) return;
+    const fallback = availableTabs[0]?.id;
+    if (fallback) setTab(fallback);
+  }, [availableTabs, tab]);
+
+  const openTab = (next: Section) => {
+    setTab(next);
+    writeUsersTab(next);
+    setError(null);
+  };
+
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (
+      e.key !== "ArrowRight" &&
+      e.key !== "ArrowLeft" &&
+      e.key !== "Home" &&
+      e.key !== "End"
+    ) {
+      return;
+    }
+    e.preventDefault();
+    let next = index;
+    if (e.key === "ArrowRight") next = (index + 1) % availableTabs.length;
+    if (e.key === "ArrowLeft") next = (index - 1 + availableTabs.length) % availableTabs.length;
+    if (e.key === "Home") next = 0;
+    if (e.key === "End") next = availableTabs.length - 1;
+    openTab(availableTabs[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [roles, setRoles] = useState<RolCatalogo[]>([]);
@@ -36,7 +114,6 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // users UI
   const [search, setSearch] = useState("");
   const [rolFilter, setRolFilter] = useState("");
   const [soloActivos, setSoloActivos] = useState(false);
@@ -48,7 +125,6 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
   const [password, setPassword] = useState("");
   const [rol, setRol] = useState("operador_alta");
 
-  // roles UI
   const [showRoleForm, setShowRoleForm] = useState(false);
   const [editingRole, setEditingRole] = useState<RolCatalogo | null>(null);
   const [roleNombre, setRoleNombre] = useState("");
@@ -84,7 +160,7 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
   }, [perms.canManageUsers, perms.canManageRoles]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const roleNames = useMemo(() => roles.map((r) => r.nombre), [roles]);
@@ -288,6 +364,19 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
     }
   };
 
+  if (availableTabs.length === 0) {
+    return (
+      <div className="page">
+        <section className="card">
+          <EmptyState
+            title="Sin acceso"
+            description="Tu rol no tiene permisos para administrar usuarios ni roles."
+          />
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       {error && (
@@ -296,135 +385,270 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
         </p>
       )}
 
-      {activeSection === "usuarios" && perms.canManageUsers && (
-        <>
-          <Modal
-            open={showUserForm}
-            title={editingUser ? `Editar · ${editingUser.nombre}` : "Alta de usuario"}
-            size="md"
-            onClose={resetUserForm}
-          >
-            <form className="form" onSubmit={handleUserSubmit}>
-              <div className="two-col">
-                <label className="field">
-                  <span>Nombre</span>
-                  <input
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    required
-                    maxLength={100}
-                  />
-                </label>
-                <label className="field">
-                  <span>Email</span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    maxLength={254}
-                  />
-                </label>
-              </div>
-              <div className="two-col">
-                <label className="field">
-                  <span>{editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}</span>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required={!editingUser}
-                    minLength={editingUser ? undefined : 6}
-                    maxLength={128}
-                    autoComplete="new-password"
-                  />
-                </label>
-                <label className="field">
-                  <span>Rol</span>
-                  <select value={rol} onChange={(e) => setRol(e.target.value)} required>
-                    {roleNames.map((name) => (
-                      <option key={name} value={name}>
-                        {roleLabel(name)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="form-actions">
-                <button type="button" className="btn secondary" onClick={resetUserForm} disabled={busy}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn primary" disabled={busy}>
-                  {busy ? "Guardando…" : editingUser ? "Guardar cambios" : "Crear usuario"}
-                </button>
-              </div>
-            </form>
-          </Modal>
+      <Modal
+        open={showUserForm && perms.canManageUsers}
+        title={editingUser ? `Editar · ${editingUser.nombre}` : "Alta de usuario"}
+        size="md"
+        onClose={resetUserForm}
+      >
+        <form className="form" onSubmit={handleUserSubmit}>
+          <div className="two-col">
+            <label className="field">
+              <span>Nombre</span>
+              <input
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                required
+                maxLength={100}
+              />
+            </label>
+            <label className="field">
+              <span>Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                maxLength={254}
+              />
+            </label>
+          </div>
+          <div className="two-col">
+            <label className="field">
+              <span>{editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required={!editingUser}
+                minLength={editingUser ? undefined : 6}
+                maxLength={128}
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="field">
+              <span>Rol</span>
+              <select value={rol} onChange={(e) => setRol(e.target.value)} required>
+                {roleNames.map((name) => (
+                  <option key={name} value={name}>
+                    {roleLabel(name)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn secondary" onClick={resetUserForm} disabled={busy}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn primary" disabled={busy}>
+              {busy ? "Guardando…" : editingUser ? "Guardar cambios" : "Crear usuario"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
-          <PageHeader
-            title="Usuarios"
-            subtitle="Quiénes pueden entrar y con qué rol"
-            leading={
-              usuarios.length > 0 ? (
-                <span>
-                  {filtrados.length}
-                  {filtrados.length !== usuarios.length ? ` / ${usuarios.length}` : ""} usuario
-                  {filtrados.length === 1 ? "" : "s"}
-                </span>
-              ) : null
-            }
-          >
-            {perms.canManageUsers && (
-              <button type="button" className="btn primary btn-sm" onClick={openCreateUser}>
-                + Nuevo usuario
-              </button>
-            )}
-          </PageHeader>
+      <Modal
+        open={showRoleForm && perms.canManageRoles}
+        title={editingRole ? `Editar rol · ${editingRole.nombre}` : "Nuevo rol"}
+        size="lg"
+        onClose={resetRoleForm}
+      >
+        <form className="form" onSubmit={handleRoleSubmit}>
+          <div className="two-col">
+            <label className="field">
+              <span>Nombre técnico</span>
+              <input
+                value={roleNombre}
+                onChange={(e) => setRoleNombre(e.target.value)}
+                required
+                maxLength={50}
+                disabled={Boolean(editingRole?.es_sistema)}
+                placeholder="ej. auditor_planta"
+              />
+            </label>
+            <label className="field">
+              <span>Descripción</span>
+              <input
+                value={roleDesc}
+                onChange={(e) => setRoleDesc(e.target.value)}
+                maxLength={500}
+                placeholder="Para qué se usa este rol"
+              />
+            </label>
+          </div>
 
-          <section className="card">
-            {usuarios.length > 0 && (
-              <div className="toolbar toolbar-compact" role="search" aria-label="Filtrar usuarios">
-                <label className="field toolbar-field grow">
-                  <span className="sr-only">Buscar</span>
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar nombre, email o rol…"
-                  />
-                </label>
-                <label className="field toolbar-field">
-                  <span className="sr-only">Rol</span>
-                  <select
-                    value={rolFilter}
-                    onChange={(e) => setRolFilter(e.target.value)}
-                    aria-label="Rol"
-                  >
-                    <option value="">Rol</option>
-                    {roleNames.map((name) => (
-                      <option key={name} value={name}>
-                        {roleLabel(name)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field toolbar-field checkbox-field toolbar-check">
-                  <input
-                    type="checkbox"
-                    checked={soloActivos}
-                    onChange={(e) => setSoloActivos(e.target.checked)}
-                  />
-                  <span>Solo activos</span>
-                </label>
-                {filtersActive && (
-                  <div className="toolbar-actions">
-                    <button type="button" className="btn secondary" onClick={clearFilters}>
-                      Limpiar
-                    </button>
-                  </div>
+          <div className="perm-matrix" role="group" aria-label="Permisos del rol">
+            <div className="section-header">
+              <h3>Permisos de acciones</h3>
+              <span className="muted">{rolePerms.length} seleccionados</span>
+            </div>
+            {permisosPorModulo.map(([modulo, items]) => (
+              <div key={modulo} className="perm-module">
+                <strong className="section-kicker">{modulo}</strong>
+                <ul className="perm-list">
+                  {items.map((p) => (
+                    <li key={p.id}>
+                      <label className="field checkbox-field">
+                        <input
+                          type="checkbox"
+                          checked={rolePerms.includes(p.codigo)}
+                          onChange={() => toggleRolePerm(p.codigo)}
+                        />
+                        <span>
+                          <strong>{p.nombre}</strong>
+                          <span className="muted"> · {p.codigo}</span>
+                          {p.descripcion && (
+                            <span className="perm-desc muted"> — {p.descripcion}</span>
+                          )}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="form-actions">
+            <button type="button" className="btn secondary" onClick={resetRoleForm} disabled={busy}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn primary" disabled={busy}>
+              {busy ? "Guardando…" : editingRole ? "Guardar rol" : "Crear rol"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <section className="card">
+        <div className="table-chrome">
+          <div className="table-chrome-leading">
+            <div
+              className="tabs table-chrome-tabs"
+              role="tablist"
+              aria-label="Secciones de usuarios y roles"
+            >
+              {availableTabs.map((t, i) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`${tabsId}-tab-${t.id}`}
+                  className={`tab ${tab === t.id ? "active" : ""}`}
+                  aria-selected={tab === t.id}
+                  aria-controls={`${tabsId}-panel-${t.id}`}
+                  tabIndex={tab === t.id ? 0 : -1}
+                  ref={(el) => {
+                    tabRefs.current[i] = el;
+                  }}
+                  onClick={() => openTab(t.id)}
+                  onKeyDown={(e) => onTabKeyDown(e, i)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {tab === "usuarios" && !loading && usuarios.length > 0 ? (
+              <span className="section-count">
+                {filtrados.length}
+                {filtersActive ? ` / ${usuarios.length}` : ""} usuario
+                {filtrados.length === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {tab === "roles" && !loading && roles.length > 0 ? (
+              <span className="section-count">
+                {roles.length} rol{roles.length === 1 ? "" : "es"}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className="table-chrome-controls"
+            role={tab === "usuarios" ? "search" : undefined}
+            aria-label={tab === "usuarios" ? "Filtrar usuarios" : undefined}
+          >
+            {tab === "usuarios" && perms.canManageUsers && (
+              <>
+                {usuarios.length > 0 && (
+                  <>
+                    <label className="field toolbar-field grow">
+                      <span className="sr-only">Buscar</span>
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Buscar nombre, email o rol…"
+                      />
+                    </label>
+                    <FilterSelect
+                      placeholder="Rol"
+                      aria-label="Rol"
+                      value={rolFilter}
+                      onChange={setRolFilter}
+                      options={roleNames.map((name) => ({
+                        value: name,
+                        label: roleLabel(name),
+                      }))}
+                    />
+                    <FilterToggle pressed={soloActivos} onPressedChange={setSoloActivos}>
+                      Solo activos
+                    </FilterToggle>
+                    {filtersActive && (
+                      <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                        Limpiar
+                      </button>
+                    )}
+                  </>
                 )}
-              </div>
+                <ActionsMenu
+                  disabled={loading || busy}
+                  items={
+                    [
+                      {
+                        id: "refresh",
+                        label: loading ? "Cargando…" : "Actualizar",
+                        disabled: loading || busy,
+                        onClick: () => void load(),
+                      },
+                      {
+                        id: "nuevo",
+                        label: "+ Nuevo usuario",
+                        onClick: openCreateUser,
+                      },
+                    ] satisfies ActionsMenuItem[]
+                  }
+                />
+              </>
             )}
+            {tab === "roles" && perms.canManageRoles && (
+              <ActionsMenu
+                disabled={loading || busy}
+                items={
+                  [
+                    {
+                      id: "refresh",
+                      label: loading ? "Cargando…" : "Actualizar",
+                      disabled: loading || busy,
+                      onClick: () => void load(),
+                    },
+                    {
+                      id: "nuevo",
+                      label: "+ Nuevo rol",
+                      onClick: openCreateRole,
+                    },
+                  ] satisfies ActionsMenuItem[]
+                }
+              />
+            )}
+          </div>
+        </div>
 
+        {tab === "usuarios" && perms.canManageUsers && (
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-usuarios`}
+            aria-labelledby={`${tabsId}-tab-usuarios`}
+            className="ui-enter"
+          >
             {loading ? (
               <p className="muted" aria-busy="true">
                 Cargando…
@@ -450,8 +674,8 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
                 }
               />
             ) : (
-              <div className="table-wrap table-panel">
-                <table className="data-table dense sticky-head">
+              <div className="table-wrap table-panel list-table-wrap">
+                <table className="data-table dense sticky-head audit-table">
                   <thead>
                     <tr>
                       <th>Nombre</th>
@@ -504,104 +728,16 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
                 </table>
               </div>
             )}
-          </section>
-        </>
-      )}
+          </div>
+        )}
 
-      {activeSection === "roles" && perms.canManageRoles && (
-        <>
-          <Modal
-            open={showRoleForm}
-            title={editingRole ? `Editar rol · ${editingRole.nombre}` : "Nuevo rol"}
-            size="lg"
-            onClose={resetRoleForm}
+        {tab === "roles" && perms.canManageRoles && (
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-roles`}
+            aria-labelledby={`${tabsId}-tab-roles`}
+            className="ui-enter"
           >
-            <form className="form" onSubmit={handleRoleSubmit}>
-              <div className="two-col">
-                <label className="field">
-                  <span>Nombre técnico</span>
-                  <input
-                    value={roleNombre}
-                    onChange={(e) => setRoleNombre(e.target.value)}
-                    required
-                    maxLength={50}
-                    disabled={Boolean(editingRole?.es_sistema)}
-                    placeholder="ej. auditor_planta"
-                  />
-                </label>
-                <label className="field">
-                  <span>Descripción</span>
-                  <input
-                    value={roleDesc}
-                    onChange={(e) => setRoleDesc(e.target.value)}
-                    maxLength={500}
-                    placeholder="Para qué se usa este rol"
-                  />
-                </label>
-              </div>
-
-              <div className="perm-matrix" role="group" aria-label="Permisos del rol">
-                <div className="section-header">
-                  <h3>Permisos de acciones</h3>
-                  <span className="muted">{rolePerms.length} seleccionados</span>
-                </div>
-                {permisosPorModulo.map(([modulo, items]) => (
-                  <div key={modulo} className="perm-module">
-                    <strong className="section-kicker">{modulo}</strong>
-                    <ul className="perm-list">
-                      {items.map((p) => (
-                        <li key={p.id}>
-                          <label className="field checkbox-field">
-                            <input
-                              type="checkbox"
-                              checked={rolePerms.includes(p.codigo)}
-                              onChange={() => toggleRolePerm(p.codigo)}
-                            />
-                            <span>
-                              <strong>{p.nombre}</strong>
-                              <span className="muted"> · {p.codigo}</span>
-                              {p.descripcion && (
-                                <span className="perm-desc muted"> — {p.descripcion}</span>
-                              )}
-                            </span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-
-              <div className="form-actions">
-                <button type="button" className="btn secondary" onClick={resetRoleForm} disabled={busy}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn primary" disabled={busy}>
-                  {busy ? "Guardando…" : editingRole ? "Guardar rol" : "Crear rol"}
-                </button>
-              </div>
-            </form>
-          </Modal>
-
-          <PageHeader
-            title="Roles"
-            subtitle="Qué puede hacer cada tipo de usuario"
-            leading={
-              roles.length > 0 ? (
-                <span>
-                  {roles.length} rol{roles.length === 1 ? "" : "es"}
-                </span>
-              ) : null
-            }
-          >
-            {perms.canManageRoles && (
-              <button type="button" className="btn primary btn-sm" onClick={openCreateRole}>
-                + Nuevo rol
-              </button>
-            )}
-          </PageHeader>
-
-          <section className="card">
             {loading ? (
               <p className="muted" aria-busy="true">
                 Cargando…
@@ -617,8 +753,8 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
                 }
               />
             ) : (
-              <div className="table-wrap table-panel">
-                <table className="data-table dense sticky-head">
+              <div className="table-wrap table-panel list-table-wrap">
+                <table className="data-table dense sticky-head audit-table">
                   <thead>
                     <tr>
                       <th className="col-rol">Rol</th>
@@ -652,9 +788,7 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
                                   </span>
                                 ))}
                                 {(r.permisos ?? []).length > 3 && (
-                                  <span className="muted">
-                                    +{(r.permisos ?? []).length - 3}
-                                  </span>
+                                  <span className="muted">+{(r.permisos ?? []).length - 3}</span>
                                 )}
                               </>
                             )}
@@ -694,9 +828,9 @@ export default function UsuariosPage({ section }: UsuariosPageProps) {
                 </table>
               </div>
             )}
-          </section>
-        </>
-      )}
+          </div>
+        )}
+      </section>
 
       <ConfirmDialog
         open={confirmToggle !== null}

@@ -70,7 +70,9 @@ describe("DepositosPage", () => {
 
     render(<DepositosPage />);
 
-    expect(await screen.findByRole("heading", { name: /^depósitos$/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /\+ nuevo depósito/i }),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/sin depósitos/i)).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: /\+ nuevo depósito/i })[0]);

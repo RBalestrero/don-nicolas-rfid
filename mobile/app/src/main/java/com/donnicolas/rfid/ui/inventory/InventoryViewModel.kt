@@ -210,7 +210,8 @@ class InventoryViewModel(
 
     fun selectArticulo(activo: ActivoDto) {
         viewModelScope.launch {
-            val code = EpcScheme.articuloCodeFromPatrimonial(activo.numeroPatrimonial)
+            val code = activo.codigoEpc
+                ?: EpcScheme.articuloCodeFromPatrimonial(activo.numeroPatrimonial)
             val prefix = code?.let { EpcScheme.articuloPrefixFromCode(it) }
             if (code == null || prefix == null) {
                 _state.update {
@@ -218,9 +219,9 @@ class InventoryViewModel(
                         selectedActivo = activo,
                         error = AppError(
                             code = "SKU_CODE_INVALID",
-                            title = "No se pudo derivar el código RFID del artículo",
-                            detail = "El número patrimonial «${activo.numeroPatrimonial}» no genera " +
-                                "un prefijo EPC válido.",
+                            title = "No se pudo obtener el código RFID del artículo",
+                            detail = "El artículo «${activo.numeroPatrimonial}» no tiene codigo_epc. " +
+                                "Sincronizá el mapa EPC o revisá el alta en el servidor.",
                         ),
                     )
                 }
@@ -870,6 +871,7 @@ class InventoryViewModel(
             if (skuMatchCode == null || skuMatchPrefix.isNullOrBlank()) {
                 val sample = expectedEpcs.firstOrNull()
                 skuMatchCode = sample?.let { EpcScheme.decodeArticuloCode(it) }
+                    ?: _state.value.selectedActivo?.codigoEpc
                     ?: _state.value.selectedActivo?.numeroPatrimonial?.let {
                         EpcScheme.articuloCodeFromPatrimonial(it)
                     }

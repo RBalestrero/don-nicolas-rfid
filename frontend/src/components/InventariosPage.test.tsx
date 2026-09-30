@@ -159,12 +159,14 @@ describe("InventariosPage", () => {
     render(<InventariosPage />);
 
     expect(
-      await screen.findByText(/revisá y auditá los conteos hechos con el lector/i),
+      await screen.findByRole("heading", { name: /^sesiones$/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^acciones$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /nuevo conteo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /iniciar inventario/i })).not.toBeInTheDocument();
 
     expect(await screen.findByText("Central")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^estado$/i }));
     expect(screen.getByRole("option", { name: "Cerrado" })).toBeInTheDocument();
     expect(screen.getAllByText("Cerrado").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Pendiente")).toBeInTheDocument();

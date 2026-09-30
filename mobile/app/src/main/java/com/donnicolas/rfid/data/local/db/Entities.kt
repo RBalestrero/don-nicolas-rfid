@@ -25,6 +25,8 @@ data class CachedActivoEntity(
     @PrimaryKey val id: String,
     val numeroPatrimonial: String,
     val descripcion: String,
+    /** Código ART 40-bit del EPC (null si aún no sincronizado). */
+    val codigoEpc: Long? = null,
     val epc: String?,
     val categoriaNombre: String?,
     val activo: Boolean,

@@ -5,7 +5,7 @@ Formato D1 (24 hex = 96 bits)::
     D1 | ARTÍCULO (10 hex / 40 bits) | SERIAL (10 hex / 40 bits) | SUFIJO (2 hex)
 
 - Prefijo ``D1``: versión del esquema (privado, no GS1).
-- Artículo: dígitos del número patrimonial (p. ej. PAT-1001 → 1001).
+- Artículo: ``activos.codigo_epc`` (entero 40-bit asignado por el servidor).
 - Serial: aleatorio de 40 bits → unicidad entre etiquetas del mismo artículo.
 - Sufijo ``A1``: marca de sistema Don Nicolás. El MC33 filtra por este sufijo
   y descarta tags ajenos (otras empresas / otros esquemas).
@@ -26,7 +26,8 @@ _ART_HEX_LEN = 10
 _SER_HEX_LEN = 10
 _SUF_HEX_LEN = 2
 _EPC_HEX_LEN = 24
-_MAX_ART = (1 << 40) - 1
+MAX_ARTICULO_CODE = (1 << 40) - 1
+_MAX_ART = MAX_ARTICULO_CODE
 _MAX_SER = (1 << 40) - 1
 
 
@@ -47,10 +48,13 @@ class EpcDecoded:
 
 
 def articulo_code_from_patrimonial(numero_patrimonial: str) -> int:
-    """Extrae un código de artículo reversible desde el número patrimonial.
+    """Deriva un código 40-bit desde el patrimonial (legado / backfill).
 
     Preferimos los dígitos (``PAT-1001`` → ``1001``). Si no hay dígitos,
     codificamos alfanuméricos en base-36 (hasta 8 caracteres).
+
+    Los activos nuevos usan ``activos.codigo_epc`` asignado por el servidor;
+    esta función solo sirve para migración y preferencia al alta.
     """
     raw = (numero_patrimonial or "").strip().upper()
     if not raw:
@@ -77,7 +81,7 @@ def articulo_code_from_patrimonial(numero_patrimonial: str) -> int:
 
 
 def sugerir_patrimonial(articulo_code: int) -> str:
-    """Sugerencia legible del artículo a partir del código embebido."""
+    """Sugerencia legible de último recurso (sin lookup en BD)."""
     return f"PAT-{articulo_code}"
 
 
@@ -99,13 +103,27 @@ def pertenece_al_sistema(epc: str | None) -> bool:
     )
 
 
-def generar_epc(activo_id: str, numero_patrimonial: str | None = None) -> str:
-    """Genera un EPC-96 único (D1 + artículo + serial + sufijo sistema)."""
-    _ = activo_id
-    if not numero_patrimonial:
-        raise ValueError("numero_patrimonial es obligatorio para generar EPC D1")
+def generar_epc(
+    activo_id: str,
+    *,
+    codigo_epc: int | None = None,
+    numero_patrimonial: str | None = None,
+) -> str:
+    """Genera un EPC-96 único (D1 + artículo + serial + sufijo sistema).
 
-    art = articulo_code_from_patrimonial(numero_patrimonial)
+    Preferí ``codigo_epc`` (código interno del activo). ``numero_patrimonial``
+    queda solo como fallback legado.
+    """
+    _ = activo_id
+    if codigo_epc is not None:
+        art = int(codigo_epc)
+    elif numero_patrimonial:
+        art = articulo_code_from_patrimonial(numero_patrimonial)
+    else:
+        raise ValueError("codigo_epc es obligatorio para generar EPC D1")
+
+    if art < 0 or art > _MAX_ART:
+        raise ValueError(f"codigo_epc fuera de rango (0..{_MAX_ART})")
     serial = secrets.randbits(40)
     return encode_epc(art, serial)
 

@@ -96,6 +96,7 @@ class ActivoResponse(ActivoBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    codigo_epc: int
     activo: bool
     creado_en: datetime
     actualizado_en: datetime
@@ -105,6 +106,19 @@ class ActivoResponse(ActivoBase):
     epcs: list[str] = Field(default_factory=list)
     # Resumen de ubicación actual (join en listado; evita N+1 en la web).
     ubicacion: ActivoUbicacionResumen | None = None
+
+
+class EpcMapItem(BaseModel):
+    id: UUID
+    numero_patrimonial: str
+    codigo_epc: int
+    activo: bool
+    actualizado_en: datetime
+
+
+class EpcMapResponse(BaseModel):
+    generated_at: datetime
+    items: list[EpcMapItem]
 
 
 class ActivoLookupResponse(BaseModel):

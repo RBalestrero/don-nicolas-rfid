@@ -26,6 +26,8 @@ export interface Activo {
   activo: boolean;
   /** Si true, cada etiqueta nueva exige serie de fábrica. */
   serializado?: boolean;
+  /** Código interno 40-bit grabado en el EPC (campo ART). */
+  codigo_epc?: number;
   creado_en: string;
   actualizado_en: string;
   categoria: Categoria;

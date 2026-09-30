@@ -25,6 +25,8 @@ import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.rfid.EpcScheme
 import com.donnicolas.rfid.rfid.LocateMatchMode
 import com.donnicolas.rfid.rfid.LocateProximity
+import java.util.concurrent.atomic.AtomicLong
+
 sealed class AssetResult<out T> {
     data class Ok<T>(val value: T) : AssetResult<T>()
     data class Error(val error: AppError) : AssetResult<Nothing>()
@@ -36,6 +38,11 @@ class AssetsRepository(
     private val cachedActivoDao: CachedActivoDao,
     private val baseUrl: String = BuildConfig.API_BASE_URL,
 ) {
+    private val lastEpcMapSyncAtMs = AtomicLong(0L)
+
+    companion object {
+        private const val EPC_MAP_TTL_MS = 6L * 60L * 60L * 1000L
+    }
     /**
      * Lista tipos de artículo localizables (un row por activo / SKU).
      * El EPC de muestra deriva el prefijo D1+ART; en campo se matchea cualquier serial.
@@ -57,6 +64,7 @@ class AssetsRepository(
                         id = it.activoId,
                         numeroPatrimonial = it.numeroPatrimonial,
                         descripcion = it.descripcion,
+                        codigoEpc = it.articuloCode,
                         epc = it.epc,
                         categoriaNombre = null,
                         activo = true,
@@ -382,13 +390,18 @@ class AssetsRepository(
             preferred != null && (preferred in fromList || preferred == legacy) -> preferred
             preferred != null && EpcScheme.decodeArticuloCode(preferred) != null -> preferred
             else -> fromList.firstOrNull() ?: legacy
-        } ?: return null
-        val code = EpcScheme.decodeArticuloCode(sample)
+        }
+        val code = codigoEpc
+            ?: sample?.let { EpcScheme.decodeArticuloCode(it) }
             ?: EpcScheme.articuloCodeFromPatrimonial(numeroPatrimonial)
             ?: return null
-        val prefix = EpcScheme.articuloPrefixHex(sample)
+        val prefix = sample?.let { EpcScheme.articuloPrefixHex(it) }
             ?: EpcScheme.articuloPrefixFromCode(code)
             ?: return null
+        val resolvedSample = sample ?: run {
+            val synthesized = prefix + "0000000000" + EpcScheme.SYSTEM_SUFFIX
+            if (synthesized.length == EpcScheme.EPC_HEX_LEN) synthesized else return null
+        }
         val stock = when {
             stockEtiquetas > 0 -> stockEtiquetas
             fromList.isNotEmpty() -> fromList.size
@@ -398,7 +411,7 @@ class AssetsRepository(
             activoId = id,
             numeroPatrimonial = numeroPatrimonial,
             descripcion = descripcion,
-            epc = sample,
+            epc = resolvedSample,
             articuloCode = code,
             locatePrefix = prefix,
             stockEtiquetas = stock,
@@ -411,22 +424,68 @@ class AssetsRepository(
         toLocateTarget(preferredEpc = null, mode = LocateMode.ARTICULO)
 
     private fun CachedActivoEntity.toLocateTargetOrNull(): LocateTargetDto? {
-        val sample = epc?.let { EpcScheme.normalize(it) }?.takeIf { it.isNotEmpty() } ?: return null
-        val code = EpcScheme.decodeArticuloCode(sample)
+        val sample = epc?.let { EpcScheme.normalize(it) }?.takeIf { it.isNotEmpty() }
+        val code = codigoEpc
+            ?: sample?.let { EpcScheme.decodeArticuloCode(it) }
             ?: EpcScheme.articuloCodeFromPatrimonial(numeroPatrimonial)
             ?: return null
-        val prefix = EpcScheme.articuloPrefixHex(sample)
+        val prefix = sample?.let { EpcScheme.articuloPrefixHex(it) }
             ?: EpcScheme.articuloPrefixFromCode(code)
             ?: return null
+        val resolvedSample = sample ?: run {
+            val synthesized = prefix + "0000000000" + EpcScheme.SYSTEM_SUFFIX
+            if (synthesized.length == EpcScheme.EPC_HEX_LEN) synthesized else return null
+        }
         return LocateTargetDto(
             activoId = id.substringBefore(':'),
             numeroPatrimonial = numeroPatrimonial,
             descripcion = descripcion,
-            epc = sample,
+            epc = resolvedSample,
             articuloCode = code,
             locatePrefix = prefix,
             stockEtiquetas = 1,
             locateMode = LocateMode.ARTICULO,
         )
+    }
+
+    /**
+     * Descarga el mapa codigo_epc ↔ patrimonial al caché Room (offline locate/filter).
+     */
+    suspend fun syncEpcMap(force: Boolean = false): AssetResult<Int> {
+        val now = System.currentTimeMillis()
+        val lastAt = lastEpcMapSyncAtMs.get()
+        if (!force && lastAt > 0L && now - lastAt < EPC_MAP_TTL_MS) {
+            return AssetResult.Ok(0)
+        }
+        return try {
+            val remote = assetsApi.syncEpcMap(since = null, includeInactive = false)
+            val rows = remote.items.map { item ->
+                val existing = cachedActivoDao.getById(item.id)
+                CachedActivoEntity(
+                    id = item.id,
+                    numeroPatrimonial = item.numeroPatrimonial,
+                    descripcion = existing?.descripcion ?: item.numeroPatrimonial,
+                    codigoEpc = item.codigoEpc,
+                    epc = existing?.epc,
+                    categoriaNombre = existing?.categoriaNombre,
+                    activo = item.activo,
+                    cachedAtMs = now,
+                )
+            }
+            if (rows.isNotEmpty()) {
+                cachedActivoDao.upsertAll(rows)
+            }
+            lastEpcMapSyncAtMs.set(now)
+            AssetResult.Ok(rows.size)
+        } catch (e: Exception) {
+            AssetResult.Error(
+                ApiErrorMapper.fromThrowable(
+                    throwable = e,
+                    operation = "sincronizar mapa EPC",
+                    baseUrl = baseUrl,
+                    endpoint = "activos/epc-map",
+                ),
+            )
+        }
     }
 }

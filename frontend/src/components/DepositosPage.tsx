@@ -33,7 +33,7 @@ import SectorForm from "./SectorForm";
 import UbicacionForm from "./UbicacionForm";
 import { usePermissions } from "../lib/usePermissions";
 import { groupStockBySku, skuCoincideBusqueda } from "../lib/groupStockBySku";
-import type { AppPage } from "./DashboardPage";
+import type { AppPage } from "../lib/appPages";
 
 function ubicacionAsignadaFromActivo(a: Activo): UbicacionAsignada | null {
   if (!a.ubicacion) return null;
@@ -249,8 +249,11 @@ function AnimatedTreeChildren({
 
 export default function DepositosPage({
   onNavigate,
+  embedded = false,
 }: {
   onNavigate?: (page: AppPage) => void;
+  /** Cuando true, se renderiza sin shell de página (p. ej. bajo Artículos). */
+  embedded?: boolean;
 } = {}) {
   const toast = useToast();
   const perms = usePermissions();
@@ -690,7 +693,7 @@ export default function DepositosPage({
     .join(" → ");
 
   return (
-    <div className="page">
+    <div className={embedded ? "ops-embed depot-embed" : "page"}>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -716,32 +719,90 @@ export default function DepositosPage({
         />
       </Modal>
 
-      <PageHeader
-        title="Depósitos"
-        subtitle="Sectores, ubicaciones y el stock en cada una"
-        leading={
-          !loading && depositos.length > 0 ? (
-            <span>
-              {depositos.length} depósito{depositos.length === 1 ? "" : "s"}
-            </span>
-          ) : null
-        }
-      >
-        {perms.canWriteWarehouse && (
-          <button
-            type="button"
-            className="btn primary btn-sm"
-            onClick={() => {
-              setEditingDeposito(null);
-              setShowForm(true);
-            }}
-          >
-            + Nuevo depósito
-          </button>
-        )}
-      </PageHeader>
+      {!embedded && (
+        <PageHeader
+          leading={
+            !loading && depositos.length > 0 ? (
+              <span className="section-count">
+                {depositos.length} depósito{depositos.length === 1 ? "" : "s"}
+              </span>
+            ) : undefined
+          }
+        >
+          {perms.canWriteWarehouse && (
+            <button
+              type="button"
+              className="btn primary btn-sm"
+              onClick={() => {
+                setEditingDeposito(null);
+                setShowForm(true);
+              }}
+            >
+              + Nuevo depósito
+            </button>
+          )}
+        </PageHeader>
+      )}
 
       <section className="card depot-workspace">
+        {embedded && (
+          <div className="table-chrome">
+            <div className="table-chrome-leading">
+              <h2>Depósitos</h2>
+              {!loading && depositos.length > 0 ? (
+                <span className="section-count">
+                  {depositos.length} depósito{depositos.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              {!loading && depositos.length > 0 ? (
+                <span
+                  className="muted depot-chrome-path"
+                  aria-label="Ruta actual"
+                  aria-live="polite"
+                  title={
+                    [
+                      pathLabel || "Elegí un depósito",
+                      selectedId && (detalle?.direccion || detalle?.descripcion)
+                        ? [detalle.direccion, detalle.descripcion].filter(Boolean).join(" · ")
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  }
+                >
+                  {pathLabel || "Elegí un depósito"}
+                  {selectedId && (detalle?.direccion || detalle?.descripcion)
+                    ? ` · ${[detalle.direccion, detalle.descripcion].filter(Boolean).join(" · ")}`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            <div className="table-chrome-controls">
+              {!loading && depositos.length > 0 && (
+                <ExportButtons
+                  variant="menu"
+                  basePath={
+                    selectedId ? `/reportes/stock/${selectedId}` : "/reportes/stock/_"
+                  }
+                  filenameBase={detalle ? `stock_${detalle.nombre}` : "stock"}
+                  disabled={!selectedId || !stock || stock.total === 0}
+                />
+              )}
+              {perms.canWriteWarehouse && (
+                <button
+                  type="button"
+                  className="btn primary btn-sm"
+                  onClick={() => {
+                    setEditingDeposito(null);
+                    setShowForm(true);
+                  }}
+                >
+                  + Nuevo depósito
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {loading && (
           <p className="muted" aria-busy="true">
             Cargando depósitos…
@@ -771,36 +832,37 @@ export default function DepositosPage({
         )}
         {!loading && depositos.length > 0 && (
           <>
-            <div className="depot-drill-toolbar">
-              <div className="depot-drill-context">
-                <p className="depot-crumb" aria-live="polite">
-                  {pathLabel || "Elegí un depósito"}
-                </p>
-                <p className="muted depot-meta" aria-live="polite">
-                  {selectedId && (detalle?.direccion || detalle?.descripcion)
-                    ? [detalle.direccion, detalle.descripcion].filter(Boolean).join(" · ")
-                    : "\u00a0"}
-                </p>
+            {!embedded && (
+              <div className="depot-drill-toolbar">
+                <div className="depot-drill-context">
+                  <p className="depot-crumb" aria-live="polite">
+                    {pathLabel || "Elegí un depósito"}
+                  </p>
+                  <p className="muted depot-meta" aria-live="polite">
+                    {selectedId && (detalle?.direccion || detalle?.descripcion)
+                      ? [detalle.direccion, detalle.descripcion].filter(Boolean).join(" · ")
+                      : "\u00a0"}
+                  </p>
+                </div>
+                <div className="section-header-right depot-export-slot">
+                  <ExportButtons
+                    variant="menu"
+                    basePath={
+                      selectedId
+                        ? `/reportes/stock/${selectedId}`
+                        : "/reportes/stock/_"
+                    }
+                    filenameBase={detalle ? `stock_${detalle.nombre}` : "stock"}
+                    disabled={!selectedId || !stock || stock.total === 0}
+                  />
+                </div>
               </div>
-              <div className="section-header-right depot-export-slot">
-                <ExportButtons
-                  basePath={
-                    selectedId
-                      ? `/reportes/stock/${selectedId}`
-                      : "/reportes/stock/_"
-                  }
-                  filenameBase={
-                    detalle ? `stock_${detalle.nombre}` : "stock"
-                  }
-                  disabled={!selectedId || !stock || stock.total === 0}
-                />
-              </div>
-            </div>
+            )}
 
             <div className="depot-split">
               <section className="depot-pane depot-pane-tree" aria-labelledby="drill-tree">
                 <header className="depot-pane-head">
-                  <h3 id="drill-tree">Estructura</h3>
+                  <h2 id="drill-tree">Estructura</h2>
                   <PaneActionMenu
                     ariaLabel="Acciones de estructura"
                     actions={treeMenuActions}
@@ -894,9 +956,9 @@ export default function DepositosPage({
 
               <section className="depot-pane depot-pane-articulos" aria-labelledby="drill-art">
                 <header className="depot-pane-head">
-                  <h3 id="drill-art">Artículos</h3>
+                  <h2 id="drill-art">Artículos</h2>
                   {selectedUbicacion && (
-                    <span className="muted">
+                    <span className="section-count">
                       {articulosUbicacion.reduce((n, g) => n + g.unidades, 0)} u.
                     </span>
                   )}

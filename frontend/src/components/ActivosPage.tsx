@@ -21,16 +21,21 @@ import ActivoForm from "./ActivoForm";
 import ActivosList from "./ActivosList";
 import CategoriaForm from "./CategoriaForm";
 import ConfirmDialog from "./ConfirmDialog";
-import type { AppPage } from "./DashboardPage";
+import type { AppPage } from "../lib/appPages";
+import DepositosPage from "./DepositosPage";
 import EmptyState from "./EmptyState";
 import ImprimirEtiquetasModal from "./ImprimirEtiquetasModal";
 import Modal from "./Modal";
-import PageHeader from "./PageHeader";
+import type { ActionsMenuItem } from "./ActionsMenu";
+import ActionsMenu from "./ActionsMenu";
+import FilterSelect from "./FilterSelect";
+import TablePager from "./TablePager";
 import {
   filterActivos,
   hasActiveActivosFilters,
   type UbicacionFilter,
 } from "../lib/filterActivos";
+import { useTablePaging } from "../lib/useTablePaging";
 import { usePermissions } from "../lib/usePermissions";
 
 function ubicacionesFromActivos(lista: Activo[]): Record<string, UbicacionAsignada | null> {
@@ -93,28 +98,33 @@ export default function ActivosPage({ onNavigate }: ActivosPageProps) {
   const [etiquetasActivoId, setEtiquetasActivoId] = useState<string | null>(null);
 
   useEffect(() => {
-    const flag = sessionStorage.getItem("dn_act_filter");
-    if (flag === "sin") {
-      setUbicacionFilter("sin");
-      sessionStorage.removeItem("dn_act_filter");
-    }
-    const focusId = sessionStorage.getItem("dn_act_focus");
-    const deepSearch = sessionStorage.getItem("dn_act_search");
-    const tabFlag = sessionStorage.getItem("dn_act_tab");
-    if (focusId) {
-      setFocusActivoId(focusId);
-      sessionStorage.removeItem("dn_act_focus");
-    }
-    if (deepSearch) {
-      setSearch(deepSearch);
-      sessionStorage.removeItem("dn_act_search");
-    }
-    if (tabFlag === "categorias") {
-      setTab("categorias");
-      sessionStorage.removeItem("dn_act_tab");
-    }
-    sessionStorage.removeItem("dn_act_open_historial");
-    sessionStorage.removeItem("dn_act_historial_focus");
+    const applyActFlags = () => {
+      const flag = sessionStorage.getItem("dn_act_filter");
+      if (flag === "sin") {
+        setUbicacionFilter("sin");
+        sessionStorage.removeItem("dn_act_filter");
+      }
+      const focusId = sessionStorage.getItem("dn_act_focus");
+      const deepSearch = sessionStorage.getItem("dn_act_search");
+      const tabFlag = sessionStorage.getItem("dn_act_tab");
+      if (focusId) {
+        setFocusActivoId(focusId);
+        sessionStorage.removeItem("dn_act_focus");
+      }
+      if (deepSearch) {
+        setSearch(deepSearch);
+        sessionStorage.removeItem("dn_act_search");
+      }
+      if (tabFlag === "categorias") {
+        setTab("categorias");
+        sessionStorage.removeItem("dn_act_tab");
+      }
+      sessionStorage.removeItem("dn_act_open_historial");
+      sessionStorage.removeItem("dn_act_historial_focus");
+    };
+    applyActFlags();
+    window.addEventListener("dn-session-nav", applyActFlags);
+    return () => window.removeEventListener("dn-session-nav", applyActFlags);
   }, []);
 
   const filterOpts = useMemo(
@@ -126,6 +136,7 @@ export default function ActivosPage({ onNavigate }: ActivosPageProps) {
     () => filterActivos(activos, ubicaciones, filterOpts),
     [activos, ubicaciones, filterOpts],
   );
+  const catPaging = useTablePaging(categorias, "categorias");
 
   const clearFilters = () => {
     setSearch("");
@@ -311,7 +322,7 @@ export default function ActivosPage({ onNavigate }: ActivosPageProps) {
   const viewingActivo = activos.find((a) => a.id === viewingId) ?? null;
 
   return (
-    <div className="page">
+    <div className="page page-activos">
       {error && (
         <p className="error" role="alert">
           {error}
@@ -366,258 +377,282 @@ export default function ActivosPage({ onNavigate }: ActivosPageProps) {
         onActivoChanged={() => void loadData()}
       />
 
-      <PageHeader
-        title="Artículos"
-        subtitle="Buscá, ubicá y organizá tu stock"
-        tabs={
-          <div className="tabs" role="tablist" aria-label="Secciones de artículos">
-            {ARTICULOS_TABS.map((t, i) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                id={`${tabsId}-tab-${t.id}`}
-                className={`tab ${tab === t.id ? "active" : ""}`}
-                aria-selected={tab === t.id}
-                aria-controls={`${tabsId}-panel-${t.id}`}
-                tabIndex={tab === t.id ? 0 : -1}
-                ref={(el) => {
-                  tabRefs.current[i] = el;
-                }}
-                onClick={() => setTab(t.id)}
-                onKeyDown={(e) => onTabKeyDown(e, i)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {tab === "catalogo" ? (
-          <>
-            <button
-              type="button"
-              className="btn secondary btn-sm"
-              disabled={loading}
-              onClick={() => void loadData()}
-            >
-              {loading ? "Cargando…" : "Actualizar"}
-            </button>
-            {perms.canWriteAssets && (
-              <button
-                type="button"
-                className="btn primary btn-sm"
-                onClick={() => {
-                  closePanels();
-                  setViewingId(null);
-                  setShowForm(true);
-                }}
-              >
-                + Nuevo artículo
-              </button>
-            )}
-          </>
-        ) : perms.canWriteAssets ? (
-          <button
-            type="button"
-            className="btn primary btn-sm"
-            onClick={() => {
-              setEditingCategoria(null);
-              setShowCategoriaForm(true);
-            }}
-          >
-            + Nueva categoría
-          </button>
-        ) : (
-          <span className="muted">Solo lectura</span>
-        )}
-      </PageHeader>
-
-      {tab === "catalogo" && (
-        <section
-          className="card"
-          role="tabpanel"
-          id={`${tabsId}-panel-catalogo`}
-          aria-labelledby={`${tabsId}-tab-catalogo`}
-        >
-          {!loading && activos.length > 0 ? (
-            <p className="muted depot-meta">
-              {activosFiltrados.length}
-              {filtersActive ? ` / ${activos.length}` : ""} artículo
-              {activosFiltrados.length === 1 ? "" : "s"}
-            </p>
-          ) : null}
-          {activos.length > 0 && (
-            <div className="toolbar toolbar-compact" role="search" aria-label="Filtrar artículos">
-              <label className="field toolbar-field grow">
-                <span className="sr-only">Buscar</span>
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar patrimonial, EPC, descripción…"
-                />
-              </label>
-              <label className="field toolbar-field">
-                <span className="sr-only">Categoría</span>
-                <select
-                  value={categoriaFilter}
-                  onChange={(e) => setCategoriaFilter(e.target.value)}
-                  aria-label="Categoría"
+      <section className="card articulos-list-card">
+        <div className="table-chrome">
+          <div className="table-chrome-leading">
+            <div className="tabs table-chrome-tabs" role="tablist" aria-label="Secciones de artículos">
+              {ARTICULOS_TABS.map((t, i) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`${tabsId}-tab-${t.id}`}
+                  className={`tab ${tab === t.id ? "active" : ""}`}
+                  aria-selected={tab === t.id}
+                  aria-controls={`${tabsId}-panel-${t.id}`}
+                  tabIndex={tab === t.id ? 0 : -1}
+                  ref={(el) => {
+                    tabRefs.current[i] = el;
+                  }}
+                  onClick={() => setTab(t.id)}
+                  onKeyDown={(e) => onTabKeyDown(e, i)}
                 >
-                  <option value="">Categoría</option>
-                  {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field toolbar-field">
-                <span className="sr-only">Ubicación</span>
-                <select
-                  value={ubicacionFilter}
-                  onChange={(e) => setUbicacionFilter(e.target.value as UbicacionFilter)}
-                  aria-label="Ubicación"
-                >
-                  <option value="all">Ubicación</option>
-                  <option value="con">Con ubicación</option>
-                  <option value="sin">Sin ubicación</option>
-                </select>
-              </label>
-              {filtersActive && (
-                <div className="toolbar-actions">
-                  <button type="button" className="btn secondary" onClick={clearFilters}>
-                    Limpiar
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!loading && activos.length > 0 && activosFiltrados.length === 0 ? (
-            <EmptyState
-              title="Sin coincidencias"
-              description="Ningún artículo coincide con los filtros actuales."
-              action={
-                <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
-                  Limpiar filtros
+                  {t.label}
                 </button>
-              }
-            />
-          ) : (
-            <ActivosList
-              activos={activosFiltrados}
-              ubicaciones={ubicaciones}
-              loading={loading}
-              viewingId={viewingId}
-              editingId={editingId}
-              focusId={focusActivoId}
-              onView={handleView}
-              onEdit={handleToggleEdit}
-              onPrint={(id) => openEtiquetasModal(id)}
-              onDelete={handleDelete}
-              canWriteAssets={perms.canWriteAssets}
-              onCreateRequest={
-                perms.canWriteAssets
-                  ? () => {
-                      closePanels();
-                      setViewingId(null);
-                      setShowForm(true);
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </section>
-      )}
-
-      {tab === "categorias" && (
-        <section
-          className="card"
-          role="tabpanel"
-          id={`${tabsId}-panel-categorias`}
-          aria-labelledby={`${tabsId}-tab-categorias`}
-        >
-          {!loading && categorias.length > 0 ? (
-            <p className="muted depot-meta">
-              {categorias.length} categoría{categorias.length === 1 ? "" : "s"}
-            </p>
-          ) : null}
-          {!loading && categorias.length > 0 && (
-            <div className="table-wrap table-panel">
-              <table className="data-table dense sticky-head">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th className="col-hide-sm">Descripción</th>
-                    {perms.canWriteAssets && (
-                      <th className="col-actions">
-                        <span className="sr-only">Acciones</span>
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {categorias.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <strong>{c.nombre}</strong>
-                      </td>
-                      <td className="col-hide-sm muted">{c.descripcion || "—"}</td>
-                      {perms.canWriteAssets && (
-                        <td className="col-actions">
-                          <div className="row-actions">
-                            <button
-                              type="button"
-                              className="btn secondary btn-sm"
-                              onClick={() => {
-                                setShowCategoriaForm(false);
-                                setEditingCategoria(c);
-                              }}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn ghost btn-sm danger-text"
-                              onClick={() => {
-                                setActionError(null);
-                                setConfirmDeleteCategoriaId(c.id);
-                              }}
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              ))}
             </div>
-          )}
-          {!loading && categorias.length === 0 && (
-            <EmptyState
-              title="Sin categorías"
-              description="Creá categorías para clasificar los artículos del inventario."
-              action={
-                perms.canWriteAssets ? (
-                  <button
-                    type="button"
-                    className="btn primary btn-sm"
-                    onClick={() => {
-                      setEditingCategoria(null);
-                      setShowCategoriaForm(true);
-                    }}
-                  >
-                    + Nueva categoría
+            {tab === "catalogo" && !loading && activos.length > 0 ? (
+              <span className="section-count">
+                {activosFiltrados.length}
+                {filtersActive ? ` / ${activos.length}` : ""} artículo
+                {activosFiltrados.length === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {tab === "categorias" && !loading && categorias.length > 0 ? (
+              <span className="section-count">
+                {categorias.length} categoría{categorias.length === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className="table-chrome-controls"
+            role={tab === "catalogo" ? "search" : undefined}
+            aria-label={tab === "catalogo" ? "Filtrar artículos" : undefined}
+          >
+            {tab === "catalogo" && (
+              <>
+                {activos.length > 0 && (
+                  <>
+                    <label className="field toolbar-field grow">
+                      <span className="sr-only">Buscar</span>
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Buscar patrimonial, EPC, descripción…"
+                      />
+                    </label>
+                    <FilterSelect
+                      placeholder="Categoría"
+                      aria-label="Categoría"
+                      value={categoriaFilter}
+                      onChange={setCategoriaFilter}
+                      options={categorias.map((c) => ({ value: c.id, label: c.nombre }))}
+                    />
+                    <FilterSelect
+                      placeholder="Ubicación"
+                      aria-label="Ubicación"
+                      value={ubicacionFilter === "all" ? "" : ubicacionFilter}
+                      onChange={(v) => setUbicacionFilter((v || "all") as UbicacionFilter)}
+                      options={[
+                        { value: "con", label: "Con ubicación" },
+                        { value: "sin", label: "Sin ubicación" },
+                      ]}
+                    />
+                    {filtersActive && (
+                      <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                        Limpiar
+                      </button>
+                    )}
+                  </>
+                )}
+                <ActionsMenu
+                  disabled={loading}
+                  items={
+                    [
+                      {
+                        id: "refresh",
+                        label: loading ? "Cargando…" : "Actualizar",
+                        disabled: loading,
+                        onClick: () => void loadData(),
+                      },
+                      ...(perms.canWriteAssets
+                        ? [
+                            {
+                              id: "nuevo",
+                              label: "+ Nuevo artículo",
+                              onClick: () => {
+                                closePanels();
+                                setViewingId(null);
+                                setShowForm(true);
+                              },
+                            } satisfies ActionsMenuItem,
+                          ]
+                        : []),
+                    ] satisfies ActionsMenuItem[]
+                  }
+                />
+              </>
+            )}
+            {tab === "categorias" && (
+              <ActionsMenu
+                items={
+                  (perms.canWriteAssets
+                    ? [
+                        {
+                          id: "nueva-cat",
+                          label: "+ Nueva categoría",
+                          onClick: () => {
+                            setEditingCategoria(null);
+                            setShowCategoriaForm(true);
+                          },
+                        },
+                      ]
+                    : []) satisfies ActionsMenuItem[]
+                }
+              />
+            )}
+          </div>
+        </div>
+
+        {tab === "catalogo" && (
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-catalogo`}
+            aria-labelledby={`${tabsId}-tab-catalogo`}
+            className="ui-enter"
+          >
+            {!loading && activos.length > 0 && activosFiltrados.length === 0 ? (
+              <EmptyState
+                title="Sin coincidencias"
+                description="Ningún artículo coincide con los filtros actuales."
+                action={
+                  <button type="button" className="btn secondary btn-sm" onClick={clearFilters}>
+                    Limpiar filtros
                   </button>
-                ) : undefined
-              }
-            />
-          )}
-        </section>
-      )}
+                }
+              />
+            ) : (
+              <ActivosList
+                activos={activosFiltrados}
+                ubicaciones={ubicaciones}
+                loading={loading}
+                viewingId={viewingId}
+                editingId={editingId}
+                focusId={focusActivoId}
+                filterKey={`${search}|${categoriaFilter}|${ubicacionFilter}`}
+                onView={handleView}
+                onEdit={handleToggleEdit}
+                onPrint={(id) => openEtiquetasModal(id)}
+                onDelete={handleDelete}
+                canWriteAssets={perms.canWriteAssets}
+                onCreateRequest={
+                  perms.canWriteAssets
+                    ? () => {
+                        closePanels();
+                        setViewingId(null);
+                        setShowForm(true);
+                      }
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        )}
+
+        {tab === "categorias" && (
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-categorias`}
+            aria-labelledby={`${tabsId}-tab-categorias`}
+            className="ui-enter"
+          >
+            {!loading && categorias.length > 0 && (
+              <>
+                <div
+                  ref={catPaging.viewportRef}
+                  className="table-wrap table-panel list-table-wrap"
+                >
+                  <table className="data-table dense sticky-head audit-table">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th className="col-hide-sm">Descripción</th>
+                        {perms.canWriteAssets && (
+                          <th className="col-actions">
+                            <span className="sr-only">Acciones</span>
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody key={`p-${catPaging.pageIndex}-s-${catPaging.pageSize}`} className="ui-enter">
+                      {catPaging.pageItems.map((c) => (
+                        <tr key={c.id}>
+                          <td>
+                            <strong>{c.nombre}</strong>
+                          </td>
+                          <td className="col-hide-sm muted">{c.descripcion || "—"}</td>
+                          {perms.canWriteAssets && (
+                            <td className="col-actions">
+                              <div className="row-actions">
+                                <button
+                                  type="button"
+                                  className="btn secondary btn-sm"
+                                  onClick={() => {
+                                    setShowCategoriaForm(false);
+                                    setEditingCategoria(c);
+                                  }}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn ghost btn-sm danger-text"
+                                  onClick={() => {
+                                    setActionError(null);
+                                    setConfirmDeleteCategoriaId(c.id);
+                                  }}
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {catPaging.total > 0 && (
+                  <TablePager
+                    from={catPaging.from}
+                    to={catPaging.to}
+                    total={catPaging.total}
+                    page={catPaging.pageIndex + 1}
+                    pages={catPaging.pages}
+                    pageSize={catPaging.pageSize}
+                    canPrev={catPaging.canPrev}
+                    canNext={catPaging.canNext}
+                    onPrev={catPaging.goPrev}
+                    onNext={catPaging.goNext}
+                    onPageSizeChange={catPaging.setPageSize}
+                    label="Paginación de categorías"
+                  />
+                )}
+              </>
+            )}
+            {!loading && categorias.length === 0 && (
+              <EmptyState
+                title="Sin categorías"
+                description="Creá categorías para clasificar los artículos del inventario."
+                action={
+                  perms.canWriteAssets ? (
+                    <button
+                      type="button"
+                      className="btn primary btn-sm"
+                      onClick={() => {
+                        setEditingCategoria(null);
+                        setShowCategoriaForm(true);
+                      }}
+                    >
+                      + Nueva categoría
+                    </button>
+                  ) : undefined
+                }
+              />
+            )}
+          </div>
+        )}
+      </section>
 
       <Modal
         open={(showCategoriaForm || editingCategoria !== null) && perms.canWriteAssets}
@@ -699,6 +734,8 @@ export default function ActivosPage({ onNavigate }: ActivosPageProps) {
         initialActivoId={etiquetasActivoId}
         onPrinted={() => void loadData()}
       />
+
+      <DepositosPage embedded onNavigate={onNavigate} />
     </div>
   );
 }

@@ -1,13 +1,18 @@
 import type { ReactNode } from "react";
 
 interface PageHeaderProps {
-  /** Nombre de la sección. Es el único h1 del workspace. */
-  title: string;
-  /** Una línea: qué se puede hacer acá / por qué importa. */
+  /**
+   * @deprecated El título de página vive en la topbar (`App.tsx`).
+   * Se acepta por compatibilidad y no se renderiza.
+   */
+  title?: string;
+  /**
+   * @deprecated El subtítulo de página vive en la topbar (`App.tsx`).
+   * Se acepta por compatibilidad y no se renderiza.
+   */
   subtitle?: string;
   /**
-   * Dato breve al lado del título (p. ej. "12 artículos").
-   * Preferir lenguaje llano; no duplicar contadores que ya están en el cuerpo.
+   * Dato breve a la izquierda (p. ej. contador). Preferir `.section-count`.
    */
   leading?: ReactNode;
   /** Navegación de sección (tabs). Se renderiza debajo del toolbar. */
@@ -16,29 +21,25 @@ interface PageHeaderProps {
   children?: ReactNode;
 }
 
-/** Encabezado de página: título, contexto y acciones de la sección. */
+/**
+ * Toolbar compacta de página: meta/acciones/tabs.
+ * El h1 queda en la topbar; acá solo chrome operativo.
+ */
 export default function PageHeader({
-  title,
-  subtitle,
   leading,
   tabs,
   children,
 }: PageHeaderProps) {
+  if (!leading && !tabs && !children) return null;
+
+  // `div` (not `header`): el banner del documento ya es `.topbar` en App.
   return (
-    <header className="page-toolbar">
+    <div className="page-toolbar">
       <div className="page-toolbar-row">
-        <div className="page-toolbar-leading">
-          <div className="page-title-block">
-            <div className="page-title-row">
-              <h1 className="page-title">{title}</h1>
-              {leading ? <div className="page-meta">{leading}</div> : null}
-            </div>
-            {subtitle ? <p className="page-subtitle">{subtitle}</p> : null}
-          </div>
-        </div>
+        {leading ? <div className="page-toolbar-leading">{leading}</div> : null}
         {children ? <div className="page-toolbar-actions">{children}</div> : null}
       </div>
       {tabs ? <div className="page-toolbar-tabs">{tabs}</div> : null}
-    </header>
+    </div>
   );
 }

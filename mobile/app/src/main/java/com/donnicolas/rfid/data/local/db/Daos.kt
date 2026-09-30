@@ -29,7 +29,9 @@ interface CachedActivoDao {
     @Query(
         """
         SELECT * FROM cached_activos
-        WHERE activo = 1 AND epc IS NOT NULL AND epc != ''
+        WHERE activo = 1 AND (
+            (epc IS NOT NULL AND epc != '') OR codigoEpc IS NOT NULL
+          )
           AND (
             :q = '' OR
             numeroPatrimonial LIKE '%' || :q || '%' OR
@@ -41,6 +43,12 @@ interface CachedActivoDao {
         """,
     )
     suspend fun searchWithEpc(q: String, limit: Int = 80): List<CachedActivoEntity>
+
+    @Query("SELECT * FROM cached_activos WHERE codigoEpc = :codigo LIMIT 1")
+    suspend fun getByCodigoEpc(codigo: Long): CachedActivoEntity?
+
+    @Query("SELECT * FROM cached_activos WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): CachedActivoEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<CachedActivoEntity>)

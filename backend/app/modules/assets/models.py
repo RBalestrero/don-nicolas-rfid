@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,8 @@ class Activo(Base):
     numero_patrimonial: Mapped[str] = mapped_column(
         String(50), unique=True, nullable=False, index=True
     )
+    # Código compacto 40-bit grabado en el campo ART del EPC-96 (D1).
+    codigo_epc: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
     descripcion: Mapped[str] = mapped_column(String(255), nullable=False)
     categoria_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categorias.id"), nullable=False)
     epc: Mapped[str | None] = mapped_column(String(96), unique=True, nullable=True, index=True)

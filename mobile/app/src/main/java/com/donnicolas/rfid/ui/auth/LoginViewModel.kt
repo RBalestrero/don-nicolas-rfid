@@ -8,6 +8,7 @@ import com.donnicolas.rfid.data.local.SessionEvents
 import com.donnicolas.rfid.data.model.AppError
 import com.donnicolas.rfid.data.model.AuthResult
 import com.donnicolas.rfid.data.model.User
+import com.donnicolas.rfid.data.repository.AssetsRepository
 import com.donnicolas.rfid.data.repository.AuthRepository
 import com.donnicolas.rfid.device.DevicePresenceReporter
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ class LoginViewModel(
     private val sessionEvents: SessionEvents,
     private val apiHostStore: ApiHostStore,
     private val devicePresenceReporter: DevicePresenceReporter,
+    private val assetsRepository: AssetsRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LoginUiState(apiHost = apiHostStore.getHost()))
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
@@ -97,6 +99,9 @@ class LoginViewModel(
             when (val result = authRepository.login(current.email, current.password)) {
                 is AuthResult.Success -> {
                     devicePresenceReporter.start()
+                    viewModelScope.launch {
+                        runCatching { assetsRepository?.syncEpcMap(force = true) }
+                    }
                     _state.update { it.copy(loading = false, user = result.user, error = null) }
                 }
                 is AuthResult.Error -> {
@@ -121,6 +126,9 @@ class LoginViewModel(
             when (val result = authRepository.currentUser()) {
                 is AuthResult.Success -> {
                     devicePresenceReporter.start()
+                    viewModelScope.launch {
+                        runCatching { assetsRepository?.syncEpcMap(force = true) }
+                    }
                     _state.update { it.copy(loading = false, user = result.user) }
                 }
                 is AuthResult.Error -> {
@@ -146,6 +154,7 @@ class LoginViewModel(
         private val sessionEvents: SessionEvents,
         private val apiHostStore: ApiHostStore,
         private val devicePresenceReporter: DevicePresenceReporter,
+        private val assetsRepository: AssetsRepository? = null,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -154,6 +163,7 @@ class LoginViewModel(
                 sessionEvents,
                 apiHostStore,
                 devicePresenceReporter,
+                assetsRepository,
             ) as T
         }
     }

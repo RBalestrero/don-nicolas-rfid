@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "../lib/api";
 import { useToast } from "../context/ToastContext";
 import type {
@@ -9,15 +9,19 @@ import type {
   InventarioReporte,
 } from "../types";
 import ConfirmDialog from "./ConfirmDialog";
+import ActionsMenu from "./ActionsMenu";
 import ExportButtons from "./ExportButtons";
 import EmptyState from "./EmptyState";
+import FilterSelect from "./FilterSelect";
+import FilterToggle from "./FilterToggle";
 import Modal from "./Modal";
-import PageHeader from "./PageHeader";
 import {
   filterInventarios,
   hasActiveInventariosFilters,
 } from "../lib/filterInventarios";
+import { useTablePaging } from "../lib/useTablePaging";
 import { usePermissions } from "../lib/usePermissions";
+import TablePager from "./TablePager";
 
 function estadoInventario(estado: string): string {
   if (estado === "en_curso") return "En curso";
@@ -128,7 +132,13 @@ function formatDiferencia(n: number): string {
   return String(n);
 }
 
-export default function InventariosPage() {
+export default function InventariosPage({
+  embedded = false,
+  chromeLeading,
+}: {
+  embedded?: boolean;
+  chromeLeading?: ReactNode;
+} = {}) {
   const toast = useToast();
   const perms = usePermissions();
   const [depositos, setDepositos] = useState<Deposito[]>([]);
@@ -147,18 +157,25 @@ export default function InventariosPage() {
   const [confirmAuditar, setConfirmAuditar] = useState(false);
 
   useEffect(() => {
-    const flag = sessionStorage.getItem("dn_inv_filter");
-    if (flag === "discrepancias") {
-      setSoloDiscrepancias(true);
-      sessionStorage.removeItem("dn_inv_filter");
-    } else if (flag === "pendiente_auditoria") {
-      setSoloPendienteAuditoria(true);
-      setEstadoFilter("cerrado");
-      sessionStorage.removeItem("dn_inv_filter");
-    } else if (flag === "en_curso") {
-      setEstadoFilter("en_curso");
-      sessionStorage.removeItem("dn_inv_filter");
-    }
+    const applyInvFilter = () => {
+      const flag = sessionStorage.getItem("dn_inv_filter");
+      if (flag === "discrepancias") {
+        setSoloDiscrepancias(true);
+        setSoloPendienteAuditoria(false);
+        sessionStorage.removeItem("dn_inv_filter");
+      } else if (flag === "pendiente_auditoria") {
+        setSoloPendienteAuditoria(true);
+        setSoloDiscrepancias(false);
+        setEstadoFilter("cerrado");
+        sessionStorage.removeItem("dn_inv_filter");
+      } else if (flag === "en_curso") {
+        setEstadoFilter("en_curso");
+        sessionStorage.removeItem("dn_inv_filter");
+      }
+    };
+    applyInvFilter();
+    window.addEventListener("dn-session-nav", applyInvFilter);
+    return () => window.removeEventListener("dn-session-nav", applyInvFilter);
   }, []);
 
   const nombreDeposito = useCallback(
@@ -175,6 +192,8 @@ export default function InventariosPage() {
     () => filterInventarios(lista, filterOpts, nombreDeposito),
     [lista, filterOpts, nombreDeposito],
   );
+  const filterKey = `${search}|${estadoFilter}|${soloDiscrepancias}|${soloPendienteAuditoria}`;
+  const paging = useTablePaging(listaFiltrada, filterKey);
 
   const clearFilters = () => {
     setSearch("");
@@ -356,30 +375,7 @@ export default function InventariosPage() {
   const kpisActivo = activo ? inventoryKpis(activo.resumen) : null;
 
   return (
-    <div className="page">
-      <PageHeader
-        title="Inventarios"
-        subtitle="Revisá y auditá los conteos hechos con el lector"
-        leading={
-          !loading && lista.length > 0 ? (
-            <span>
-              {listaFiltrada.length}
-              {filtersActive ? ` / ${lista.length}` : ""} conteo
-              {listaFiltrada.length === 1 ? "" : "s"}
-            </span>
-          ) : null
-        }
-      >
-        <button
-          type="button"
-          className="btn secondary btn-sm"
-          disabled={loading || busy}
-          onClick={() => void loadLista()}
-        >
-          {loading ? "Cargando…" : "Actualizar"}
-        </button>
-      </PageHeader>
-
+    <div className={embedded ? "ops-embed" : "page"}>
       {error && !activo && (
         <p className="error" role="alert">
           {error}
@@ -458,6 +454,7 @@ export default function InventariosPage() {
                 )}
                 {(activo.estado === "cerrado" || activo.estado === "descartado") && (
                   <ExportButtons
+                    variant="menu"
                     basePath={`/reportes/inventarios/${activo.id}`}
                     filenameBase={`inventario_${activo.id.slice(0, 8)}`}
                     formats={["xlsx", "csv", "pdf"]}
@@ -689,58 +686,82 @@ export default function InventariosPage() {
         onCancel={() => setConfirmDescartar(false)}
       />
 
-      <section className="card">
-        {lista.length > 0 && (
-          <div className="toolbar toolbar-compact" role="search" aria-label="Filtrar inventarios">
-            <label className="field toolbar-field grow">
-              <span className="sr-only">Buscar</span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar depósito, estado…"
-              />
-            </label>
-            <label className="field toolbar-field">
-              <span className="sr-only">Estado</span>
-              <select
-                value={estadoFilter}
-                onChange={(e) => setEstadoFilter(e.target.value)}
-                aria-label="Estado"
-              >
-                <option value="">Estado</option>
-                <option value="en_curso">En curso</option>
-                <option value="cerrado">Cerrado</option>
-                <option value="cancelado">Cancelado</option>
-                <option value="descartado">Descartado</option>
-              </select>
-            </label>
-            <label className="field toolbar-field checkbox-field toolbar-check">
-              <input
-                type="checkbox"
-                checked={soloDiscrepancias}
-                onChange={(e) => setSoloDiscrepancias(e.target.checked)}
-              />
-              <span>Discrepancias</span>
-            </label>
-            <label className="field toolbar-field checkbox-field toolbar-check">
-              <input
-                type="checkbox"
-                checked={soloPendienteAuditoria}
-                onChange={(e) => setSoloPendienteAuditoria(e.target.checked)}
-              />
-              <span>Pend. auditoría</span>
-            </label>
-            {filtersActive && (
-              <div className="toolbar-actions">
-                <button type="button" className="btn secondary" onClick={clearFilters}>
-                  Limpiar
-                </button>
+      <section className={embedded ? "ops-embed-body" : "card"}>
+        {(lista.length > 0 || embedded) && (
+          <div className="table-chrome" role="search" aria-label="Filtrar inventarios">
+            {(!embedded || chromeLeading) && (
+              <div className="table-chrome-leading">
+                {chromeLeading !== undefined ? chromeLeading : <h2>Sesiones</h2>}
+                {!embedded && lista.length > 0 ? (
+                  <span className="section-count">
+                    {listaFiltrada.length}
+                    {filtersActive ? ` / ${lista.length}` : ""}
+                  </span>
+                ) : null}
               </div>
             )}
+            <div className="table-chrome-controls">
+              {(lista.length > 0 || (embedded && !loading)) && (
+                <>
+                  <label className="field toolbar-field grow">
+                    <span className="sr-only">Buscar</span>
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Buscar depósito, estado…"
+                    />
+                  </label>
+                  <FilterSelect
+                    placeholder="Estado"
+                    aria-label="Estado"
+                    value={estadoFilter}
+                    onChange={setEstadoFilter}
+                    options={[
+                      { value: "en_curso", label: "En curso" },
+                      { value: "cerrado", label: "Cerrado" },
+                      { value: "cancelado", label: "Cancelado" },
+                      { value: "descartado", label: "Descartado" },
+                    ]}
+                  />
+                  <FilterToggle
+                    pressed={soloDiscrepancias}
+                    onPressedChange={setSoloDiscrepancias}
+                  >
+                    Discrepancias
+                  </FilterToggle>
+                  <FilterToggle
+                    pressed={soloPendienteAuditoria}
+                    onPressedChange={setSoloPendienteAuditoria}
+                  >
+                    Pend. auditoría
+                  </FilterToggle>
+                  {filtersActive && (
+                    <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                      Limpiar
+                    </button>
+                  )}
+                </>
+              )}
+              <ActionsMenu
+                disabled={loading || busy}
+                items={[
+                  {
+                    id: "refresh",
+                    label: loading ? "Cargando…" : "Actualizar",
+                    disabled: loading || busy,
+                    onClick: () => void loadLista(),
+                  },
+                ]}
+              />
+            </div>
           </div>
         )}
 
-        {loading ? (
+        {loading && embedded ? (
+          <div className="table-wrap table-panel list-table-wrap" aria-busy="true">
+            <span className="sr-only">Cargando inventarios…</span>
+          </div>
+        ) : loading ? (
           <p className="muted" aria-busy="true">
             Cargando…
           </p>
@@ -753,6 +774,17 @@ export default function InventariosPage() {
               "Registrá lecturas RFID con el gatillo",
               "Cerrá el conteo en la APK y auditá el reporte acá",
             ]}
+            action={
+              <ActionsMenu
+                items={[
+                  {
+                    id: "refresh",
+                    label: "Actualizar",
+                    onClick: () => void loadLista(),
+                  },
+                ]}
+              />
+            }
           />
         ) : listaFiltrada.length === 0 ? (
           <EmptyState
@@ -765,102 +797,126 @@ export default function InventariosPage() {
             }
           />
         ) : (
-          <div className="table-wrap table-panel">
-            <table className="data-table dense sticky-head">
-              <thead>
-                <tr>
-                  <th>Inicio</th>
-                  <th>Depósito</th>
-                  <th>Estado</th>
-                  <th>Auditoría</th>
-                  <th className="num">Antes</th>
-                  <th className="num">Leídos</th>
-                  <th className="num">Dif.</th>
-                  <th className="col-actions">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {listaFiltrada.map((item) => {
-                  const hasDisc = item.total_faltante > 0 || (item.total_exceso ?? 0) > 0;
-                  const kpis = inventoryKpis(item);
-                  const canAuditar = item.estado === "cerrado" && perms.canAuditInventory;
-                  return (
-                    <tr
-                      key={item.id}
-                      className={[
-                        "row-clickable",
-                        activo?.id === item.id ? "row-active" : "",
-                        hasDisc && item.estado === "cerrado" && !item.auditado ? "row-disc" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => {
-                        if (!busy) void handleAbrir(item.id);
-                      }}
-                      title={`${canAuditar ? "Auditar" : "Ver"} inventario`}
-                    >
-                      <td>{new Date(item.iniciado_en).toLocaleString("es-AR")}</td>
-                      <td>{nombreDeposito(item.deposito_id)}</td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            item.estado === "cerrado"
-                              ? "ok"
-                              : item.estado === "descartado"
-                                ? "danger"
-                                : "warn"
+          <>
+            <div
+              ref={paging.viewportRef}
+              className="table-wrap table-panel list-table-wrap"
+            >
+              <table className="data-table dense sticky-head audit-table">
+                <thead>
+                  <tr>
+                    <th>Inicio</th>
+                    <th>Depósito</th>
+                    <th>Estado</th>
+                    <th>Auditoría</th>
+                    <th className="num">Antes</th>
+                    <th className="num">Leídos</th>
+                    <th className="num">Dif.</th>
+                    <th className="col-actions">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody key={`p-${paging.pageIndex}-s-${paging.pageSize}`} className="ui-enter">
+                  {paging.pageItems.map((item) => {
+                    const hasDisc = item.total_faltante > 0 || (item.total_exceso ?? 0) > 0;
+                    const kpis = inventoryKpis(item);
+                    const canAuditar = item.estado === "cerrado" && perms.canAuditInventory;
+                    return (
+                      <tr
+                        key={item.id}
+                        className={[
+                          "row-clickable",
+                          activo?.id === item.id ? "row-active" : "",
+                          hasDisc && item.estado === "cerrado" && !item.auditado ? "row-disc" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => {
+                          if (!busy) void handleAbrir(item.id);
+                        }}
+                        title={`${canAuditar ? "Auditar" : "Ver"} inventario`}
+                      >
+                        <td className="audit-when">
+                          {new Date(item.iniciado_en).toLocaleString("es-AR")}
+                        </td>
+                        <td>{nombreDeposito(item.deposito_id)}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              item.estado === "cerrado"
+                                ? "ok"
+                                : item.estado === "descartado"
+                                  ? "danger"
+                                  : "warn"
+                            }`}
+                          >
+                            {estadoInventario(item.estado)}
+                          </span>
+                        </td>
+                        <td>
+                          {item.estado === "descartado" ? (
+                            <span className="muted">—</span>
+                          ) : item.estado !== "cerrado" ? (
+                            <span className="muted">—</span>
+                          ) : (
+                            <span className={`badge ${item.auditado ? "ok" : "warn"}`}>
+                              {item.auditado ? "Auditada" : "Pendiente"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="num">{kpis.stockAntes}</td>
+                        <td className="num">{kpis.leidos}</td>
+                        <td
+                          className={`num ${
+                            kpis.diferencia < 0
+                              ? "text-danger"
+                              : kpis.diferencia > 0
+                                ? "text-warn"
+                                : ""
                           }`}
                         >
-                          {estadoInventario(item.estado)}
-                        </span>
-                      </td>
-                      <td>
-                        {item.estado === "descartado" ? (
-                          <span className="muted">—</span>
-                        ) : item.estado !== "cerrado" ? (
-                          <span className="muted">—</span>
-                        ) : (
-                          <span className={`badge ${item.auditado ? "ok" : "warn"}`}>
-                            {item.auditado ? "Auditada" : "Pendiente"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="num">{kpis.stockAntes}</td>
-                      <td className="num">{kpis.leidos}</td>
-                      <td
-                        className={`num ${
-                          kpis.diferencia < 0
-                            ? "text-danger"
-                            : kpis.diferencia > 0
-                              ? "text-warn"
-                              : ""
-                        }`}
-                      >
-                        {formatDiferencia(kpis.diferencia)}
-                      </td>
-                      <td className="col-actions">
-                        <div className="row-actions">
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${canAuditar && !item.auditado ? "primary" : "secondary"}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleAbrir(item.id);
-                            }}
-                            disabled={busy}
-                          >
-                            {canAuditar ? "Auditar" : "Ver"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {formatDiferencia(kpis.diferencia)}
+                        </td>
+                        <td className="col-actions">
+                          <div className="row-actions">
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${canAuditar && !item.auditado ? "primary" : "secondary"}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleAbrir(item.id);
+                              }}
+                              disabled={busy}
+                            >
+                              {canAuditar ? "Auditar" : "Ver"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {paging.total > 0 && (
+              <TablePager
+                from={paging.from}
+                to={paging.to}
+                total={paging.total}
+                page={paging.pageIndex + 1}
+                pages={paging.pages}
+                pageSize={paging.pageSize}
+                canPrev={paging.canPrev}
+                canNext={paging.canNext}
+                busy={busy}
+                onPrev={paging.goPrev}
+                onNext={paging.goNext}
+                onPageSizeChange={paging.setPageSize}
+                label="Paginación de sesiones"
+              />
+            )}
+          </>
         )}
       </section>
     </div>

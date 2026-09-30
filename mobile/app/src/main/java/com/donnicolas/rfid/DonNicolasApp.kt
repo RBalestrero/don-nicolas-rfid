@@ -93,8 +93,12 @@ class DonNicolasApp : Application() {
         connectivityMonitor.addListener { online ->
             if (online) {
                 appScope.launch { runCatching { syncManager.flush() } }
+                appScope.launch { runCatching { assetsRepository.syncEpcMap(force = false) } }
             }
         }
         appScope.launch { runCatching { syncManager.flush() } }
+        if (tokenStore.isLoggedIn()) {
+            appScope.launch { runCatching { assetsRepository.syncEpcMap(force = false) } }
+        }
     }
 }

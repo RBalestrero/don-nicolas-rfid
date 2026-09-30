@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
             app.sessionEvents,
             app.apiHostStore,
             app.devicePresenceReporter,
+            app.assetsRepository,
         )
     }
 

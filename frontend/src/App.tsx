@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ActivosPage from "./components/ActivosPage";
-import DashboardPage, { type AppPage } from "./components/DashboardPage";
-import DepositosPage from "./components/DepositosPage";
-import InventariosPage from "./components/InventariosPage";
-import TransferenciasPage from "./components/TransferenciasPage";
-import UsuariosPage from "./components/UsuariosPage";
+import AttentionDock from "./components/AttentionDock";
+import DashboardPage from "./components/DashboardPage";
+import type { AppPage } from "./lib/appPages";
+import { signalSessionNav } from "./lib/attentionItems";
+import { writeOpsTableTab } from "./components/OpsTableTabs";
+import UsuariosPage, { writeUsersTab } from "./components/UsuariosPage";
 import LoginForm from "./components/LoginForm";
 import { canManageRoles, canManageUsers, roleLabel } from "./lib/permissions";
 import "./App.css";
@@ -19,16 +20,30 @@ interface HealthResponse {
   database: string;
 }
 
-const NAV_OPERACION: { id: AppPage; label: string }[] = [
-  { id: "dashboard", label: "Operaciones" },
-  { id: "inventarios", label: "Inventarios" },
-  { id: "transferencias", label: "Movimientos" },
-];
-
-const NAV_MAESTROS: { id: AppPage; label: string }[] = [
-  { id: "activos", label: "Artículos" },
-  { id: "depositos", label: "Depósitos" },
-];
+const PAGE_CHROME: Record<AppPage, { title: string; subtitle: string }> = {
+  dashboard: { title: "Operaciones", subtitle: "Qué necesita tu atención hoy" },
+  inventarios: {
+    title: "Operaciones",
+    subtitle: "Inventarios · auditoría MC33",
+  },
+  transferencias: {
+    title: "Operaciones",
+    subtitle: "Movimientos entre depósitos y entregas",
+  },
+  activos: { title: "Artículos", subtitle: "Catálogo, categorías y depósitos" },
+  depositos: {
+    title: "Artículos",
+    subtitle: "Catálogo, categorías y depósitos",
+  },
+  usuarios: {
+    title: "Configuración",
+    subtitle: "Usuarios y roles",
+  },
+  roles: {
+    title: "Configuración",
+    subtitle: "Usuarios y roles",
+  },
+};
 
 function HealthBadge() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -63,50 +78,140 @@ function HealthBadge() {
   );
 }
 
-function NavButton({
-  id,
-  label,
-  active,
-  onSelect,
+function AppNavMenu({
+  page,
+  showConfig,
+  onNavigate,
 }: {
-  id: AppPage;
-  label: string;
-  active: boolean;
-  onSelect: (page: AppPage) => void;
+  page: AppPage;
+  showConfig: boolean;
+  onNavigate: (page: AppPage) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  const items = useMemo(() => {
+    const list: { id: AppPage; label: string; active: boolean }[] = [
+      {
+        id: "dashboard",
+        label: "Operaciones",
+        active: page === "dashboard" || page === "inventarios" || page === "transferencias",
+      },
+      {
+        id: "activos",
+        label: "Artículos",
+        active: page === "activos" || page === "depositos",
+      },
+    ];
+    if (showConfig) {
+      list.push({
+        id: "usuarios",
+        label: "Configuración",
+        active: page === "usuarios" || page === "roles",
+      });
+    }
+    return list;
+  }, [page, showConfig]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      className={`nav-item ${active ? "active" : ""}`}
-      onClick={(e) => {
-        onSelect(id);
-        e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-      }}
-      aria-current={active ? "page" : undefined}
-    >
-      {label}
-    </button>
+    <div className="app-nav-menu" ref={rootRef}>
+      <button
+        type="button"
+        className={`app-nav-trigger${open ? " is-open" : ""}`}
+        aria-label={open ? "Cerrar navegación" : "Abrir navegación"}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="app-nav-icon" aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+      {open && (
+        <div className="app-nav-panel" role="menu" id={menuId} aria-label="Navegación principal">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitem"
+              className={`app-nav-item${item.active ? " is-active" : ""}`}
+              aria-current={item.active ? "page" : undefined}
+              onClick={() => {
+                setOpen(false);
+                onNavigate(item.id);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 export default function App() {
   const { user, loading, logout } = useAuth();
   const [page, setPage] = useState<AppPage>("dashboard");
+  const [attnMobileOpen, setAttnMobileOpen] = useState(false);
+  const [attnCount, setAttnCount] = useState(0);
+  const onAttnCountChange = useCallback((n: number) => setAttnCount(n), []);
+  const navigate = useCallback((next: AppPage) => {
+    if (next === "inventarios") {
+      writeOpsTableTab("inventarios");
+      signalSessionNav();
+      setPage("dashboard");
+      return;
+    }
+    if (next === "transferencias") {
+      writeOpsTableTab("movimientos");
+      signalSessionNav();
+      setPage("dashboard");
+      return;
+    }
+    if (next === "depositos") {
+      setPage("activos");
+      return;
+    }
+    if (next === "roles") {
+      writeUsersTab("roles");
+      setPage("usuarios");
+      return;
+    }
+    setPage(next);
+  }, []);
   const canUsers = canManageUsers(user?.permisos, user?.rol);
   const canRoles = canManageRoles(user?.permisos, user?.rol);
   const showConfig = canUsers || canRoles;
 
-  const navConfig = useMemo(() => {
-    const items: { id: AppPage; label: string }[] = [];
-    if (canUsers) items.push({ id: "usuarios", label: "Usuarios" });
-    if (canRoles) items.push({ id: "roles", label: "Roles" });
-    return items;
-  }, [canUsers, canRoles]);
-
   useEffect(() => {
-    if (page === "usuarios" && !canUsers) setPage(canRoles ? "roles" : "dashboard");
-    if (page === "roles" && !canRoles) setPage(canUsers ? "usuarios" : "dashboard");
-  }, [canUsers, canRoles, page]);
+    if (page === "roles") {
+      writeUsersTab("roles");
+      setPage("usuarios");
+      return;
+    }
+    if (page === "usuarios" && !showConfig) setPage("dashboard");
+  }, [showConfig, page]);
 
   if (loading) {
     return (
@@ -135,9 +240,11 @@ export default function App() {
     );
   }
 
+  const chrome = PAGE_CHROME[page];
+
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className="topbar" aria-label="Barra de aplicación">
         <div className="brand">
           <div className="logo">DN</div>
           <div className="brand-text">
@@ -145,7 +252,29 @@ export default function App() {
             <span className="muted">WMS</span>
           </div>
         </div>
+        <div className="topbar-page">
+          <AppNavMenu page={page} showConfig={showConfig} onNavigate={navigate} />
+          <div className="topbar-page-text">
+            <h1 className="topbar-page-title">{chrome.title}</h1>
+            <p className="topbar-page-subtitle">{chrome.subtitle}</p>
+          </div>
+        </div>
         <div className="topbar-actions">
+          <button
+            type="button"
+            className="btn secondary btn-sm attn-topbar-btn"
+            aria-label={
+              attnCount > 0
+                ? `Requiere atención, ${attnCount} pendiente${attnCount === 1 ? "" : "s"}`
+                : "Requiere atención"
+            }
+            onClick={() => setAttnMobileOpen(true)}
+          >
+            Atención
+            {attnCount > 0 ? (
+              <span className="attn-topbar-count">{attnCount}</span>
+            ) : null}
+          </button>
           <span className="user-chip muted" title={`${user.nombre} · ${user.rol}`}>
             <span className="user-chip-name">{user.nombre}</span>
             <span className="role-badge">{roleLabel(user.rol)}</span>
@@ -158,58 +287,26 @@ export default function App() {
       </header>
 
       <div className="shell-body">
-        <nav className="side-nav" aria-label="Navegación principal">
-          <div className="nav-scroll">
-            <div className="nav-group">
-              <span className="nav-group-label">Operación</span>
-              {NAV_OPERACION.map((item) => (
-                <NavButton
-                  key={item.id}
-                  id={item.id}
-                  label={item.label}
-                  active={page === item.id}
-                  onSelect={setPage}
-                />
-              ))}
-            </div>
-            <div className="nav-group">
-              <span className="nav-group-label">Maestros</span>
-              {NAV_MAESTROS.map((item) => (
-                <NavButton
-                  key={item.id}
-                  id={item.id}
-                  label={item.label}
-                  active={page === item.id}
-                  onSelect={setPage}
-                />
-              ))}
-            </div>
-            {showConfig && navConfig.length > 0 && (
-              <div className="nav-group">
-                <span className="nav-group-label">Configuración</span>
-                {navConfig.map((item) => (
-                  <NavButton
-                    key={item.id}
-                    id={item.id}
-                    label={item.label}
-                    active={page === item.id}
-                    onSelect={setPage}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </nav>
-
-        <main className="workspace">
-          {page === "dashboard" && <DashboardPage onNavigate={setPage} />}
-          {page === "activos" && <ActivosPage onNavigate={setPage} />}
-          {page === "depositos" && <DepositosPage onNavigate={setPage} />}
-          {page === "inventarios" && <InventariosPage />}
-          {page === "transferencias" && <TransferenciasPage />}
-          {page === "usuarios" && canUsers && <UsuariosPage section="usuarios" />}
-          {page === "roles" && canRoles && <UsuariosPage section="roles" />}
+        <main
+          className={[
+            "workspace",
+            page === "dashboard" ? "workspace-ops" : "",
+            page === "activos" ? "workspace-activos" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {page === "dashboard" && <DashboardPage onNavigate={navigate} />}
+          {page === "activos" && <ActivosPage onNavigate={navigate} />}
+          {page === "usuarios" && showConfig && <UsuariosPage />}
         </main>
+
+        <AttentionDock
+          onNavigate={navigate}
+          onCountChange={onAttnCountChange}
+          mobileOpen={attnMobileOpen}
+          onMobileOpenChange={setAttnMobileOpen}
+        />
       </div>
     </div>
   );

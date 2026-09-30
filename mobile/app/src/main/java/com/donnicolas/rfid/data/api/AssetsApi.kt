@@ -14,6 +14,12 @@ interface AssetsApi {
         @Query("include_inactive") includeInactive: Boolean = false,
     ): List<ActivoDto>
 
+    @GET("activos/epc-map")
+    suspend fun syncEpcMap(
+        @Query("since") since: String? = null,
+        @Query("include_inactive") includeInactive: Boolean = false,
+    ): EpcMapDto
+
     @POST("activos")
     suspend fun createActivo(@Body body: ActivoCreateDto): ActivoDto
 
@@ -99,6 +105,7 @@ data class ActivoDto(
     val id: String,
     @Json(name = "numero_patrimonial") val numeroPatrimonial: String,
     val descripcion: String,
+    @Json(name = "codigo_epc") val codigoEpc: Long? = null,
     val epc: String? = null,
     val activo: Boolean = true,
     val serializado: Boolean = false,
@@ -106,6 +113,19 @@ data class ActivoDto(
     @Json(name = "stock_etiquetas") val stockEtiquetas: Int = 0,
     /** Unidades RFID (etiquetas activas). */
     val epcs: List<String> = emptyList(),
+)
+
+data class EpcMapDto(
+    @Json(name = "generated_at") val generatedAt: String? = null,
+    val items: List<EpcMapItemDto> = emptyList(),
+)
+
+data class EpcMapItemDto(
+    val id: String,
+    @Json(name = "numero_patrimonial") val numeroPatrimonial: String,
+    @Json(name = "codigo_epc") val codigoEpc: Long,
+    val activo: Boolean = true,
+    @Json(name = "actualizado_en") val actualizadoEn: String? = null,
 )
 
 data class ActivoCreateDto(

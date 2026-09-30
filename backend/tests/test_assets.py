@@ -115,9 +115,40 @@ def test_create_and_get_activo(client: TestClient, auth_headers):
     activo = create_response.json()
     assert activo["descripcion"] == "Escritorio ejecutivo"
     assert activo["datos_tecnicos"]["material"] == "madera"
+    assert isinstance(activo["codigo_epc"], int)
+    assert activo["codigo_epc"] >= 1
 
     get_response = client.get(f"/api/v1/activos/{activo['id']}", headers=auth_headers)
     assert get_response.status_code == 200
+    assert get_response.json()["codigo_epc"] == activo["codigo_epc"]
+
+
+def test_epc_map_incluye_codigo_interno(client: TestClient, auth_headers):
+    cat = client.post(
+        "/api/v1/categorias",
+        json={"nombre": _unique("CatEpcMap")},
+        headers=auth_headers,
+    ).json()
+    patrimonial = _unique("LONG-PATRIMONIAL-ABCDEFGHIJKLMNOP")
+    created = client.post(
+        "/api/v1/activos",
+        json={
+            "numero_patrimonial": patrimonial,
+            "descripcion": "Artículo con patrimonial largo",
+            "categoria_id": cat["id"],
+        },
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+    codigo = created.json()["codigo_epc"]
+    assert isinstance(codigo, int)
+
+    mapped = client.get("/api/v1/activos/epc-map", headers=auth_headers)
+    assert mapped.status_code == 200
+    body = mapped.json()
+    assert "items" in body
+    hit = next(i for i in body["items"] if i["numero_patrimonial"] == patrimonial)
+    assert hit["codigo_epc"] == codigo
 
 
 def test_create_activo_con_ubicacion(client: TestClient, auth_headers):

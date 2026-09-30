@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 import type {
   DashboardResumen,
@@ -8,19 +8,24 @@ import type {
   MovimientosPage,
   TransferenciaResumenDash,
 } from "../types";
+import ActionsMenu from "./ActionsMenu";
 import EmptyState from "./EmptyState";
 import ExportButtons from "./ExportButtons";
-import PageHeader from "./PageHeader";
+import FilterSelect from "./FilterSelect";
+import InventariosPage from "./InventariosPage";
+import OpsTableTabs, {
+  type OpsTableTab,
+  readOpsTableTab,
+  writeOpsTableTab,
+} from "./OpsTableTabs";
+import TablePager from "./TablePager";
+import TransferenciasPage from "./TransferenciasPage";
 import { usePermissions } from "../lib/usePermissions";
+import { TABLE_PAGE_DEFAULT, normalizePageSize, type TablePageSize } from "../lib/tablePaging";
+import { signalSessionNav } from "../lib/attentionItems";
+import type { AppPage } from "../lib/appPages";
 
-export type AppPage =
-  | "dashboard"
-  | "activos"
-  | "depositos"
-  | "inventarios"
-  | "transferencias"
-  | "usuarios"
-  | "roles";
+export type { AppPage } from "../lib/appPages";
 
 const ACCION_LABELS: Record<string, string> = {
   creacion: "Alta",
@@ -88,20 +93,6 @@ function pct(part: number, total: number): number {
   return Math.min(100, Math.round((part / total) * 100));
 }
 
-type AttentionSeverity = "danger" | "warn";
-
-interface AttentionItem {
-  id: string;
-  severity: AttentionSeverity;
-  badge: string;
-  title: string;
-  detail: string;
-  when?: string | null;
-  page: AppPage;
-  filterKey?: string;
-  filterValue?: string;
-}
-
 interface DashboardPageProps {
   onNavigate?: (page: AppPage) => void;
 }
@@ -112,12 +103,62 @@ const DEVICES_POLL_MS = 35_000;
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const perms = usePermissions();
   const [resumen, setResumen] = useState<DashboardResumen | null>(null);
-  const [filtrados, setFiltrados] = useState<MovimientosPage | null>(null);
+  const [historial, setHistorial] = useState<MovimientosPage | null>(null);
+  const [histPageSize, setHistPageSize] = useState<TablePageSize>(TABLE_PAGE_DEFAULT);
+  const [opsTab, setOpsTab] = useState<OpsTableTab>(() => readOpsTableTab() ?? "historial");
   const [accion, setAccion] = useState("");
   const [search, setSearch] = useState("");
+  const [appliedAccion, setAppliedAccion] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const histOffsetRef = useRef(0);
+  const appliedAccionRef = useRef("");
+  const appliedSearchRef = useRef("");
+  const histPageSizeRef = useRef<TablePageSize>(TABLE_PAGE_DEFAULT);
+  const histSearchSkipRef = useRef(true);
+  const accionRef = useRef(accion);
+  accionRef.current = accion;
+
+  const loadHistorial = useCallback(
+    async (opts: {
+      offset?: number;
+      limit?: number;
+      accion?: string;
+      search?: string;
+      signal?: AbortSignal;
+      quiet?: boolean;
+    } = {}) => {
+      const limit = Math.max(1, opts.limit ?? histPageSizeRef.current);
+      const offset = Math.max(0, opts.offset ?? 0);
+      const acc = opts.accion ?? "";
+      const q = (opts.search ?? "").trim();
+      if (!opts.quiet) setBusy(true);
+      try {
+        const params = new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset),
+        });
+        if (acc) params.set("accion", acc);
+        if (q) params.set("search", q);
+        const data = await apiFetch<MovimientosPage>(`/movimientos?${params.toString()}`, {
+          signal: opts.signal,
+        });
+        if (opts.signal?.aborted) return;
+        histOffsetRef.current = data.offset;
+        setHistorial(data);
+      } catch (err) {
+        if (opts.signal?.aborted) return;
+        if (!opts.quiet) {
+          setError(err instanceof Error ? err.message : "Error al cargar el historial");
+        }
+      } finally {
+        if (!opts.quiet && !opts.signal?.aborted) setBusy(false);
+      }
+    },
+    [],
+  );
 
   const loadResumen = useCallback(async (signal?: AbortSignal, opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;
@@ -132,7 +173,6 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       );
       if (signal?.aborted) return;
       setResumen(data);
-      if (!silent) setFiltrados(null);
     } catch (err) {
       if (signal?.aborted) return;
       // En poll silencioso no pisar la UI con error transitorio de red.
@@ -147,6 +187,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   useEffect(() => {
     const ac = new AbortController();
     void loadResumen(ac.signal);
+    void loadHistorial({
+      offset: 0,
+      limit: TABLE_PAGE_DEFAULT,
+      signal: ac.signal,
+      quiet: true,
+    });
     const timer = window.setInterval(() => {
       void loadResumen(undefined, { silent: true });
     }, DEVICES_POLL_MS);
@@ -154,7 +200,42 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       ac.abort();
       window.clearInterval(timer);
     };
-  }, [loadResumen]);
+  }, [loadResumen, loadHistorial]);
+
+  useEffect(() => {
+    writeOpsTableTab(opsTab);
+  }, [opsTab]);
+
+  useEffect(() => {
+    const syncTab = () => {
+      const t = readOpsTableTab();
+      if (t) setOpsTab(t);
+    };
+    syncTab();
+    window.addEventListener("dn-session-nav", syncTab);
+    return () => window.removeEventListener("dn-session-nav", syncTab);
+  }, []);
+
+  useEffect(() => {
+    histPageSizeRef.current = histPageSize;
+  }, [histPageSize]);
+
+  useEffect(() => {
+    appliedAccionRef.current = appliedAccion;
+    appliedSearchRef.current = appliedSearch;
+  }, [appliedAccion, appliedSearch]);
+
+  const changeHistPageSize = (next: number) => {
+    const size = normalizePageSize(next);
+    setHistPageSize(size);
+    histPageSizeRef.current = size;
+    void loadHistorial({
+      offset: 0,
+      limit: size,
+      accion: appliedAccionRef.current,
+      search: appliedSearchRef.current,
+    });
+  };
 
   const colaTransferencias = useMemo(
     () =>
@@ -192,31 +273,72 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     return "Sesión cerrada";
   }
 
-  const movimientosVisibles: MovimientoItem[] = filtrados
-    ? filtrados.items
-    : (resumen?.movimientos_recientes ?? []);
+  const movimientosVisibles: MovimientoItem[] = historial?.items ?? [];
+  const histTotal = historial?.total ?? 0;
+  const histOffset = historial?.offset ?? 0;
+  const histLimit = historial?.limit ?? histPageSize;
+  const histPage = Math.floor(histOffset / Math.max(histLimit, 1)) + 1;
+  const histPages = Math.max(1, Math.ceil(histTotal / Math.max(histLimit, 1)));
+  const histFrom = histTotal === 0 ? 0 : histOffset + 1;
+  const histTo = Math.min(histOffset + movimientosVisibles.length, histTotal);
+  const canHistPrev = histOffset > 0;
+  const canHistNext = histOffset + histLimit < histTotal;
+  const filtroActivo = Boolean(appliedAccion || appliedSearch);
 
-  const aplicarFiltro = async (e?: FormEvent) => {
-    e?.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: "40", offset: "0" });
-      if (accion) params.set("accion", accion);
-      if (search.trim()) params.set("search", search.trim());
-      const data = await apiFetch<MovimientosPage>(`/movimientos?${params.toString()}`);
-      setFiltrados(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al filtrar movimientos");
-    } finally {
-      setBusy(false);
+  const applyHistorialFilters = useCallback(
+    (nextAccion: string, nextSearch: string) => {
+      const q = nextSearch.trim();
+      setError(null);
+      setAppliedAccion(nextAccion);
+      setAppliedSearch(q);
+      void loadHistorial({ offset: 0, accion: nextAccion, search: q });
+    },
+    [loadHistorial],
+  );
+
+  useEffect(() => {
+    if (histSearchSkipRef.current) {
+      histSearchSkipRef.current = false;
+      return;
     }
+    const q = search.trim();
+    if (q === appliedSearchRef.current) return;
+    const timer = window.setTimeout(() => {
+      applyHistorialFilters(accionRef.current, search);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, applyHistorialFilters]);
+
+  const onAccionFilterChange = (value: string) => {
+    setAccion(value);
+    applyHistorialFilters(value, search);
   };
 
   const limpiarFiltro = () => {
+    histSearchSkipRef.current = true;
     setAccion("");
     setSearch("");
-    setFiltrados(null);
+    setAppliedAccion("");
+    setAppliedSearch("");
+    void loadHistorial({ offset: 0, accion: "", search: "" });
+  };
+
+  const irHistPrev = () => {
+    if (!canHistPrev || busy) return;
+    void loadHistorial({
+      offset: Math.max(0, histOffset - histLimit),
+      accion: appliedAccion,
+      search: appliedSearch,
+    });
+  };
+
+  const irHistNext = () => {
+    if (!canHistNext || busy) return;
+    void loadHistorial({
+      offset: histOffset + histLimit,
+      accion: appliedAccion,
+      search: appliedSearch,
+    });
   };
 
   const verMovimiento = (m: MovimientoItem) => {
@@ -226,13 +348,44 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     } else {
       sessionStorage.removeItem("dn_act_search");
     }
+    signalSessionNav();
     onNavigate?.("activos");
   };
 
+  const goWithFilter = (page: AppPage, key: string, value: string) => {
+    sessionStorage.setItem(key, value);
+    if (page === "inventarios") {
+      setOpsTab("inventarios");
+      writeOpsTableTab("inventarios");
+      signalSessionNav();
+      return;
+    }
+    if (page === "transferencias") {
+      setOpsTab("movimientos");
+      writeOpsTableTab("movimientos");
+      signalSessionNav();
+      return;
+    }
+    signalSessionNav();
+    onNavigate?.(page);
+  };
+
+  const openOpsSection = (tab: OpsTableTab) => {
+    setOpsTab(tab);
+    writeOpsTableTab(tab);
+  };
+
+  const opsTabsId = useId();
+  const opsTabs = (
+    <OpsTableTabs id={opsTabsId} value={opsTab} onChange={openOpsSection} />
+  );
+
   if (loading) {
     return (
-      <div className="page">
-        <PageHeader title="Operaciones" leading={<span>Cargando…</span>} />
+      <div className="page page-ops" aria-busy="true">
+        <span className="sr-only" role="status">
+          Cargando…
+        </span>
         <div className="kpi-grid kpi-skeleton" aria-hidden>
           <div className="kpi-card skeleton-block" />
           <div className="kpi-card skeleton-block" />
@@ -245,8 +398,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   if (!resumen) {
     return (
-      <div className="page">
-        <PageHeader title="Operaciones" />
+      <div className="page page-ops">
         <section className="card">
           {error && (
             <p className="error" role="alert">
@@ -291,127 +443,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     colaTransferencias.length === 0 &&
     colaInventarios.length === 0;
 
-  const atencion: AttentionItem[] = [];
-  let listadosDisc = 0;
-  let listadosSinAuditar = 0;
-  const discPendiente = kpis.inventarios_con_discrepancia_pendiente ?? 0;
-  const auditPendiente = kpis.inventarios_pendientes_auditoria ?? 0;
-
-  for (const inv of resumen.inventarios_recientes) {
-    if (inv.estado !== "cerrado") continue;
-    // Sin `auditado` en el payload no podemos saber si ya se cerró la alerta.
-    if (typeof inv.auditado !== "boolean") continue;
-    if (inv.auditado) continue;
-
-    const conDiff = inv.total_faltante > 0 || (inv.total_exceso ?? 0) > 0;
-    listadosSinAuditar += 1;
-    if (conDiff) {
-      listadosDisc += 1;
-      const exceso = inv.total_exceso ?? 0;
-      atencion.push({
-        id: `inv-disc-${inv.id}`,
-        severity: "danger",
-        badge: "Discrepancia",
-        title: `Inventario · ${inv.deposito_nombre ?? "Depósito"}`,
-        detail: `${inv.total_faltante} faltante${inv.total_faltante === 1 ? "" : "s"} · ${exceso} exceso${exceso === 1 ? "" : "s"} · sin auditar`,
-        when: inv.cerrado_en,
-        page: "inventarios",
-        filterKey: "dn_inv_filter",
-        filterValue: "discrepancias",
-      });
-    } else {
-      atencion.push({
-        id: `inv-audit-${inv.id}`,
-        severity: "warn",
-        badge: "Auditoría",
-        title: `Inventario · ${inv.deposito_nombre ?? "Depósito"}`,
-        detail: "Cerrado y pendiente de marcar como auditado",
-        when: inv.cerrado_en,
-        page: "inventarios",
-        filterKey: "dn_inv_filter",
-        filterValue: "pendiente_auditoria",
-      });
-    }
-  }
-
-  const restoDisc = Math.max(0, discPendiente - listadosDisc);
-  const listadosSoloAudit = Math.max(0, listadosSinAuditar - listadosDisc);
-  const restoAudit = Math.max(0, auditPendiente - discPendiente - listadosSoloAudit);
-
-  if (restoDisc > 0) {
-    atencion.push({
-      id: "inv-disc-more",
-      severity: "danger",
-      badge: "Discrepancia",
-      title: `${restoDisc} inventario${restoDisc === 1 ? "" : "s"} con diferencia`,
-      detail: "Cerrados, con faltantes/excesos y aún sin auditar",
-      page: "inventarios",
-      filterKey: "dn_inv_filter",
-      filterValue: "discrepancias",
-    });
-  }
-
-  if (restoAudit > 0) {
-    atencion.push({
-      id: "inv-audit-more",
-      severity: "warn",
-      badge: "Auditoría",
-      title: `${restoAudit} inventario${restoAudit === 1 ? "" : "s"} sin auditar`,
-      detail: "Sesiones cerradas sin diferencia, pendientes de revisión",
-      page: "inventarios",
-      filterKey: "dn_inv_filter",
-      filterValue: "pendiente_auditoria",
-    });
-  }
-
-  if (sinUbicar > 0) {
-    atencion.push({
-      id: "act-sin-ubi",
-      severity: "warn",
-      badge: "Ubicación",
-      title: `${sinUbicar} activo${sinUbicar === 1 ? "" : "s"} sin ubicación`,
-      detail: `${cobertura}% de cobertura · ${kpis.stock_total_ubicado}/${kpis.activos_activos} ubicados`,
-      page: "activos",
-      filterKey: "dn_act_filter",
-      filterValue: "sin",
-    });
-  }
-
-  // Priorizar críticos primero
-  atencion.sort((a, b) => {
-    if (a.severity === b.severity) return 0;
-    return a.severity === "danger" ? -1 : 1;
-  });
-
-  const openAttention = (item: AttentionItem) => {
-    if (item.filterKey && item.filterValue) {
-      sessionStorage.setItem(item.filterKey, item.filterValue);
-    }
-    onNavigate?.(item.page);
-  };
-
   return (
-    <div className="page">
-      <PageHeader
-        title="Operaciones"
-        subtitle="Qué necesita tu atención hoy"
-        leading={
-          pendientesCola > 0 ? (
-            <span>
-              {pendientesCola} en curso
-            </span>
-          ) : null
-        }
-      >
-        <button
-          type="button"
-          className="btn secondary btn-sm"
-          onClick={() => void loadResumen()}
-        >
-          Actualizar
-        </button>
-      </PageHeader>
-
+    <div className="page page-ops">
       {error && (
         <p className="error" role="alert">
           {error}
@@ -458,10 +491,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${kpis.transferencias_activos_pendientes > 0 ? "tone-warn" : "tone-ok"}`}
-          onClick={() => {
-            sessionStorage.setItem("dn_xfer_filter", "abiertas");
-            onNavigate?.("transferencias");
-          }}
+          onClick={() => goWithFilter("transferencias", "dn_xfer_filter", "abiertas")}
         >
           <span className="kpi-label">Ejecución de movimientos</span>
           <strong className="kpi-value">{kpis.transferencias_avance_pct}%</strong>
@@ -477,10 +507,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${kpis.inventarios_activos_pendientes > 0 ? "tone-warn" : "tone-ok"}`}
-          onClick={() => {
-            sessionStorage.setItem("dn_inv_filter", "en_curso");
-            onNavigate?.("inventarios");
-          }}
+          onClick={() => goWithFilter("inventarios", "dn_inv_filter", "en_curso")}
         >
           <span className="kpi-label">Avance de inventarios</span>
           <strong className="kpi-value">{kpis.inventarios_avance_pct}%</strong>
@@ -496,10 +523,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${kpis.inventarios_pendientes_auditoria > 0 ? "tone-danger" : "tone-ok"}`}
-          onClick={() => {
-            sessionStorage.setItem("dn_inv_filter", "pendiente_auditoria");
-            onNavigate?.("inventarios");
-          }}
+          onClick={() => goWithFilter("inventarios", "dn_inv_filter", "pendiente_auditoria")}
         >
           <span className="kpi-label">Auditoría pendiente</span>
           <strong className="kpi-value">{kpis.inventarios_pendientes_auditoria}</strong>
@@ -514,10 +538,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <button
           type="button"
           className={`kpi-card interactive ${sinUbicar > 0 ? "tone-warn" : "tone-ok"}`}
-          onClick={() => {
-            sessionStorage.setItem("dn_act_filter", "sin");
-            onNavigate?.("activos");
-          }}
+          onClick={() => goWithFilter("activos", "dn_act_filter", "sin")}
         >
           <span className="kpi-label">Cobertura de ubicación</span>
           <strong className="kpi-value">{cobertura}%</strong>
@@ -533,8 +554,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       <div className="dash-split">
         <section className="card">
           <div className="section-header">
-            <h3>En curso ahora</h3>
-            <span className="muted">
+            <h2>En curso ahora</h2>
+            <span className="section-count">
               {pendientesCola === 0
                 ? "Nada pendiente"
                 : `${pendientesCola} ítem${pendientesCola === 1 ? "" : "s"}`}
@@ -558,7 +579,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <button
                     type="button"
                     className="btn secondary btn-sm"
-                    onClick={() => onNavigate?.("inventarios")}
+                    onClick={() => openOpsSection("inventarios")}
                   >
                     Ver inventarios
                   </button>
@@ -566,7 +587,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <button
                       type="button"
                       className="btn primary btn-sm"
-                      onClick={() => onNavigate?.("transferencias")}
+                      onClick={() => openOpsSection("movimientos")}
                     >
                       Nueva transferencia
                     </button>
@@ -592,10 +613,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <button
                       type="button"
                       className="ops-item"
-                      onClick={() => {
-                        sessionStorage.setItem("dn_xfer_filter", "abiertas");
-                        onNavigate?.("transferencias");
-                      }}
+                      onClick={() => goWithFilter("transferencias", "dn_xfer_filter", "abiertas")}
                     >
                       <span className="badge warn">{estadoXfer(t.estado)}</span>
                       <span className="ops-body">
@@ -610,14 +628,14 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                         </span>
                       </span>
                       <span className="ops-time muted">{formatFecha(t.creado_en)}</span>
-                      <span className="ops-progress" aria-hidden>
+                      <span className="ops-progress">
                         <span className="ops-progress-meta">
                           <span>
                             Confirmados en destino {t.confirmados_destino}/{t.total_activos}
                           </span>
                           <span>{avance}%</span>
                         </span>
-                        <span className="ops-progress-track">
+                        <span className="ops-progress-track" aria-hidden>
                           <span
                             className={`ops-progress-fill ${avance < 100 ? "is-warn" : ""}`}
                             style={{ width: `${avance}%` }}
@@ -635,10 +653,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <button
                       type="button"
                       className="ops-item"
-                      onClick={() => {
-                        sessionStorage.setItem("dn_inv_filter", "en_curso");
-                        onNavigate?.("inventarios");
-                      }}
+                      onClick={() => goWithFilter("inventarios", "dn_inv_filter", "en_curso")}
                     >
                       <span className="badge warn">En curso</span>
                       <span className="ops-body">
@@ -646,14 +661,14 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                         <span className="muted">{inv.deposito_nombre ?? "?"}</span>
                       </span>
                       <span className="ops-time muted">{formatFecha(inv.iniciado_en)}</span>
-                      <span className="ops-progress" aria-hidden>
+                      <span className="ops-progress">
                         <span className="ops-progress-meta">
                           <span>
                             Leídos {inv.total_encontrado}/{inv.total_esperado} esperados
                           </span>
                           <span>{avance}%</span>
                         </span>
-                        <span className="ops-progress-track">
+                        <span className="ops-progress-track" aria-hidden>
                           <span
                             className={`ops-progress-fill ${avance < 100 ? "is-warn" : ""}`}
                             style={{ width: `${Math.max(avance, avance > 0 ? 4 : 0)}%` }}
@@ -668,233 +683,255 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           )}
         </section>
 
-        <section className={`card ${atencion.length > 0 ? "attn-card" : "attn-card is-clear"}`}>
-            <div className="section-header">
-              <h3>Requiere atención</h3>
-              <span className="muted">
-                {atencion.length === 0
-                  ? "Sin alertas"
-                  : `${atencion.length} ítem${atencion.length === 1 ? "" : "s"}`}
-              </span>
-            </div>
-            {atencion.length === 0 ? (
-              <EmptyState
-                title="Todo en orden"
-                description="No hay discrepancias, auditorías pendientes ni activos sin ubicación."
-              />
-            ) : (
-              <ul className="ops-queue attn-queue" aria-label="Bandeja de atención">
-                {atencion.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      className={`ops-item attn-item severity-${item.severity}`}
-                      onClick={() => openAttention(item)}
+        <section className="card devices-card">
+          <div className="section-header">
+            <h2 title="En línea = heartbeat reciente · Inactivo = sesión abierta sin reportes recientes (app cerrada, equipo apagado, sin red) · Sesión cerrada = logout">
+              Dispositivos
+            </h2>
+            <span className="section-count">
+              {dispositivos.length === 0
+                ? "Sin registros"
+                : [
+                    `${dispositivosOnline} en línea`,
+                    dispositivosInactivos > 0
+                      ? `${dispositivosInactivos} inactivo${dispositivosInactivos === 1 ? "" : "s"}`
+                      : null,
+                    `${dispositivos.length} registrado${dispositivos.length === 1 ? "" : "s"}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </span>
+          </div>
+          {dispositivos.length === 0 ? (
+            <EmptyState
+              title="Ningún lector registrado"
+              description="Cuando un operador inicia sesión en la APK, el dispositivo aparece acá. Si deja de reportar (app cerrada, equipo apagado, sin red) queda Inactivo; al cerrar sesión, Sesión cerrada."
+            />
+          ) : (
+            <ul className="ops-queue device-queue" aria-label="Dispositivos móviles registrados">
+              {dispositivos.map((d) => {
+                const vistoAbs = formatFecha(d.ultimo_visto_en);
+                const estado = dispositivoEstado(d);
+                const estadoLabel = dispositivoEstadoLabel(estado);
+                const badgeClass =
+                  estado === "en_linea" ? "ok" : estado === "inactivo" ? "warn" : "muted";
+                const rowClass =
+                  estado === "en_linea"
+                    ? "is-online"
+                    : estado === "inactivo"
+                      ? "is-idle"
+                      : "is-offline";
+                return (
+                  <li key={d.id}>
+                    <div
+                      className={`device-row ${rowClass}`}
+                      aria-label={`${d.modelo}${d.numero_serie ? `, serie ${d.numero_serie}` : ""}, ${estadoLabel}, visto ${vistoAbs}`}
                     >
-                      <span className={`badge ${item.severity}`}>{item.badge}</span>
-                      <span className="ops-body">
-                        <strong>{item.title}</strong>
-                        <span className="muted">{item.detail}</span>
+                      <span className={`badge ${badgeClass}`}>{estadoLabel}</span>
+                      <span className="device-main">
+                        <strong className="device-name">
+                          {d.modelo}
+                          {d.numero_serie ? ` · S/N ${d.numero_serie}` : ""}
+                        </strong>
+                        <span className="device-meta muted">
+                          {[
+                            d.fabricante,
+                            d.usuario_nombre ? d.usuario_nombre : null,
+                            d.app_version ? `App ${d.app_version}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Sin usuario"}
+                        </span>
                       </span>
-                      {item.when && (
-                        <span className="ops-time muted">{formatFecha(item.when)}</span>
-                      )}
-                    </button>
+                      <time className="device-seen muted" dateTime={d.ultimo_visto_en}>
+                        {formatVistoHace(d.ultimo_visto_en)}
+                        <span className="sr-only"> ({vistoAbs})</span>
+                      </time>
+                    </div>
                   </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
 
-      <section className="card devices-card">
-        <div className="section-header">
-          <h3 title="En línea = heartbeat reciente · Inactivo = sesión abierta sin reportes recientes (app cerrada, equipo apagado, sin red) · Sesión cerrada = logout">
-            Dispositivos MC33
-          </h3>
-          <span className="muted">
-            {dispositivos.length === 0
-              ? "Sin registros"
-              : [
-                  `${dispositivosOnline} en línea`,
-                  dispositivosInactivos > 0 ? `${dispositivosInactivos} inactivo${dispositivosInactivos === 1 ? "" : "s"}` : null,
-                  `${dispositivos.length} registrado${dispositivos.length === 1 ? "" : "s"}`,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-          </span>
-        </div>
-        {dispositivos.length === 0 ? (
-          <EmptyState
-            title="Ningún lector registrado"
-            description="Cuando un operador inicia sesión en la APK, el dispositivo aparece acá. Si deja de reportar (app cerrada, equipo apagado, sin red) queda Inactivo; al cerrar sesión, Sesión cerrada."
-          />
-        ) : (
-          <ul className="ops-queue device-queue" aria-label="Dispositivos móviles registrados">
-            {dispositivos.map((d) => {
-              const vistoAbs = formatFecha(d.ultimo_visto_en);
-              const estado = dispositivoEstado(d);
-              const estadoLabel = dispositivoEstadoLabel(estado);
-              const badgeClass =
-                estado === "en_linea" ? "ok" : estado === "inactivo" ? "warn" : "muted";
-              const rowClass =
-                estado === "en_linea"
-                  ? "is-online"
-                  : estado === "inactivo"
-                    ? "is-idle"
-                    : "is-offline";
-              return (
-                <li key={d.id}>
-                  <div
-                    className={`device-row ${rowClass}`}
-                    aria-label={`${d.modelo}${d.numero_serie ? `, serie ${d.numero_serie}` : ""}, ${estadoLabel}, visto ${vistoAbs}`}
-                  >
-                    <span className={`badge ${badgeClass}`}>{estadoLabel}</span>
-                    <span className="ops-body">
-                      <strong>
-                        {d.modelo}
-                        {d.numero_serie ? ` · S/N ${d.numero_serie}` : ""}
-                      </strong>
-                      <span className="muted">
-                        {[d.fabricante, d.usuario_nombre ? `Usuario: ${d.usuario_nombre}` : null]
-                          .filter(Boolean)
-                          .join(" · ") || "Sin usuario"}
-                        {d.app_version ? ` · App ${d.app_version}` : ""}
-                      </span>
-                    </span>
-                    <time className="ops-time muted" dateTime={d.ultimo_visto_en}>
-                      {formatVistoHace(d.ultimo_visto_en)}
-                      <span className="sr-only"> ({vistoAbs})</span>
-                    </time>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
       <section className="card audit-card">
-        <div className="section-header">
-          <h3 title="Actividad del sistema (altas, ubicaciones, movimientos)">
-            Auditoría reciente
-          </h3>
-          {filtrados && (
-            <span className="muted audit-count">
-              {filtrados.total} resultado{filtrados.total === 1 ? "" : "s"}
-            </span>
+        <div className="table-chrome ops-main-chrome">
+          <div className="table-chrome-leading">{opsTabs}</div>
+          {opsTab === "historial" && (
+            <div
+              className="table-chrome-controls"
+              role="search"
+              aria-label="Filtrar historial"
+            >
+              <label className="field toolbar-field grow">
+                <span className="sr-only">Buscar</span>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar patrimonial, usuario…"
+                  aria-label="Buscar"
+                />
+              </label>
+              <FilterSelect
+                placeholder="Acción"
+                aria-label="Acción"
+                value={accion}
+                onChange={onAccionFilterChange}
+                options={Object.entries(ACCION_LABELS).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
+              {filtroActivo && (
+                <button type="button" className="btn ghost btn-sm" onClick={limpiarFiltro}>
+                  Limpiar
+                </button>
+              )}
+              <ActionsMenu
+                disabled={busy}
+                items={[
+                  {
+                    id: "refresh",
+                    label: busy ? "Cargando…" : "Actualizar",
+                    disabled: busy,
+                    onClick: () =>
+                      void loadHistorial({
+                        offset: histOffset,
+                        accion: appliedAccion,
+                        search: appliedSearch,
+                      }),
+                  },
+                ]}
+              >
+                <ExportButtons
+                  variant="items"
+                  basePath="/reportes/movimientos"
+                  filenameBase="movimientos"
+                  query={{
+                    accion: appliedAccion || undefined,
+                    search: appliedSearch || undefined,
+                  }}
+                />
+              </ActionsMenu>
+            </div>
           )}
         </div>
 
-        <form
-          className="toolbar toolbar-compact"
-          onSubmit={aplicarFiltro}
-          aria-label="Filtrar movimientos"
+        <div
+          id={`${opsTabsId}-panel-historial`}
+          className={`ops-section-panel${opsTab === "historial" ? " is-active" : ""}`}
+          hidden={opsTab !== "historial"}
+          role="tabpanel"
+          aria-labelledby={`${opsTabsId}-tab-historial`}
         >
-          <label className="field toolbar-field">
-            <span className="sr-only">Acción</span>
-            <select
-              value={accion}
-              onChange={(e) => setAccion(e.target.value)}
-              aria-label="Acción"
-            >
-              <option value="">Acción</option>
-              {Object.entries(ACCION_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field toolbar-field grow">
-            <span className="sr-only">Buscar</span>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar patrimonial o descripción…"
-              aria-label="Buscar"
-            />
-          </label>
-          <div className="toolbar-actions">
-            <button type="submit" className="btn secondary" disabled={busy}>
-              {busy ? "…" : "Filtrar"}
-            </button>
-            {filtrados && (
-              <button type="button" className="btn secondary" onClick={limpiarFiltro}>
-                Limpiar
-              </button>
-            )}
-            <ExportButtons
-              basePath="/reportes/movimientos"
-              filenameBase="movimientos"
-              query={{
-                accion: accion || undefined,
-                search: search.trim() || undefined,
-              }}
-            />
-          </div>
-        </form>
+          {movimientosVisibles.length === 0 ? (
+            <div className="audit-body">
+              <EmptyState
+                title="Sin actividad"
+                description={
+                  filtroActivo
+                    ? "Ningún movimiento coincide con el filtro."
+                    : "Cuando creés, asignes o transfieras activos, aparecerán aquí."
+                }
+                action={
+                  filtroActivo ? (
+                    <button type="button" className="btn secondary btn-sm" onClick={limpiarFiltro}>
+                      Limpiar filtro
+                    </button>
+                  ) : undefined
+                }
+              />
+            </div>
+          ) : (
+            <>
+              <div className="audit-body">
+                <div className="table-wrap table-panel dash-scroll audit-table-wrap">
+                  <table className="data-table dense sticky-head audit-table">
+                    <thead>
+                      <tr>
+                        <th>Cuándo</th>
+                        <th>Acción</th>
+                        <th>Activo</th>
+                        <th className="col-hide-sm">Usuario</th>
+                        <th className="col-actions">
+                          <span className="sr-only">Acciones</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody key={`p-${histPage}-s-${histLimit}`} className="ui-enter">
+                      {movimientosVisibles.map((m) => (
+                        <tr key={m.id}>
+                          <td className="muted audit-when">{formatFecha(m.creado_en)}</td>
+                          <td>
+                            <span className="audit-action">{formatAccion(m.accion)}</span>
+                          </td>
+                          <td>
+                            <span className="mono">{m.numero_patrimonial ?? "—"}</span>
+                            {m.descripcion && (
+                              <span className="muted desc-hide-sm"> · {m.descripcion}</span>
+                            )}
+                          </td>
+                          <td className="muted col-hide-sm">{m.usuario_nombre ?? "Sistema"}</td>
+                          <td className="col-actions">
+                            <div className="row-actions">
+                              <button
+                                type="button"
+                                className="btn ghost btn-sm"
+                                onClick={() => verMovimiento(m)}
+                                aria-label={`Ver detalle de ${formatAccion(m.accion)} · ${m.numero_patrimonial ?? "activo"}`}
+                              >
+                                Ver
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {histTotal > 0 && (
+                <TablePager
+                  from={histFrom}
+                  to={histTo}
+                  total={histTotal}
+                  page={histPage}
+                  pages={histPages}
+                  pageSize={histPageSize}
+                  canPrev={canHistPrev}
+                  canNext={canHistNext}
+                  busy={busy}
+                  onPrev={irHistPrev}
+                  onNext={irHistNext}
+                  onPageSizeChange={changeHistPageSize}
+                  label="Paginación del historial"
+                />
+              )}
+            </>
+          )}
+        </div>
 
-        {movimientosVisibles.length === 0 ? (
-          <EmptyState
-            title="Sin actividad"
-            description={
-              filtrados
-                ? "Ningún movimiento coincide con el filtro."
-                : "Cuando creés, asignes o transfieras activos, aparecerán aquí."
-            }
-            action={
-              filtrados ? (
-                <button type="button" className="btn secondary btn-sm" onClick={limpiarFiltro}>
-                  Limpiar filtro
-                </button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="table-wrap table-panel dash-scroll">
-            <table className="data-table dense sticky-head">
-              <thead>
-                <tr>
-                  <th>Cuándo</th>
-                  <th>Acción</th>
-                  <th>Activo</th>
-                  <th className="col-hide-sm">Usuario</th>
-                  <th className="col-actions">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {movimientosVisibles.map((m) => (
-                  <tr key={m.id}>
-                    <td className="muted">{formatFecha(m.creado_en)}</td>
-                    <td>{formatAccion(m.accion)}</td>
-                    <td>
-                      <span className="mono">{m.numero_patrimonial ?? "—"}</span>
-                      {m.descripcion && (
-                        <span className="muted desc-hide-sm"> · {m.descripcion}</span>
-                      )}
-                    </td>
-                    <td className="muted col-hide-sm">{m.usuario_nombre ?? "Sistema"}</td>
-                    <td className="col-actions">
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="btn ghost btn-sm"
-                          onClick={() => verMovimiento(m)}
-                          aria-label={`Ver detalle de ${formatAccion(m.accion)} · ${m.numero_patrimonial ?? "activo"}`}
-                        >
-                          Ver
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div
+          id={`${opsTabsId}-panel-inventarios`}
+          className={`ops-section-panel ops-section-embed${opsTab === "inventarios" ? " is-active" : ""}`}
+          hidden={opsTab !== "inventarios"}
+          role="tabpanel"
+          aria-labelledby={`${opsTabsId}-tab-inventarios`}
+        >
+          <InventariosPage embedded chromeLeading={null} />
+        </div>
+
+        <div
+          id={`${opsTabsId}-panel-movimientos`}
+          className={`ops-section-panel ops-section-embed${opsTab === "movimientos" ? " is-active" : ""}`}
+          hidden={opsTab !== "movimientos"}
+          role="tabpanel"
+          aria-labelledby={`${opsTabsId}-tab-movimientos`}
+        >
+          <TransferenciasPage embedded chromeLeading={null} />
+        </div>
       </section>
     </div>
   );

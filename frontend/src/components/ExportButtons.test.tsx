@@ -43,4 +43,24 @@ describe("ExportButtons", () => {
       );
     });
   });
+
+  it("exporta desde menú desplegable", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExportButtons
+        variant="menu"
+        basePath="/reportes/movimientos"
+        filenameBase="movimientos"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^exportar$/i }));
+    await user.click(screen.getByRole("menuitem", { name: /exportar xlsx/i }));
+    await waitFor(() => {
+      expect(downloadMock).toHaveBeenCalledWith(
+        "/reportes/movimientos?formato=xlsx",
+        "movimientos.xlsx",
+      );
+    });
+  });
 });
